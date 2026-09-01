@@ -103,7 +103,7 @@ export default function App() {
     localStorage.setItem('stealth_rooms', JSON.stringify(roomList));
   }, [roomList]);
 
-  // Facebook Messenger Style Sent Sound
+  // Sent Sound (Facebook Messenger Style Soft Pop)
   const playSentSound = useCallback(() => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -121,7 +121,7 @@ export default function App() {
     } catch (e) {}
   }, []);
 
-  // Medium Received Message Chime
+  // Received Message Sound (Medium Two-Tone Chime)
   const playReceiveSound = useCallback(() => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -222,14 +222,34 @@ export default function App() {
       }
     });
 
-    // Real-Time Typing Listeners
+    // Multi-Event Real-Time Typing Listeners (Guarantees immediate sync)
+    const handleTypingEvent = (data) => {
+      const myCurrentRole = localStorage.getItem('stealth_role') || 'user';
+      if (data && data.senderRole && data.senderRole !== myCurrentRole) {
+        setIsPeerTyping(true);
+        setPeerTypingRole(data.senderRole === 'user' ? 'A' : 'H');
+      }
+    };
+
+    const handleStopTypingEvent = (data) => {
+      const myCurrentRole = localStorage.getItem('stealth_role') || 'user';
+      if (data && data.senderRole && data.senderRole !== myCurrentRole) {
+        setIsPeerTyping(false);
+      }
+    };
+
+    socketRef.current.on('typing', handleTypingEvent);
+    socketRef.current.on('display_typing', handleTypingEvent);
     socketRef.current.on('peer_typing_status', (data) => {
       const myCurrentRole = localStorage.getItem('stealth_role') || 'user';
-      if (data.senderRole !== myCurrentRole) {
-        setIsPeerTyping(data.isTyping);
+      if (data && data.senderRole !== myCurrentRole) {
+        setIsPeerTyping(Boolean(data.isTyping));
         setPeerTypingRole(data.senderRole === 'user' ? 'A' : 'H');
       }
     });
+
+    socketRef.current.on('stop_typing', handleStopTypingEvent);
+    socketRef.current.on('hide_typing', handleStopTypingEvent);
 
     socketRef.current.on('update_msg_status', ({ messageId, flaggedPending }) => {
       setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, flaggedPending } : m));
@@ -273,28 +293,23 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Instant Typing Broadcast Handler
+  // Instant Typing Broadcast (Zero Latency Multi-Emit)
   const handleInputChange = (e) => {
     const val = e.target.value;
     setInput(val);
 
     if (viewMode === 'stealth' && socketRef.current) {
-      socketRef.current.emit('typing_status', {
-        room: GLOBAL_ROOM,
-        senderRole: role,
-        isTyping: true
-      });
+      // Direct instant emit on every keystroke
+      socketRef.current.emit('typing', { room: GLOBAL_ROOM, senderRole: role, isTyping: true });
+      socketRef.current.emit('typing_status', { room: GLOBAL_ROOM, senderRole: role, isTyping: true });
 
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => {
         if (socketRef.current) {
-          socketRef.current.emit('typing_status', {
-            room: GLOBAL_ROOM,
-            senderRole: role,
-            isTyping: false
-          });
+          socketRef.current.emit('stop_typing', { room: GLOBAL_ROOM, senderRole: role, isTyping: false });
+          socketRef.current.emit('typing_status', { room: GLOBAL_ROOM, senderRole: role, isTyping: false });
         }
-      }, 1400);
+      }, 1500);
     }
   };
 
@@ -440,11 +455,8 @@ export default function App() {
           role,
           encryptedText: encrypted
         });
-        socketRef.current.emit('typing_status', {
-          room: GLOBAL_ROOM,
-          senderRole: role,
-          isTyping: false
-        });
+        socketRef.current.emit('stop_typing', { room: GLOBAL_ROOM, senderRole: role, isTyping: false });
+        socketRef.current.emit('typing_status', { room: GLOBAL_ROOM, senderRole: role, isTyping: false });
         playSentSound();
       }
       setInput('');
@@ -754,7 +766,7 @@ export default function App() {
             <div ref={messageEndRef} />
           </section>
         ) : (
-          /* VIEW 2: STEALTH JSON SCHEMA VIEW (With Real-Time Typing Indicator) */
+          /* VIEW 2: STEALTH JSON SCHEMA VIEW (Interactive Real-Time Typing) */
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
             <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs">
               <div className="bg-[#212121] px-4 py-2.5 flex items-center justify-between border-b border-[#2e2e2e] text-[#b4b4b4]">
@@ -800,17 +812,9 @@ export default function App() {
                 <div className="border-y border-[#2a2a2a] py-2 my-2 bg-[#121212]/50 rounded px-2 relative">
                   <div className="text-[#6a9955] mb-1 flex items-center justify-between">
                     <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'A' : 'H'})`}</span>
-                    <div className="flex items-center gap-3">
-                      {isPeerTyping && (
-                        <span className="text-emerald-400 text-[10.5px] font-sans font-medium flex items-center gap-1.5 animate-pulse">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-ping" />
-                          {`# ${peerTypingRole} is typing...`}
-                        </span>
-                      )}
-                      <span className="text-[10px] text-gray-500 font-sans">
-                        {`Showing last (${displayedStealthMessages.length}) records`}
-                      </span>
-                    </div>
+                    <span className="text-[10px] text-gray-500 font-sans">
+                      {`Showing last (${displayedStealthMessages.length}) records`}
+                    </span>
                   </div>
 
                   <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1 scrollbar-none">
@@ -857,10 +861,10 @@ export default function App() {
 
                     {/* Smooth Bottom-Right Minimal Typing Indicator Inside Stream */}
                     {isPeerTyping && (
-                      <div className="flex justify-end pt-1 pr-1 animate-in fade-in duration-100">
-                        <span className="text-[#6a9955] text-[10px] font-mono italic tracking-wide flex items-center gap-1 bg-[#1a1a1a] px-2 py-0.5 rounded border border-[#2e2e2e]">
-                          <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
-                          {`${peerTypingRole} typing...`}
+                      <div className="flex justify-end pt-1 pr-1">
+                        <span className="text-emerald-400 text-[10px] font-mono italic flex items-center gap-1.5 bg-[#17251e] border border-emerald-800/80 px-2 py-0.5 rounded shadow">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                          <span>{`${peerTypingRole} typing...`}</span>
                         </span>
                       </div>
                     )}
