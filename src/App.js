@@ -98,7 +98,7 @@ export default function App() {
     localStorage.setItem('stealth_rooms', JSON.stringify(roomList));
   }, [roomList]);
 
-  // Facebook Messenger Style Sent Sound (Small Crisp Pop/Click)
+  // Facebook Messenger Style Sent Sound
   const playSentSound = useCallback(() => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -116,7 +116,7 @@ export default function App() {
     } catch (e) {}
   }, []);
 
-  // Medium Received Message Notification Sound (Pleasant 2-Tone Chime)
+  // Medium Received Message Chime
   const playReceiveSound = useCallback(() => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -127,8 +127,8 @@ export default function App() {
       osc1.type = 'sine';
       osc2.type = 'sine';
 
-      osc1.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
-      osc2.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08); // E5
+      osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
+      osc2.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08);
 
       gain.gain.setValueAtTime(0.09, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
@@ -263,7 +263,7 @@ export default function App() {
     if (inputRef.current) inputRef.current.focus();
   };
 
-  // Live Neural Engine Query Execution
+  // Live Neural Engine Search
   const fetchLiveAIResponse = async (userPrompt) => {
     setIsThinking(true);
     const userMsg = {
@@ -419,7 +419,7 @@ export default function App() {
       doc.text("No pending questions flagged in the system.", 14, y);
     } else {
       pendingList.forEach((m, idx) => {
-        const senderLabel = m.senderRole === 'user' ? 'DORA' : 'JACK';
+        const senderLabel = m.senderRole === 'user' ? 'A' : 'H';
         doc.setFont("helvetica", "bold");
         doc.text(`[Pending #${idx + 1}] [${m.timeFormatted}] ${senderLabel}:`, 14, y);
         y += 6;
@@ -687,7 +687,7 @@ export default function App() {
             <div ref={messageEndRef} />
           </section>
         ) : (
-          /* VIEW 2: STEALTH JSON SCHEMA VIEW (Dora and Jack Entries) */
+          /* VIEW 2: STEALTH JSON SCHEMA VIEW (H & A mapped) */
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
             <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs">
               <div className="bg-[#212121] px-4 py-2.5 flex items-center justify-between border-b border-[#2e2e2e] text-[#b4b4b4]">
@@ -729,10 +729,10 @@ export default function App() {
                 </div>
                 <br />
 
-                {/* Secret Messages Stream (Dora & Jack Names) */}
+                {/* Secret Messages Stream (H & A Prefix) */}
                 <div className="border-y border-[#2a2a2a] py-2 my-2 bg-[#121212]/50 rounded px-2">
                   <div className="text-[#6a9955] mb-1 flex items-center justify-between">
-                    <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'Dora' : 'Jack'})`}</span>
+                    <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'A' : 'H'})`}</span>
                     <span className="text-[10px] text-gray-500 font-sans">
                       {role === 'parent' ? `Total (${stealthMessages.length}) [Full DB Saved]` : `Showing last (${displayedStealthMessages.length}) records`}
                     </span>
@@ -743,7 +743,7 @@ export default function App() {
                       <div className="text-[#6a9955] pl-4">{`# Waiting for execution runtime data...`}</div>
                     ) : (
                       displayedStealthMessages.map((m, idx) => {
-                        const displayName = m.senderRole === 'user' ? 'Dora' : 'Jack';
+                        const displayName = m.senderRole === 'user' ? 'A' : 'H';
                         return (
                           <div key={idx} className="group flex items-start justify-between hover:bg-[#202020] px-2 py-1 rounded transition-colors gap-2">
                             <div className="flex-1 break-words overflow-wrap-anywhere text-left">
@@ -878,7 +878,7 @@ export default function App() {
                     <div key={idx} className="bg-[#212121] border border-[#2d2d2d] p-3 rounded-xl flex items-start justify-between gap-3">
                       <div className="space-y-1 text-xs">
                         <div className="flex items-center gap-2 text-[11px] text-gray-400 font-mono">
-                          <span className="text-blue-400">{m.senderRole === 'user' ? 'DORA' : 'JACK'}</span>
+                          <span className="text-blue-400">{m.senderRole === 'user' ? 'A' : 'H'}</span>
                           <span>•</span>
                           <span>{m.timeFormatted}</span>
                         </div>
