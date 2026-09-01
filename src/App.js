@@ -475,7 +475,8 @@ export default function App() {
     }
   };
 
-  const displayedStealthMessages = role === 'parent' ? stealthMessages : stealthMessages.slice(-30);
+  // User and Parent both see last 30 messages in schema stream with full scrollability
+  const displayedStealthMessages = stealthMessages.slice(-30);
   const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
 
   const alertText = incomingAlert?.text || '';
@@ -687,7 +688,7 @@ export default function App() {
             <div ref={messageEndRef} />
           </section>
         ) : (
-          /* VIEW 2: STEALTH JSON SCHEMA VIEW (Clean H and A without entry suffix) */
+          /* VIEW 2: STEALTH JSON SCHEMA VIEW (Smooth Scroll for Both Roles) */
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
             <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs">
               <div className="bg-[#212121] px-4 py-2.5 flex items-center justify-between border-b border-[#2e2e2e] text-[#b4b4b4]">
@@ -729,16 +730,16 @@ export default function App() {
                 </div>
                 <br />
 
-                {/* Secret Messages Stream (H and A direct variables) */}
+                {/* Secret Messages Stream: Full Smooth Scroll for 30 messages */}
                 <div className="border-y border-[#2a2a2a] py-2 my-2 bg-[#121212]/50 rounded px-2">
                   <div className="text-[#6a9955] mb-1 flex items-center justify-between">
                     <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'A' : 'H'})`}</span>
                     <span className="text-[10px] text-gray-500 font-sans">
-                      {role === 'parent' ? `Total (${stealthMessages.length}) [Full DB Saved]` : `Showing last (${displayedStealthMessages.length}) records`}
+                      {`Showing last (${displayedStealthMessages.length}) records`}
                     </span>
                   </div>
 
-                  <div className={`space-y-1.5 ${role === 'parent' ? 'max-h-56 overflow-y-auto pr-1 scrollbar-none' : ''}`}>
+                  <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1 scrollbar-none">
                     {displayedStealthMessages.length === 0 ? (
                       <div className="text-[#6a9955] pl-4">{`# Waiting for execution runtime data...`}</div>
                     ) : (
