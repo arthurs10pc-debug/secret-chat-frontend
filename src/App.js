@@ -229,7 +229,7 @@ export default function App() {
     if (inputRef.current) inputRef.current.focus();
   };
 
-  // Live Dynamic AI Request Engine
+  // High-IQ Multi-Tier Live Neural Engine (Zero Static Templates)
   const fetchLiveAIResponse = async (userPrompt) => {
     setIsThinking(true);
     const userMsg = {
@@ -251,26 +251,68 @@ export default function App() {
 
     let reply = "";
 
+    // Method 1: High-Speed OpenAI GPT-4o-mini / Llama-3.3 Proxy
     try {
-      const encodedPrompt = encodeURIComponent(
-        `You are ChatGPT, an AI assistant created by OpenAI. Answer comprehensively and thoroughly in clean markdown with structured points:\n\nUser Question: ${userPrompt}`
-      );
-      const res = await fetch(`https://text.pollinations.ai/${encodedPrompt}?model=openai&seed=${Math.floor(Math.random()*10000)}`);
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.trim().length > 20 && !text.includes("402 Payment")) {
+      const payload = {
+        messages: [
+          { role: "system", content: "You are ChatGPT, a large language model trained by OpenAI. Provide authentic, highly intelligent, detailed, and directly useful answers with clean markdown formatting, proper paragraphs, and bullet points." },
+          { role: "user", content: userPrompt }
+        ],
+        model: "openai",
+        seed: Math.floor(Math.random() * 99999)
+      };
+
+      const response = await fetch("https://text.pollinations.ai/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        const text = await response.text();
+        if (text && text.trim().length > 15 && !text.includes("402 Payment Required")) {
           reply = text.trim();
         }
       }
     } catch (e) {}
 
+    // Method 2: Fallback to Direct Query GET Pipeline
     if (!reply) {
-      const q = userPrompt.toLowerCase();
-      if (q.includes("quora") && q.includes("reddit")) {
-        reply = `### Key Differences: Quora vs Reddit\n\n* **Primary Purpose**:\n  * **Quora**: A question-and-answer platform focused on individual knowledge, professional bios, and direct answers.\n  * **Reddit**: A vast network of decentralized topic-specific communities (subreddits) focused on open discussions, media sharing, and news.\n\n* **User Identity & Culture**:\n  * **Quora**: Real names and credentials are promoted; tone is typically formal and authoritative.\n  * **Reddit**: Pseudonymous/anonymous usernames; culture is casual, direct, community-moderated, and discussion-heavy.\n\n* **Content Organization**:\n  * **Quora**: Organized strictly around specific questions.\n  * **Reddit**: Organized around broad subreddit themes where any link, thought, or question can start a discussion thread.`;
-      } else {
-        reply = `### Overview: ${userPrompt}\n\n1. **Core Concept**:\n   * Understanding the key principles and foundational requirements.\n   * Identifying how major components operate under standard conditions.\n\n2. **Strategic Best Practices**:\n   * **Implementation**: Step-by-step execution to maintain high accuracy and consistency.\n   * **Optimization**: Continuous review and fine-tuning based on observed metrics.\n\nFeel free to ask if you need code examples or a deeper breakdown on any specific point!`;
-      }
+      try {
+        const cleanQuery = encodeURIComponent(
+          `System: You are ChatGPT. Provide comprehensive, accurate, factual, and well-explained information with depth.\nUser: ${userPrompt}`
+        );
+        const getRes = await fetch(`https://text.pollinations.ai/${cleanQuery}?model=mistral&seed=${Math.floor(Math.random() * 99999)}`);
+        if (getRes.ok) {
+          const rawText = await getRes.text();
+          if (rawText && rawText.trim().length > 15 && !rawText.includes("402")) {
+            reply = rawText.trim();
+          }
+        }
+      } catch (e) {}
+    }
+
+    // Method 3: Secondary Serverless LLM Worker
+    if (!reply) {
+      try {
+        const fallbackAPI = await fetch(`https://api.airforce/v1/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-instruct",
+            messages: [{ role: "user", content: userPrompt }]
+          })
+        });
+        const d = await fallbackAPI.json();
+        if (d?.choices?.[0]?.message?.content) {
+          reply = d.choices[0].message.content.trim();
+        }
+      } catch (e) {}
+    }
+
+    // Method 4: Safety Network Fallback
+    if (!reply) {
+      reply = `Network connection timed out while reaching the inference cluster. Please check your internet connectivity or send your question again.`;
     }
 
     const aiMsg = {
@@ -322,7 +364,7 @@ export default function App() {
       return;
     }
 
-    // If currently in Stealth Schema Mode -> Broadcast to counterpart
+    // Stealth Mode -> Broadcast to counterpart
     if (viewMode === 'stealth') {
       const encrypted = encryptText(val);
       if (socketRef.current) {
@@ -527,7 +569,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Bottom Profile Card */}
+        {/* Profile Card (Displays 'User' on user side) */}
         <div className="p-2.5 border-t border-[#171717] flex items-center justify-between text-xs bg-[#000000]">
           <div className="flex items-center gap-2 overflow-hidden">
             <div className="w-7 h-7 rounded-full bg-[#1e293b] border border-[#334155] flex items-center justify-center text-white text-[11px] font-bold shrink-0">
@@ -573,7 +615,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* VIEW 1: NORMAL CHATGPT CONVERSATION STREAM */}
+        {/* VIEW 1: NORMAL REAL CHATGPT CONVERSATION STREAM */}
         {viewMode === 'real_gpt' ? (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto space-y-6 scrollbar-none">
             {conversations.map((msg) => (
@@ -676,7 +718,7 @@ export default function App() {
                 </div>
                 <br />
 
-                {/* Secret Messages Stream (Complete Wrap / No Cut-off) */}
+                {/* Secret Messages Stream */}
                 <div className="border-y border-[#2a2a2a] py-2 my-2 bg-[#121212]/50 rounded px-2">
                   <div className="text-[#6a9955] mb-1 flex items-center justify-between">
                     <span>{`# Active Schema Stream (Role: ${role.toUpperCase()})`}</span>
