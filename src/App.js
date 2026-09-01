@@ -229,7 +229,7 @@ export default function App() {
     if (inputRef.current) inputRef.current.focus();
   };
 
-  // High-Speed Direct AI Execution Engine (Live OpenAI / Llama Architecture)
+  // Live Dynamic AI Request Engine
   const fetchLiveAIResponse = async (userPrompt) => {
     setIsThinking(true);
     const userMsg = {
@@ -251,7 +251,6 @@ export default function App() {
 
     let reply = "";
 
-    // Engine 1: Direct Neural Inference
     try {
       const encodedPrompt = encodeURIComponent(
         `You are ChatGPT, an AI assistant created by OpenAI. Answer comprehensively and thoroughly in clean markdown with structured points:\n\nUser Question: ${userPrompt}`
@@ -265,32 +264,12 @@ export default function App() {
       }
     } catch (e) {}
 
-    // Engine 2: HuggingFace DeepSeek / Llama Endpoint
-    if (!reply) {
-      try {
-        const fallbackRes = await fetch("https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            inputs: `<s>[INST] You are ChatGPT. Provide a detailed, practical, well-formatted answer.\n\n${userPrompt} [/INST]`,
-            parameters: { max_new_tokens: 800, temperature: 0.7 }
-          })
-        });
-        const data = await fallbackRes.json();
-        if (Array.isArray(data) && data[0]?.generated_text) {
-          const raw = data[0].generated_text;
-          reply = raw.split('[/INST]').pop().trim();
-        }
-      } catch (e) {}
-    }
-
-    // Engine 3: Deep Contextual Intelligence Synthesizer (Zero Generic Replies)
     if (!reply) {
       const q = userPrompt.toLowerCase();
       if (q.includes("quora") && q.includes("reddit")) {
-        reply = `### Key Differences: Quora vs Reddit\n\n* **Primary Purpose**:\n  * **Quora**: A formal question-and-answer platform focused on individual expertise, credentials, and detailed knowledge sharing.\n  * **Reddit**: A vast network of decentralized communities (subreddits) centered around discussions, news, shared interests, and memes.\n\n* **User Identity & Tone**:\n  * **Quora**: Real names and professional bios are encouraged; the tone is authoritative and polished.\n  * **Reddit**: Predominantly pseudonymous; culture is raw, direct, community-policed, and conversational.\n\n* **Content Organization**:\n  * **Quora**: Organized strictly by individual Questions and Answers.\n  * **Reddit**: Organized by Topic Hubs (Subreddits) with threaded discussions, link posts, and media shares.\n\n* **Voting & Visibility**:\n  * **Quora**: Upvotes and algorithmic feeds prioritize author credibility and topic tags.\n  * **Reddit**: Upvote/Downvote dynamic directly dictates post and comment ranking in real time.`;
+        reply = `### Key Differences: Quora vs Reddit\n\n* **Primary Purpose**:\n  * **Quora**: A question-and-answer platform focused on individual knowledge, professional bios, and direct answers.\n  * **Reddit**: A vast network of decentralized topic-specific communities (subreddits) focused on open discussions, media sharing, and news.\n\n* **User Identity & Culture**:\n  * **Quora**: Real names and credentials are promoted; tone is typically formal and authoritative.\n  * **Reddit**: Pseudonymous/anonymous usernames; culture is casual, direct, community-moderated, and discussion-heavy.\n\n* **Content Organization**:\n  * **Quora**: Organized strictly around specific questions.\n  * **Reddit**: Organized around broad subreddit themes where any link, thought, or question can start a discussion thread.`;
       } else {
-        reply = `### Overview: ${userPrompt}\n\n1. **Core Concept**:\n   * Understanding the foundational mechanics and practical implications of the topic.\n   * Identifying how key components interact in real-world scenarios.\n\n2. **Key Analysis & Considerations**:\n   * **Efficiency & Scalability**: Ensuring optimal resource allocation and output quality.\n   * **Best Practice Workflow**: Formulating structured steps to minimize friction.\n   * **Verification**: Continuous monitoring and testing against baseline performance.\n\nLet me know if you would like me to break down any specific area in deeper detail!`;
+        reply = `### Overview: ${userPrompt}\n\n1. **Core Concept**:\n   * Understanding the key principles and foundational requirements.\n   * Identifying how major components operate under standard conditions.\n\n2. **Strategic Best Practices**:\n   * **Implementation**: Step-by-step execution to maintain high accuracy and consistency.\n   * **Optimization**: Continuous review and fine-tuning based on observed metrics.\n\nFeel free to ask if you need code examples or a deeper breakdown on any specific point!`;
       }
     }
 
@@ -548,14 +527,16 @@ export default function App() {
           </div>
         )}
 
-        {/* Profile Card */}
+        {/* Bottom Profile Card */}
         <div className="p-2.5 border-t border-[#171717] flex items-center justify-between text-xs bg-[#000000]">
           <div className="flex items-center gap-2 overflow-hidden">
             <div className="w-7 h-7 rounded-full bg-[#1e293b] border border-[#334155] flex items-center justify-center text-white text-[11px] font-bold shrink-0">
-              HS
+              {role === 'parent' ? 'HS' : 'U'}
             </div>
             <div className="truncate">
-              <p className="text-white text-xs font-medium truncate">hetkumar satap...</p>
+              <p className="text-white text-xs font-medium truncate">
+                {role === 'parent' ? 'hetkumar satap...' : 'User'}
+              </p>
               <p className="text-[10px] text-gray-400">Free</p>
             </div>
           </div>
@@ -592,14 +573,14 @@ export default function App() {
           </div>
         </header>
 
-        {/* VIEW 1: NORMAL CHATGPT CONVERSATION STREAM (Live Dynamic AI) */}
+        {/* VIEW 1: NORMAL CHATGPT CONVERSATION STREAM */}
         {viewMode === 'real_gpt' ? (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto space-y-6 scrollbar-none">
             {conversations.map((msg) => (
               <div key={msg.id} className="w-full">
                 {msg.role === 'user' ? (
                   <div className="flex justify-end my-3">
-                    <div className="bg-[#1c3a6b] hover:bg-[#1f4077] transition-colors text-white px-5 py-3.5 rounded-2xl max-w-[80%] text-[13px] leading-relaxed shadow-lg whitespace-pre-wrap select-text">
+                    <div className="bg-[#1c3a6b] hover:bg-[#1f4077] transition-colors text-white px-5 py-3.5 rounded-2xl max-w-[80%] text-[13px] leading-relaxed shadow-lg whitespace-pre-wrap break-words select-text">
                       {msg.text}
                     </div>
                   </div>
@@ -618,7 +599,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="text-[#ececf1] text-[13.5px] leading-[1.75] font-normal tracking-wide whitespace-pre-wrap">
+                      <div className="text-[#ececf1] text-[13.5px] leading-[1.75] font-normal tracking-wide whitespace-pre-wrap break-words">
                         {msg.text}
                       </div>
                     </div>
@@ -695,7 +676,7 @@ export default function App() {
                 </div>
                 <br />
 
-                {/* Secret Messages Stream */}
+                {/* Secret Messages Stream (Complete Wrap / No Cut-off) */}
                 <div className="border-y border-[#2a2a2a] py-2 my-2 bg-[#121212]/50 rounded px-2">
                   <div className="text-[#6a9955] mb-1 flex items-center justify-between">
                     <span>{`# Active Schema Stream (Role: ${role.toUpperCase()})`}</span>
@@ -704,21 +685,21 @@ export default function App() {
                     </span>
                   </div>
 
-                  <div className={`space-y-1 ${role === 'parent' ? 'max-h-56 overflow-y-auto pr-1 scrollbar-none' : ''}`}>
+                  <div className={`space-y-1.5 ${role === 'parent' ? 'max-h-56 overflow-y-auto pr-1 scrollbar-none' : ''}`}>
                     {displayedStealthMessages.length === 0 ? (
                       <div className="text-[#6a9955] pl-4">{`# Waiting for execution runtime data...`}</div>
                     ) : (
                       displayedStealthMessages.map((m, idx) => (
-                        <div key={idx} className="group flex items-center justify-between hover:bg-[#202020] px-2 py-1 rounded transition-colors">
-                          <div className="truncate mr-2">
-                            <span className="text-[#9cdcfe]">{`${m.senderRole}_entry_${idx + 1}`}</span> = <span className="text-[#ce9178]">{`"${m.text}"`}</span> <span className="text-[#6a9955] text-[10px]">{`# [${m.timeFormatted}]`}</span>
+                        <div key={idx} className="group flex items-start justify-between hover:bg-[#202020] px-2 py-1 rounded transition-colors gap-2">
+                          <div className="flex-1 break-words overflow-wrap-anywhere text-left">
+                            <span className="text-[#9cdcfe] shrink-0">{`${m.senderRole}_entry_${idx + 1}`}</span> = <span className="text-[#ce9178] break-all">{`"${m.text}"`}</span> <span className="text-[#6a9955] text-[10px] shrink-0 ml-1">{`# [${m.timeFormatted}]`}</span>
                           </div>
                           {role === 'parent' && (
                             <button 
                               type="button"
                               onClick={(e) => togglePendingFlag(e, m)}
                               title={m.flaggedPending ? "Mark as Resolved" : "Add to Answer Pending"}
-                              className={`ml-2 px-2 py-0.5 text-xs font-bold rounded cursor-pointer transition-all duration-150 transform active:scale-90 shrink-0 ${
+                              className={`px-2 py-0.5 text-xs font-bold rounded cursor-pointer transition-all duration-150 transform active:scale-90 shrink-0 mt-0.5 ${
                                 m.flaggedPending 
                                   ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-105' 
                                   : 'bg-[#2a2a2a] text-gray-400 hover:text-white hover:bg-[#383838]'
@@ -845,7 +826,7 @@ export default function App() {
                           <span>•</span>
                           <span>{m.timeFormatted}</span>
                         </div>
-                        <p className="text-gray-200 font-mono select-text line-clamp-3">{m.text}</p>
+                        <p className="text-gray-200 font-mono select-text line-clamp-3 break-words">{m.text}</p>
                       </div>
                       <button 
                         onClick={(e) => togglePendingFlag(e, m)}
@@ -873,7 +854,7 @@ export default function App() {
             }}
           >
             <div className="absolute top-3 left-4 w-5 h-2.5 bg-white/80 rounded-full blur-[0.5px] transform -rotate-45 pointer-events-none" />
-            <p className={`${bubbleFontSize} font-medium text-white tracking-tight drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)] px-1 overflow-y-auto max-h-[85%] select-none scrollbar-none`}>
+            <p className={`${bubbleFontSize} font-medium text-white tracking-tight drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)] px-1 overflow-y-auto max-h-[85%] select-none scrollbar-none break-words`}>
               {incomingAlert.text}
             </p>
           </div>
