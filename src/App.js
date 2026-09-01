@@ -8,7 +8,7 @@ import {
   Search, PanelLeft, ArrowUp, Plus, RefreshCw, Sparkles, Share,
   Bot, X, Download, AlertCircle, ShieldCheck, Trash2, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
-  Code, Play
+  Code, Play, CornerUpLeft
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -66,6 +66,7 @@ export default function App() {
 
   const [stealthMessages, setStealthMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [replyTarget, setReplyTarget] = useState(null); // { text, senderRole }
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [showPendingModal, setShowPendingModal] = useState(false);
@@ -263,6 +264,14 @@ export default function App() {
     if (inputRef.current) inputRef.current.focus();
   };
 
+  const handleStartReply = (msg) => {
+    setReplyTarget({
+      text: msg.text,
+      senderRole: msg.senderRole === 'user' ? 'A' : 'H'
+    });
+    if (inputRef.current) inputRef.current.focus();
+  };
+
   // Live Neural Engine Search
   const fetchLiveAIResponse = async (userPrompt) => {
     setIsThinking(true);
@@ -354,6 +363,7 @@ export default function App() {
         socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'parent' });
       }
       setInput('');
+      setReplyTarget(null);
       return;
     }
 
@@ -365,17 +375,25 @@ export default function App() {
         socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'user' });
       }
       setInput('');
+      setReplyTarget(null);
       return;
     }
 
     if (cleanCmd === '/gpt' || cleanCmd === '/normal') {
       setViewMode('real_gpt');
       setInput('');
+      setReplyTarget(null);
       return;
     }
 
     if (viewMode === 'stealth') {
-      const encrypted = encryptText(val);
+      let finalMessageText = val;
+      if (replyTarget) {
+        const shortReply = replyTarget.text.length > 28 ? replyTarget.text.substring(0, 25) + '...' : replyTarget.text;
+        finalMessageText = `[⤴ ${replyTarget.senderRole}: "${shortReply}"] ${val}`;
+      }
+
+      const encrypted = encryptText(finalMessageText);
       if (socketRef.current) {
         socketRef.current.emit('send_stealth_msg', {
           room: GLOBAL_ROOM,
@@ -385,18 +403,21 @@ export default function App() {
         playSentSound();
       }
       setInput('');
+      setReplyTarget(null);
       return;
     }
 
     playSentSound();
     fetchLiveAIResponse(val);
     setInput('');
+    setReplyTarget(null);
   };
 
   const handleNewChat = () => {
     setConversations([]);
     setCurrentRoom("New chat");
     setViewMode('real_gpt');
+    setReplyTarget(null);
   };
 
   const downloadPendingPDF = (e) => {
@@ -475,7 +496,6 @@ export default function App() {
     }
   };
 
-  // User and Parent both see last 30 messages in schema stream with full scrollability
   const displayedStealthMessages = stealthMessages.slice(-30);
   const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
 
@@ -551,6 +571,7 @@ export default function App() {
               onClick={() => {
                 setCurrentRoom(roomName);
                 setViewMode('real_gpt');
+                setReplyTarget(null);
               }}
               className={`flex items-center justify-between py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors group ${currentRoom === roomName ? 'bg-[#212121] text-white font-normal' : 'text-[#b4b4b4] hover:bg-[#171717] hover:text-white'}`}
             >
@@ -688,7 +709,7 @@ export default function App() {
             <div ref={messageEndRef} />
           </section>
         ) : (
-          /* VIEW 2: STEALTH JSON SCHEMA VIEW (Smooth Scroll for Both Roles) */
+          /* VIEW 2: STEALTH JSON SCHEMA VIEW (Interactive ⤴ Reply Action) */
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
             <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs">
               <div className="bg-[#212121] px-4 py-2.5 flex items-center justify-between border-b border-[#2e2e2e] text-[#b4b4b4]">
@@ -730,7 +751,7 @@ export default function App() {
                 </div>
                 <br />
 
-                {/* Secret Messages Stream: Full Smooth Scroll for 30 messages */}
+                {/* Secret Messages Stream */}
                 <div className="border-y border-[#2a2a2a] py-2 my-2 bg-[#121212]/50 rounded px-2">
                   <div className="text-[#6a9955] mb-1 flex items-center justify-between">
                     <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'A' : 'H'})`}</span>
@@ -748,8 +769,21 @@ export default function App() {
                         return (
                           <div key={idx} className="group flex items-start justify-between hover:bg-[#202020] px-2 py-1 rounded transition-colors gap-2">
                             <div className="flex-1 break-words overflow-wrap-anywhere text-left">
-                              <span className="text-[#9cdcfe] shrink-0 font-bold">{displayName}</span> = <span className="text-[#ce9178] break-all">{`"${m.text}"`}</span> <span className="text-[#6a9955] text-[10px] shrink-0 ml-1">{`# [${m.timeFormatted}]`}</span>
+                              <span className="text-[#9cdcfe] shrink-0 font-bold">{displayName}</span> = <span className="text-[#ce9178] break-all">{`"${m.text}"`}</span> 
+                              
+                              {/* Clickable ⤴ Reply Button & Timestamp */}
+                              <button 
+                                type="button"
+                                onClick={() => handleStartReply(m)}
+                                title="Reply to this message"
+                                className="inline-flex items-center text-gray-400 hover:text-emerald-400 hover:scale-125 transition-transform duration-100 px-1 ml-1 cursor-pointer font-bold text-xs"
+                              >
+                                ⤴
+                              </button>
+                              
+                              <span className="text-[#6a9955] text-[10px] shrink-0">{`[${m.timeFormatted}]`}</span>
                             </div>
+
                             {role === 'parent' && (
                               <button 
                                 type="button"
@@ -784,8 +818,26 @@ export default function App() {
           </section>
         )}
 
-        {/* Bottom Input Pill Capsule */}
+        {/* Bottom Input Pill Capsule with Reply Bar */}
         <div className="px-4 lg:px-8 pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
+          
+          {/* Active Reply Banner */}
+          {replyTarget && (
+            <div className="mb-2 bg-[#1a1a1a] border border-[#333] px-3.5 py-1.5 rounded-xl flex items-center justify-between text-xs animate-in fade-in slide-in-from-bottom-2 duration-150">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <span className="text-emerald-400 font-bold">⤴ Replying to {replyTarget.senderRole}:</span>
+                <span className="text-gray-300 truncate max-w-md italic">"{replyTarget.text}"</span>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setReplyTarget(null)}
+                className="text-gray-400 hover:text-white p-0.5 rounded cursor-pointer"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
           {showMiniEmojiBar && (
             <div className="absolute right-14 bottom-14 z-30 bg-[#1e1e1e]/95 backdrop-blur-md border border-[#333] px-2 py-1 rounded-full shadow-2xl flex items-center gap-1.5 animate-in fade-in duration-150">
               {QUICK_EMOJIS.map((emoji, idx) => (
@@ -813,7 +865,11 @@ export default function App() {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={viewMode === 'stealth' ? "Type schema entry... (or /gpt to exit)" : "Ask anything"}
+                placeholder={
+                  viewMode === 'stealth' 
+                    ? (replyTarget ? `Reply to ${replyTarget.senderRole}...` : "Type schema entry... (or /gpt to exit)") 
+                    : "Ask anything"
+                }
                 className="flex-1 bg-transparent text-[13.5px] text-white placeholder-[#8e8e8e] outline-none"
               />
 
