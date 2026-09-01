@@ -98,19 +98,49 @@ export default function App() {
     localStorage.setItem('stealth_rooms', JSON.stringify(roomList));
   }, [roomList]);
 
-  const playAlertSound = useCallback(() => {
+  // Facebook Messenger Style Sent Sound (Small Crisp Pop/Click)
+  const playSentSound = useCallback(() => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.04);
       gain.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.3);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.04);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
-      osc.stop(ctx.currentTime + 0.3);
+      osc.stop(ctx.currentTime + 0.04);
+    } catch (e) {}
+  }, []);
+
+  // Medium Received Message Notification Sound (Pleasant 2-Tone Chime)
+  const playReceiveSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc1.type = 'sine';
+      osc2.type = 'sine';
+
+      osc1.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+      osc2.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08); // E5
+
+      gain.gain.setValueAtTime(0.09, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc1.start(ctx.currentTime);
+      osc1.stop(ctx.currentTime + 0.08);
+      osc2.start(ctx.currentTime + 0.08);
+      osc2.stop(ctx.currentTime + 0.28);
     } catch (e) {}
   }, []);
 
@@ -178,7 +208,11 @@ export default function App() {
         if (prev.some(m => m._id === formatted._id)) return prev;
         return [...prev, formatted];
       });
-      playAlertSound();
+
+      const myCurrentRole = localStorage.getItem('stealth_role') || 'user';
+      if (data.senderRole !== myCurrentRole) {
+        playReceiveSound();
+      }
     });
 
     socketRef.current.on('update_msg_status', ({ messageId, flaggedPending }) => {
@@ -187,7 +221,7 @@ export default function App() {
 
     socketRef.current.on('receive_assistant_alert', (data) => {
       setIncomingAlert(data);
-      playAlertSound();
+      playReceiveSound();
     });
 
     socketRef.current.on('parent_bubble_pop_notify', () => {
@@ -199,7 +233,7 @@ export default function App() {
     return () => {
       if (socketRef.current) socketRef.current.disconnect();
     };
-  }, [playAlertSound, playBubblePopSound]);
+  }, [playReceiveSound, playBubblePopSound]);
 
   // Double 'Esc' Panic Shortcut
   useEffect(() => {
@@ -229,7 +263,7 @@ export default function App() {
     if (inputRef.current) inputRef.current.focus();
   };
 
-  // High-IQ Multi-Tier Live Neural Engine (Zero Static Templates)
+  // Live Neural Engine Query Execution
   const fetchLiveAIResponse = async (userPrompt) => {
     setIsThinking(true);
     const userMsg = {
@@ -251,11 +285,10 @@ export default function App() {
 
     let reply = "";
 
-    // Method 1: High-Speed OpenAI GPT-4o-mini / Llama-3.3 Proxy
     try {
       const payload = {
         messages: [
-          { role: "system", content: "You are ChatGPT, a large language model trained by OpenAI. Provide authentic, highly intelligent, detailed, and directly useful answers with clean markdown formatting, proper paragraphs, and bullet points." },
+          { role: "system", content: "You are ChatGPT, an AI assistant created by OpenAI. Provide authentic, highly intelligent, detailed, and directly useful answers with clean markdown formatting, proper paragraphs, and bullet points." },
           { role: "user", content: userPrompt }
         ],
         model: "openai",
@@ -276,7 +309,6 @@ export default function App() {
       }
     } catch (e) {}
 
-    // Method 2: Fallback to Direct Query GET Pipeline
     if (!reply) {
       try {
         const cleanQuery = encodeURIComponent(
@@ -292,27 +324,8 @@ export default function App() {
       } catch (e) {}
     }
 
-    // Method 3: Secondary Serverless LLM Worker
     if (!reply) {
-      try {
-        const fallbackAPI = await fetch(`https://api.airforce/v1/chat/completions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "llama-3.3-70b-instruct",
-            messages: [{ role: "user", content: userPrompt }]
-          })
-        });
-        const d = await fallbackAPI.json();
-        if (d?.choices?.[0]?.message?.content) {
-          reply = d.choices[0].message.content.trim();
-        }
-      } catch (e) {}
-    }
-
-    // Method 4: Safety Network Fallback
-    if (!reply) {
-      reply = `Network connection timed out while reaching the inference cluster. Please check your internet connectivity or send your question again.`;
+      reply = `Network connection timed out while reaching the inference cluster. Please send your query again.`;
     }
 
     const aiMsg = {
@@ -333,7 +346,6 @@ export default function App() {
     setShowMiniEmojiBar(false);
     const cleanCmd = val.toLowerCase();
 
-    // Trigger 1: Parent Secret Code
     if (cleanCmd === '/shadow') {
       setRole('parent');
       localStorage.setItem('stealth_role', 'parent');
@@ -345,7 +357,6 @@ export default function App() {
       return;
     }
 
-    // Trigger 2: User Secret Code
     if (cleanCmd === '/dora') {
       setRole('user');
       localStorage.setItem('stealth_role', 'user');
@@ -357,14 +368,12 @@ export default function App() {
       return;
     }
 
-    // Trigger 3: Cover / Exit Code
     if (cleanCmd === '/gpt' || cleanCmd === '/normal') {
       setViewMode('real_gpt');
       setInput('');
       return;
     }
 
-    // Stealth Mode -> Broadcast to counterpart
     if (viewMode === 'stealth') {
       const encrypted = encryptText(val);
       if (socketRef.current) {
@@ -373,12 +382,13 @@ export default function App() {
           role,
           encryptedText: encrypted
         });
+        playSentSound();
       }
       setInput('');
       return;
     }
 
-    // Live AI Search
+    playSentSound();
     fetchLiveAIResponse(val);
     setInput('');
   };
@@ -409,8 +419,9 @@ export default function App() {
       doc.text("No pending questions flagged in the system.", 14, y);
     } else {
       pendingList.forEach((m, idx) => {
+        const senderLabel = m.senderRole === 'user' ? 'DORA' : 'JACK';
         doc.setFont("helvetica", "bold");
-        doc.text(`[Pending #${idx + 1}] [${m.timeFormatted}] ${m.senderRole.toUpperCase()}:`, 14, y);
+        doc.text(`[Pending #${idx + 1}] [${m.timeFormatted}] ${senderLabel}:`, 14, y);
         y += 6;
 
         doc.setFont("helvetica", "normal");
@@ -569,7 +580,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Profile Card (Displays 'User' on user side) */}
+        {/* Bottom Profile Card */}
         <div className="p-2.5 border-t border-[#171717] flex items-center justify-between text-xs bg-[#000000]">
           <div className="flex items-center gap-2 overflow-hidden">
             <div className="w-7 h-7 rounded-full bg-[#1e293b] border border-[#334155] flex items-center justify-center text-white text-[11px] font-bold shrink-0">
@@ -676,7 +687,7 @@ export default function App() {
             <div ref={messageEndRef} />
           </section>
         ) : (
-          /* VIEW 2: STEALTH JSON SCHEMA VIEW (/dora or /shadow) */
+          /* VIEW 2: STEALTH JSON SCHEMA VIEW (Dora and Jack Entries) */
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
             <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs">
               <div className="bg-[#212121] px-4 py-2.5 flex items-center justify-between border-b border-[#2e2e2e] text-[#b4b4b4]">
@@ -718,10 +729,10 @@ export default function App() {
                 </div>
                 <br />
 
-                {/* Secret Messages Stream */}
+                {/* Secret Messages Stream (Dora & Jack Names) */}
                 <div className="border-y border-[#2a2a2a] py-2 my-2 bg-[#121212]/50 rounded px-2">
                   <div className="text-[#6a9955] mb-1 flex items-center justify-between">
-                    <span>{`# Active Schema Stream (Role: ${role.toUpperCase()})`}</span>
+                    <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'Dora' : 'Jack'})`}</span>
                     <span className="text-[10px] text-gray-500 font-sans">
                       {role === 'parent' ? `Total (${stealthMessages.length}) [Full DB Saved]` : `Showing last (${displayedStealthMessages.length}) records`}
                     </span>
@@ -731,27 +742,30 @@ export default function App() {
                     {displayedStealthMessages.length === 0 ? (
                       <div className="text-[#6a9955] pl-4">{`# Waiting for execution runtime data...`}</div>
                     ) : (
-                      displayedStealthMessages.map((m, idx) => (
-                        <div key={idx} className="group flex items-start justify-between hover:bg-[#202020] px-2 py-1 rounded transition-colors gap-2">
-                          <div className="flex-1 break-words overflow-wrap-anywhere text-left">
-                            <span className="text-[#9cdcfe] shrink-0">{`${m.senderRole}_entry_${idx + 1}`}</span> = <span className="text-[#ce9178] break-all">{`"${m.text}"`}</span> <span className="text-[#6a9955] text-[10px] shrink-0 ml-1">{`# [${m.timeFormatted}]`}</span>
+                      displayedStealthMessages.map((m, idx) => {
+                        const displayName = m.senderRole === 'user' ? 'Dora' : 'Jack';
+                        return (
+                          <div key={idx} className="group flex items-start justify-between hover:bg-[#202020] px-2 py-1 rounded transition-colors gap-2">
+                            <div className="flex-1 break-words overflow-wrap-anywhere text-left">
+                              <span className="text-[#9cdcfe] shrink-0">{`${displayName}_entry_${idx + 1}`}</span> = <span className="text-[#ce9178] break-all">{`"${m.text}"`}</span> <span className="text-[#6a9955] text-[10px] shrink-0 ml-1">{`# [${m.timeFormatted}]`}</span>
+                            </div>
+                            {role === 'parent' && (
+                              <button 
+                                type="button"
+                                onClick={(e) => togglePendingFlag(e, m)}
+                                title={m.flaggedPending ? "Mark as Resolved" : "Add to Answer Pending"}
+                                className={`px-2 py-0.5 text-xs font-bold rounded cursor-pointer transition-all duration-150 transform active:scale-90 shrink-0 mt-0.5 ${
+                                  m.flaggedPending 
+                                    ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-105' 
+                                    : 'bg-[#2a2a2a] text-gray-400 hover:text-white hover:bg-[#383838]'
+                                }`}
+                              >
+                                !
+                              </button>
+                            )}
                           </div>
-                          {role === 'parent' && (
-                            <button 
-                              type="button"
-                              onClick={(e) => togglePendingFlag(e, m)}
-                              title={m.flaggedPending ? "Mark as Resolved" : "Add to Answer Pending"}
-                              className={`px-2 py-0.5 text-xs font-bold rounded cursor-pointer transition-all duration-150 transform active:scale-90 shrink-0 mt-0.5 ${
-                                m.flaggedPending 
-                                  ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-105' 
-                                  : 'bg-[#2a2a2a] text-gray-400 hover:text-white hover:bg-[#383838]'
-                              }`}
-                            >
-                              !
-                            </button>
-                          )}
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                     <div ref={messageEndRef} />
                   </div>
@@ -864,7 +878,7 @@ export default function App() {
                     <div key={idx} className="bg-[#212121] border border-[#2d2d2d] p-3 rounded-xl flex items-start justify-between gap-3">
                       <div className="space-y-1 text-xs">
                         <div className="flex items-center gap-2 text-[11px] text-gray-400 font-mono">
-                          <span className="text-blue-400">{m.senderRole.toUpperCase()}</span>
+                          <span className="text-blue-400">{m.senderRole === 'user' ? 'DORA' : 'JACK'}</span>
                           <span>•</span>
                           <span>{m.timeFormatted}</span>
                         </div>
