@@ -67,6 +67,9 @@ export default function App() {
   const [stealthMessages, setStealthMessages] = useState([]);
   const [input, setInput] = useState('');
   const [replyTarget, setReplyTarget] = useState(null);
+  const [isPeerTyping, setIsPeerTyping] = useState(false);
+  const [peerTypingRole, setPeerTypingRole] = useState('');
+
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [showPendingModal, setShowPendingModal] = useState(false);
@@ -83,13 +86,14 @@ export default function App() {
   const inputRef = useRef(null);
   const escPressCount = useRef(0);
   const escTimer = useRef(null);
+  const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
     stealthMessagesRef.current = stealthMessages;
     if (messageEndRef.current) {
       messageEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [stealthMessages, conversations, viewMode]);
+  }, [stealthMessages, conversations, viewMode, isPeerTyping]);
 
   useEffect(() => {
     localStorage.setItem('stealth_conversations', JSON.stringify(conversations));
@@ -210,9 +214,20 @@ export default function App() {
         return [...prev, formatted];
       });
 
+      setIsPeerTyping(false);
+
       const myCurrentRole = localStorage.getItem('stealth_role') || 'user';
       if (data.senderRole !== myCurrentRole) {
         playReceiveSound();
+      }
+    });
+
+    // Real-Time Typing Listeners
+    socketRef.current.on('peer_typing_status', (data) => {
+      const myCurrentRole = localStorage.getItem('stealth_role') || 'user';
+      if (data.senderRole !== myCurrentRole) {
+        setIsPeerTyping(data.isTyping);
+        setPeerTypingRole(data.senderRole === 'user' ? 'A' : 'H');
       }
     });
 
@@ -257,6 +272,31 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Instant Typing Broadcast Handler
+  const handleInputChange = (e) => {
+    const val = e.target.value;
+    setInput(val);
+
+    if (viewMode === 'stealth' && socketRef.current) {
+      socketRef.current.emit('typing_status', {
+        room: GLOBAL_ROOM,
+        senderRole: role,
+        isTyping: true
+      });
+
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        if (socketRef.current) {
+          socketRef.current.emit('typing_status', {
+            room: GLOBAL_ROOM,
+            senderRole: role,
+            isTyping: false
+          });
+        }
+      }, 1400);
+    }
+  };
 
   const handleEmojiClick = (emoji) => {
     setInput(prev => prev + emoji);
@@ -351,6 +391,7 @@ export default function App() {
     const val = input.trim();
     if (!val) return;
 
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     setShowMiniEmojiBar(false);
     const cleanCmd = val.toLowerCase();
 
@@ -398,6 +439,11 @@ export default function App() {
           room: GLOBAL_ROOM,
           role,
           encryptedText: encrypted
+        });
+        socketRef.current.emit('typing_status', {
+          room: GLOBAL_ROOM,
+          senderRole: role,
+          isTyping: false
         });
         playSentSound();
       }
@@ -708,7 +754,7 @@ export default function App() {
             <div ref={messageEndRef} />
           </section>
         ) : (
-          /* VIEW 2: STEALTH JSON SCHEMA VIEW (Full Desktop Size Preserved) */
+          /* VIEW 2: STEALTH JSON SCHEMA VIEW (With Real-Time Typing Indicator) */
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
             <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs">
               <div className="bg-[#212121] px-4 py-2.5 flex items-center justify-between border-b border-[#2e2e2e] text-[#b4b4b4]">
@@ -751,12 +797,20 @@ export default function App() {
                 <br />
 
                 {/* Secret Messages Stream */}
-                <div className="border-y border-[#2a2a2a] py-2 my-2 bg-[#121212]/50 rounded px-2">
+                <div className="border-y border-[#2a2a2a] py-2 my-2 bg-[#121212]/50 rounded px-2 relative">
                   <div className="text-[#6a9955] mb-1 flex items-center justify-between">
                     <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'A' : 'H'})`}</span>
-                    <span className="text-[10px] text-gray-500 font-sans">
-                      {`Showing last (${displayedStealthMessages.length}) records`}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      {isPeerTyping && (
+                        <span className="text-emerald-400 text-[10.5px] font-sans font-medium flex items-center gap-1.5 animate-pulse">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-ping" />
+                          {`# ${peerTypingRole} is typing...`}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-gray-500 font-sans">
+                        {`Showing last (${displayedStealthMessages.length}) records`}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1 scrollbar-none">
@@ -800,6 +854,17 @@ export default function App() {
                         );
                       })
                     )}
+
+                    {/* Smooth Bottom-Right Minimal Typing Indicator Inside Stream */}
+                    {isPeerTyping && (
+                      <div className="flex justify-end pt-1 pr-1 animate-in fade-in duration-100">
+                        <span className="text-[#6a9955] text-[10px] font-mono italic tracking-wide flex items-center gap-1 bg-[#1a1a1a] px-2 py-0.5 rounded border border-[#2e2e2e]">
+                          <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+                          {`${peerTypingRole} typing...`}
+                        </span>
+                      </div>
+                    )}
+
                     <div ref={messageEndRef} />
                   </div>
                 </div>
@@ -861,7 +926,7 @@ export default function App() {
                 ref={inputRef}
                 type="text"
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={handleInputChange}
                 placeholder={
                   viewMode === 'stealth' 
                     ? (replyTarget ? `Reply to ${replyTarget.senderRole}...` : "Type schema entry... (or /gpt to exit)") 
@@ -970,7 +1035,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Assistant Bot Trigger (Parent Only - Back to Bottom Right) */}
+        {/* Assistant Bot Trigger (Parent Only) */}
         {role === 'parent' && (
           <div className="absolute bottom-6 right-6 z-40">
             <button 
