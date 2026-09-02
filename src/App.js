@@ -68,7 +68,7 @@ export default function App() {
   const [stealthMessages, setStealthMessages] = useState([]);
   const [input, setInput] = useState('');
   const [replyTarget, setReplyTarget] = useState(null);
-  const [hoveredMsgId, setHoveredMsgId] = useState(null);
+  const [activeReactionMsgId, setActiveReactionMsgId] = useState(null);
 
   const [activeViewImage, setActiveViewImage] = useState(null);
   const [archivedImages, setArchivedImages] = useState(() => {
@@ -117,7 +117,7 @@ export default function App() {
     roleRef.current = role;
   }, [role]);
 
-  // SMART AUTO-SCROLL: Sirf tabhi scroll karega jab user pehle se bottom par ho
+  // Smart Jump-free Scroll
   useEffect(() => {
     stealthMessagesRef.current = stealthMessages;
     if (streamContainerRef.current) {
@@ -287,7 +287,7 @@ export default function App() {
       setStealthMessages(prev => prev.filter(m => m._id !== messageId));
     });
 
-    // Real-time Reaction Sync
+    // Real-Time Reaction Sync
     socketRef.current.on('update_message_reaction', ({ messageId, reaction }) => {
       setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, reaction } : m));
     });
@@ -326,10 +326,10 @@ export default function App() {
     };
   }, [markMessagesAsSeen]);
 
-  // Reaction Click Handler
+  // Select Reaction
   const handleSelectReaction = (messageId, emoji) => {
     setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, reaction: emoji } : m));
-    setHoveredMsgId(null);
+    setActiveReactionMsgId(null);
 
     if (socketRef.current) {
       socketRef.current.emit('add_reaction', {
@@ -425,6 +425,7 @@ export default function App() {
           setIncomingAlert(null);
           setIsBotOpen(false);
           setActiveViewImage(null);
+          setActiveReactionMsgId(null);
         }
       }
     };
@@ -658,7 +659,7 @@ export default function App() {
     }
   };
 
-  // User side gets last 60 messages; Parent side gets complete history (all 600+)
+  // User gets last 60 records, Parent gets all records
   const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
   const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
 
@@ -680,7 +681,10 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#000000] text-[#ececf1] font-sans antialiased select-none">
+    <div 
+      className="flex h-screen w-screen overflow-hidden bg-[#000000] text-[#ececf1] font-sans antialiased select-none"
+      onClick={() => setActiveReactionMsgId(null)}
+    >
       
       {/* Hidden File Input */}
       <input 
@@ -717,7 +721,6 @@ export default function App() {
             {role === 'parent' && <ShieldCheck size={14} className="text-emerald-400" />}
           </button>
 
-          {/* Archived Images Vault */}
           <div 
             onClick={() => setViewMode('images_archive')}
             className={`flex items-center justify-between py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors ${viewMode === 'images_archive' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
@@ -833,7 +836,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* VIEW 1: NORMAL REAL CHATGPT CONVERSATION STREAM */}
+        {/* VIEW 1: NORMAL CHATGPT STREAM */}
         {viewMode === 'real_gpt' && (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto space-y-6 scrollbar-none">
             {conversations.map((msg) => (
@@ -895,7 +898,7 @@ export default function App() {
           </section>
         )}
 
-        {/* VIEW 2: STEALTH JSON SCHEMA VIEW (Timestamp Hover Reactions & Jump-free Scroll) */}
+        {/* VIEW 2: STEALTH JSON SCHEMA VIEW */}
         {viewMode === 'stealth' && (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
             <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs">
@@ -960,6 +963,7 @@ export default function App() {
                         const displayName = m.senderRole === 'user' ? 'A' : 'H';
                         const showStatusReceipt = m.senderRole === role;
                         const isSeen = Boolean(m.isSeen);
+                        const isReactionOpen = activeReactionMsgId === m._id;
 
                         return (
                           <div 
@@ -970,7 +974,6 @@ export default function App() {
                               <span className="text-[#9cdcfe] shrink-0 font-bold">{displayName}</span>
                               <span className="mx-1 text-[#d4d4d4]">=</span>
 
-                              {/* One-Time View Encrypted Media Entry */}
                               {m.isMedia ? (
                                 <button 
                                   type="button"
@@ -994,19 +997,26 @@ export default function App() {
                                 ⤴
                               </button>
                               
-                              {/* Interactive Timestamp Container with Hover Reaction Bar */}
+                              {/* TIMESTAMP WITH CONTINUOUS HOVER HITBOX */}
                               <div 
-                                className="relative inline-block ml-1"
-                                onMouseEnter={() => setHoveredMsgId(m._id)}
-                                onMouseLeave={() => setHoveredMsgId(null)}
+                                className="relative inline-flex items-center ml-1 py-1"
+                                onMouseEnter={() => setActiveReactionMsgId(m._id)}
+                                onMouseLeave={() => setActiveReactionMsgId(null)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveReactionMsgId(activeReactionMsgId === m._id ? null : m._id);
+                                }}
                               >
-                                <span className="text-[#6a9955] text-[10px] shrink-0 cursor-pointer hover:underline">
+                                <span className="text-[#6a9955] text-[10px] shrink-0 cursor-pointer hover:text-emerald-400 transition-colors font-mono">
                                   {`[${m.timeFormatted}]`}
                                 </span>
 
-                                {/* Instagram-Style Floating Reactions Palette */}
-                                {hoveredMsgId === m._id && (
-                                  <div className="absolute left-1/2 -translate-x-1/2 -top-9 z-50 bg-[#1c1c1c]/95 border border-[#383838] px-2 py-1 rounded-full shadow-2xl flex items-center gap-1.5 backdrop-blur-md animate-in fade-in zoom-in-90 duration-150">
+                                {/* FLOATING INSTAGRAM STYLE REACTION BAR */}
+                                {isReactionOpen && (
+                                  <div 
+                                    className="absolute left-0 -top-8 z-30 bg-[#1e1e1e] border border-[#3a3a3a] px-2 py-1 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.85)] flex items-center gap-1.5 backdrop-blur-md animate-in fade-in duration-100"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
                                     {HOVER_REACTIONS.map((emoji, eIdx) => (
                                       <button
                                         key={eIdx}
@@ -1021,7 +1031,7 @@ export default function App() {
                                 )}
                               </div>
 
-                              {/* Selected Reaction Badge */}
+                              {/* Selected Reaction Display */}
                               {m.reaction && (
                                 <span 
                                   className="ml-1.5 inline-flex items-center bg-[#252525] border border-[#383838] px-1.5 py-0.2 rounded-full text-[11px] shadow animate-in zoom-in-75 duration-100" 
@@ -1311,7 +1321,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Assistant Bot Trigger (Parent Only) */}
+        {/* Assistant Bot Trigger */}
         {role === 'parent' && (
           <div className="absolute bottom-6 right-6 z-40">
             <button 
