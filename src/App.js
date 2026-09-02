@@ -85,6 +85,18 @@ export default function App() {
   const escPressCount = useRef(0);
   const escTimer = useRef(null);
 
+  // References for reliable real-time state checks in callbacks
+  const viewModeRef = useRef(viewMode);
+  const roleRef = useRef(role);
+
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
+
+  useEffect(() => {
+    roleRef.current = role;
+  }, [role]);
+
   useEffect(() => {
     stealthMessagesRef.current = stealthMessages;
     if (messageEndRef.current) {
@@ -173,11 +185,14 @@ export default function App() {
     }
   };
 
-  // Emit Read-Receipt (Seen status)
+  // Strictly mark seen ONLY IF user is inside stealth view, tab is visible & active
   const markMessagesAsSeen = useCallback(() => {
-    const myCurrentRole = localStorage.getItem('stealth_role') || 'user';
-    if (socketRef.current) {
-      socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: myCurrentRole });
+    const isCurrentlyStealth = viewModeRef.current === 'stealth';
+    const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
+
+    if (isCurrentlyStealth && isTabActive && socketRef.current) {
+      const currentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
+      socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: currentRole });
     }
   }, []);
 
@@ -222,14 +237,13 @@ export default function App() {
         return [...prev, formatted];
       });
 
-      const myCurrentRole = localStorage.getItem('stealth_role') || 'user';
+      const myCurrentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
       if (data.senderRole !== myCurrentRole) {
         playReceiveSound();
         markMessagesAsSeen();
       }
     });
 
-    // Real-Time double-dot (..) event from counterpart
     socketRef.current.on('messages_marked_seen', (data) => {
       setStealthMessages(prev => prev.map(m => {
         if (m.senderRole !== data.viewerRole) {
@@ -259,16 +273,24 @@ export default function App() {
     };
   }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen]);
 
-  // Window Focus Auto-Seen Check
+  // Tab activity listeners: Only trigger seen when user returns to this tab in stealth mode
   useEffect(() => {
-    const handleFocus = () => {
-      if (viewMode === 'stealth') {
-        markMessagesAsSeen();
-      }
+    const handleActivity = () => {
+      markMessagesAsSeen();
     };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [viewMode, markMessagesAsSeen]);
+
+    window.addEventListener('focus', handleActivity);
+    window.addEventListener('visibilitychange', handleActivity);
+    window.addEventListener('click', handleActivity);
+    window.addEventListener('keydown', handleActivity);
+
+    return () => {
+      window.removeEventListener('focus', handleActivity);
+      window.removeEventListener('visibilitychange', handleActivity);
+      window.removeEventListener('click', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+    };
+  }, [markMessagesAsSeen]);
 
   // Double 'Esc' Panic Shortcut
   useEffect(() => {
@@ -388,32 +410,37 @@ export default function App() {
     setShowMiniEmojiBar(false);
     const cleanCmd = val.toLowerCase();
 
+    // Trigger 1: Parent Secret Code -> Enter Stealth Mode
     if (cleanCmd === '/shadow') {
       setRole('parent');
       localStorage.setItem('stealth_role', 'parent');
       setViewMode('stealth');
       if (socketRef.current) {
         socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'parent' });
+        // Code enter karke jab tab me aayenge tab seen notify hoga
+        socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: 'parent' });
       }
       setInput('');
       setReplyTarget(null);
-      markMessagesAsSeen();
       return;
     }
 
+    // Trigger 2: User Secret Code -> Enter Stealth Mode
     if (cleanCmd === '/dora') {
       setRole('user');
       localStorage.setItem('stealth_role', 'user');
       setViewMode('stealth');
       if (socketRef.current) {
         socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'user' });
+        // Code enter karke jab tab me aayenge tab seen notify hoga
+        socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: 'user' });
       }
       setInput('');
       setReplyTarget(null);
-      markMessagesAsSeen();
       return;
     }
 
+    // Trigger 3: Cover / Normal Mode
     if (cleanCmd === '/gpt' || cleanCmd === '/normal') {
       setViewMode('real_gpt');
       setInput('');
@@ -802,8 +829,7 @@ export default function App() {
                       displayedStealthMessages.map((m, idx) => {
                         const displayName = m.senderRole === 'user' ? 'A' : 'H';
                         const myRole = role;
-                        // Status indicator logic:
-                        // Sender dekhega status (. sent, .. seen by counterpart)
+                        // Status indicator: Sender sees . (sent) or .. (seen by counterpart)
                         const showStatusReceipt = m.senderRole === myRole;
                         const isSeen = Boolean(m.isSeen);
 
@@ -1026,7 +1052,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Assistant Bot Trigger (Parent Only - Bottom Right) */}
+        {/* Assistant Bot Trigger (Parent Only) */}
         {role === 'parent' && (
           <div className="absolute bottom-6 right-6 z-40">
             <button 
