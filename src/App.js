@@ -100,7 +100,7 @@ export default function App() {
     localStorage.setItem('stealth_rooms', JSON.stringify(roomList));
   }, [roomList]);
 
-  // Facebook Messenger Style Sent Sound
+  // Audio Notifications
   const playSentSound = useCallback(() => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -118,7 +118,6 @@ export default function App() {
     } catch (e) {}
   }, []);
 
-  // Medium Received Message Chime
   const playReceiveSound = useCallback(() => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -174,6 +173,14 @@ export default function App() {
     }
   };
 
+  // Emit Read-Receipt (Seen status)
+  const markMessagesAsSeen = useCallback(() => {
+    const myCurrentRole = localStorage.getItem('stealth_role') || 'user';
+    if (socketRef.current) {
+      socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: myCurrentRole });
+    }
+  }, []);
+
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
@@ -186,6 +193,7 @@ export default function App() {
       setIsConnected(true);
       const currentRole = localStorage.getItem('stealth_role') || 'user';
       socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: currentRole });
+      markMessagesAsSeen();
     });
 
     socketRef.current.on('disconnect', () => setIsConnected(false));
@@ -198,13 +206,7 @@ export default function App() {
         isSeen: m.isSeen || false
       }));
       setStealthMessages(parsed);
-
-      // Auto emit seen event if there are unseen incoming messages
-      const myCurrentRole = localStorage.getItem('stealth_role') || 'user';
-      const hasUnseen = parsed.some(m => m.senderRole !== myCurrentRole && !m.isSeen);
-      if (hasUnseen && socketRef.current) {
-        socketRef.current.emit('messages_seen', { room: GLOBAL_ROOM, viewerRole: myCurrentRole });
-      }
+      markMessagesAsSeen();
     });
 
     socketRef.current.on('receive_stealth_msg', (data) => {
@@ -223,15 +225,12 @@ export default function App() {
       const myCurrentRole = localStorage.getItem('stealth_role') || 'user';
       if (data.senderRole !== myCurrentRole) {
         playReceiveSound();
-        // Immediately notify sender that message is seen
-        if (socketRef.current) {
-          socketRef.current.emit('messages_seen', { room: GLOBAL_ROOM, viewerRole: myCurrentRole });
-        }
+        markMessagesAsSeen();
       }
     });
 
-    // Real-time double dot listener (Seen status)
-    socketRef.current.on('update_seen_status', (data) => {
+    // Real-Time double-dot (..) event from counterpart
+    socketRef.current.on('messages_marked_seen', (data) => {
       setStealthMessages(prev => prev.map(m => {
         if (m.senderRole !== data.viewerRole) {
           return { ...m, isSeen: true };
@@ -258,7 +257,18 @@ export default function App() {
     return () => {
       if (socketRef.current) socketRef.current.disconnect();
     };
-  }, [playReceiveSound, playBubblePopSound]);
+  }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen]);
+
+  // Window Focus Auto-Seen Check
+  useEffect(() => {
+    const handleFocus = () => {
+      if (viewMode === 'stealth') {
+        markMessagesAsSeen();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [viewMode, markMessagesAsSeen]);
 
   // Double 'Esc' Panic Shortcut
   useEffect(() => {
@@ -387,6 +397,7 @@ export default function App() {
       }
       setInput('');
       setReplyTarget(null);
+      markMessagesAsSeen();
       return;
     }
 
@@ -399,6 +410,7 @@ export default function App() {
       }
       setInput('');
       setReplyTarget(null);
+      markMessagesAsSeen();
       return;
     }
 
@@ -789,10 +801,18 @@ export default function App() {
                     ) : (
                       displayedStealthMessages.map((m, idx) => {
                         const displayName = m.senderRole === 'user' ? 'A' : 'H';
+                        const myRole = role;
+                        // Status indicator logic:
+                        // Sender dekhega status (. sent, .. seen by counterpart)
+                        const showStatusReceipt = m.senderRole === myRole;
+                        const isSeen = Boolean(m.isSeen);
+
                         return (
                           <div key={idx} className="group flex items-start justify-between hover:bg-[#202020] px-2 py-1 rounded transition-colors gap-2">
-                            <div className="flex-1 break-words overflow-wrap-anywhere text-left">
-                              <span className="text-[#9cdcfe] shrink-0 font-bold">{displayName}</span> = <span className="text-[#ce9178] break-all">{`"${m.text}"`}</span> 
+                            <div className="flex-1 break-words overflow-wrap-anywhere text-left flex flex-wrap items-center">
+                              <span className="text-[#9cdcfe] shrink-0 font-bold">{displayName}</span>
+                              <span className="mx-1 text-[#d4d4d4]">=</span>
+                              <span className="text-[#ce9178] break-all">{`"${m.text}"`}</span> 
                               
                               <button 
                                 type="button"
@@ -805,15 +825,17 @@ export default function App() {
                               
                               <span className="text-[#6a9955] text-[10px] shrink-0 ml-1">{`[${m.timeFormatted}]`}</span>
                               
-                              {/* Sent (.) / Seen (..) Status Receipt */}
-                              <span 
-                                className={`text-[12px] font-mono tracking-tighter shrink-0 ml-1 font-bold ${
-                                  m.isSeen ? 'text-[#38bdf8]' : 'text-gray-500'
-                                }`}
-                                title={m.isSeen ? "Seen" : "Sent"}
-                              >
-                                {m.isSeen ? '..' : '.'}
-                              </span>
+                              {/* Sent (.) and Seen (..) Indicator */}
+                              {showStatusReceipt && (
+                                <span 
+                                  className={`text-[12px] font-mono tracking-tighter shrink-0 ml-1 font-bold ${
+                                    isSeen ? 'text-[#38bdf8]' : 'text-gray-500'
+                                  }`}
+                                  title={isSeen ? "Seen by counterpart" : "Sent"}
+                                >
+                                  {isSeen ? '..' : '.'}
+                                </span>
+                              )}
                             </div>
 
                             {role === 'parent' && (
