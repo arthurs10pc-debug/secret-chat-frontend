@@ -4,11 +4,11 @@ import CryptoJS from 'crypto-js';
 import jsPDF from 'jspdf';
 import confetti from 'canvas-confetti';
 import { 
-  SquarePen, Image, BookOpen, Clock, ToyBrick, FolderGit2, TerminalSquare, MoreHorizontal,
+  SquarePen, Image as ImageIcon, BookOpen, Clock, ToyBrick, FolderGit2, TerminalSquare, MoreHorizontal,
   Search, PanelLeft, ArrowUp, Plus, RefreshCw, Sparkles, Share,
   Bot, X, Download, AlertCircle, ShieldCheck, Trash2, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
-  Code, Play, CornerUpLeft
+  Code, Play, CornerUpLeft, Eye
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -43,6 +43,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : DEFAULT_RECENT_CHATS;
   });
 
+  // viewMode: 'real_gpt' | 'stealth' | 'images_archive'
   const [viewMode, setViewMode] = useState('real_gpt');
 
   const [conversations, setConversations] = useState(() => {
@@ -58,7 +59,7 @@ export default function App() {
       {
         id: "init_2",
         role: "assistant",
-        text: "Invisalign aligners treatment is a modern orthodontic approach designed to gradually straighten teeth and improve dental alignment using a series of clear, removable aligners. It may be suitable for concerns such as crooked teeth, spacing, crowding, and certain bite irregularities, depending on the individual's orthodontic condition. The transparent design provides a discreet alternative to traditional braces while allowing aligners to be removed during eating, brushing, and flossing. At Smile Architect Orthodontic Centre & Dental Clinic, patients receive a detailed orthodontic assessment to evaluate tooth alignment, bite, jaw relationship, and overall oral health before treatment planning. A personalised Invisalign aligners treatment plan is prepared according to individual dental requirements, with regular follow-ups to monitor tooth movement and treatment progress. If you are searching for the best Invisalign Aligners Treatment in Patil Colony, Nashik, an experienced Orthodontist in Patil Colony, Nashik, or a trusted Dental Clinic in Patil Colony, Nashik, Smile Architect Orthodontic Centre & Dental Clinic provides personalised Invisalign aligners treatment focused on improving tooth alignment, bite function, and smile aesthetics.",
+        text: "Invisalign aligners treatment is a modern orthodontic approach designed to gradually straighten teeth and improve dental alignment using a series of clear, removable aligners. At Smile Architect Orthodontic Centre & Dental Clinic, patients receive a detailed orthodontic assessment before treatment planning.",
         time: "5:27 PM"
       }
     ];
@@ -67,6 +68,28 @@ export default function App() {
   const [stealthMessages, setStealthMessages] = useState([]);
   const [input, setInput] = useState('');
   const [replyTarget, setReplyTarget] = useState(null);
+
+  // One-time image viewing modal state
+  const [activeViewImage, setActiveViewImage] = useState(null);
+
+  // Image Archive Storage
+  const [archivedImages, setArchivedImages] = useState(() => {
+    const saved = localStorage.getItem('stealth_image_vault');
+    if (!saved) return [];
+    try {
+      const parsed = JSON.parse(saved);
+      const currentRole = localStorage.getItem('stealth_role') || 'user';
+      // User side: 24 hour auto-clean check
+      if (currentRole === 'user') {
+        const now = Date.now();
+        const valid = parsed.filter(img => now - img.archivedAt < 24 * 60 * 60 * 1000);
+        return valid;
+      }
+      return parsed; // Admin side never cleans up
+    } catch {
+      return [];
+    }
+  });
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
@@ -82,10 +105,10 @@ export default function App() {
   const stealthMessagesRef = useRef([]);
   const messageEndRef = useRef(null);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const escPressCount = useRef(0);
   const escTimer = useRef(null);
 
-  // References for reliable real-time state checks in callbacks
   const viewModeRef = useRef(viewMode);
   const roleRef = useRef(role);
 
@@ -112,7 +135,11 @@ export default function App() {
     localStorage.setItem('stealth_rooms', JSON.stringify(roomList));
   }, [roomList]);
 
-  // Audio Notifications
+  useEffect(() => {
+    localStorage.setItem('stealth_image_vault', JSON.stringify(archivedImages));
+  }, [archivedImages]);
+
+  // Audio Alerts
   const playSentSound = useCallback(() => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -139,7 +166,6 @@ export default function App() {
 
       osc1.type = 'sine';
       osc2.type = 'sine';
-
       osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
       osc2.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08);
 
@@ -185,7 +211,6 @@ export default function App() {
     }
   };
 
-  // Strictly mark seen ONLY IF user is inside stealth view, tab is visible & active
   const markMessagesAsSeen = useCallback(() => {
     const isCurrentlyStealth = viewModeRef.current === 'stealth';
     const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
@@ -218,7 +243,8 @@ export default function App() {
         ...m,
         text: decryptText(m.encryptedText),
         timeFormatted: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isSeen: m.isSeen || false
+        isSeen: m.isSeen || false,
+        isMedia: m.isMedia || false
       }));
       setStealthMessages(parsed);
       markMessagesAsSeen();
@@ -230,7 +256,8 @@ export default function App() {
         ...data,
         text,
         timeFormatted: new Date(data.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isSeen: false
+        isSeen: false,
+        isMedia: data.isMedia || false
       };
       setStealthMessages(prev => {
         if (prev.some(m => m._id === formatted._id)) return prev;
@@ -253,6 +280,11 @@ export default function App() {
       }));
     });
 
+    // Real-time message destroy event once view-once is consumed
+    socketRef.current.on('message_destroyed_on_view', ({ messageId }) => {
+      setStealthMessages(prev => prev.filter(m => m._id !== messageId));
+    });
+
     socketRef.current.on('update_msg_status', ({ messageId, flaggedPending }) => {
       setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, flaggedPending } : m));
     });
@@ -273,12 +305,9 @@ export default function App() {
     };
   }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen]);
 
-  // Tab activity listeners: Only trigger seen when user returns to this tab in stealth mode
+  // Tab Activity Listener
   useEffect(() => {
-    const handleActivity = () => {
-      markMessagesAsSeen();
-    };
-
+    const handleActivity = () => markMessagesAsSeen();
     window.addEventListener('focus', handleActivity);
     window.addEventListener('visibilitychange', handleActivity);
     window.addEventListener('click', handleActivity);
@@ -291,6 +320,83 @@ export default function App() {
       window.removeEventListener('keydown', handleActivity);
     };
   }, [markMessagesAsSeen]);
+
+  // Image Upload and Clipboard Paste Handler
+  const processAndSendImage = (file) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64Data = event.target.result;
+      const encrypted = encryptText(base64Data);
+
+      if (socketRef.current && viewMode === 'stealth') {
+        socketRef.current.emit('send_stealth_msg', {
+          room: GLOBAL_ROOM,
+          role,
+          encryptedText: encrypted,
+          isMedia: true
+        });
+        playSentSound();
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Clipboard Paste listener (Ctrl + V images anywhere in stealth mode)
+  useEffect(() => {
+    const handlePaste = (e) => {
+      if (viewMode !== 'stealth') return;
+      const items = (e.clipboardData || window.clipboardData).items;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          processAndSendImage(file);
+          e.preventDefault();
+          break;
+        }
+      }
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [viewMode, role]);
+
+  // Open & Consume One-Time View Image
+  const handleOpenViewOnce = (msg) => {
+    setActiveViewImage({
+      id: msg._id,
+      data: msg.text,
+      sender: msg.senderRole === 'user' ? 'A' : 'H',
+      time: msg.timeFormatted
+    });
+  };
+
+  // Close One-Time View Modal -> Delete from chat and archive to "Images" tab
+  const handleCloseViewOnce = () => {
+    if (!activeViewImage) return;
+
+    // Archive image
+    const archiveItem = {
+      id: activeViewImage.id,
+      data: activeViewImage.data,
+      sender: activeViewImage.sender,
+      time: activeViewImage.time,
+      archivedAt: Date.now()
+    };
+    setArchivedImages(prev => [archiveItem, ...prev]);
+
+    // Clear locally from stream
+    setStealthMessages(prev => prev.filter(m => m._id !== activeViewImage.id));
+
+    // Broadcast remote destruction to counterpart
+    if (socketRef.current) {
+      socketRef.current.emit('destroy_view_once', {
+        room: GLOBAL_ROOM,
+        messageId: activeViewImage.id
+      });
+    }
+
+    setActiveViewImage(null);
+  };
 
   // Double 'Esc' Panic Shortcut
   useEffect(() => {
@@ -307,6 +413,7 @@ export default function App() {
           setShowMiniEmojiBar(false);
           setIncomingAlert(null);
           setIsBotOpen(false);
+          setActiveViewImage(null);
         }
       }
     };
@@ -321,8 +428,9 @@ export default function App() {
   };
 
   const handleStartReply = (msg) => {
+    const preview = msg.isMedia ? "[Photo]" : msg.text;
     setReplyTarget({
-      text: msg.text,
+      text: preview,
       senderRole: msg.senderRole === 'user' ? 'A' : 'H'
     });
     if (inputRef.current) inputRef.current.focus();
@@ -374,21 +482,6 @@ export default function App() {
     } catch (e) {}
 
     if (!reply) {
-      try {
-        const cleanQuery = encodeURIComponent(
-          `System: You are ChatGPT. Provide comprehensive, accurate, factual, and well-explained information with depth.\nUser: ${userPrompt}`
-        );
-        const getRes = await fetch(`https://text.pollinations.ai/${cleanQuery}?model=mistral&seed=${Math.floor(Math.random() * 99999)}`);
-        if (getRes.ok) {
-          const rawText = await getRes.text();
-          if (rawText && rawText.trim().length > 15 && !rawText.includes("402")) {
-            reply = rawText.trim();
-          }
-        }
-      } catch (e) {}
-    }
-
-    if (!reply) {
       reply = `Network connection timed out while reaching the inference cluster. Please send your query again.`;
     }
 
@@ -410,14 +503,12 @@ export default function App() {
     setShowMiniEmojiBar(false);
     const cleanCmd = val.toLowerCase();
 
-    // Trigger 1: Parent Secret Code -> Enter Stealth Mode
     if (cleanCmd === '/shadow') {
       setRole('parent');
       localStorage.setItem('stealth_role', 'parent');
       setViewMode('stealth');
       if (socketRef.current) {
         socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'parent' });
-        // Code enter karke jab tab me aayenge tab seen notify hoga
         socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: 'parent' });
       }
       setInput('');
@@ -425,14 +516,12 @@ export default function App() {
       return;
     }
 
-    // Trigger 2: User Secret Code -> Enter Stealth Mode
     if (cleanCmd === '/dora') {
       setRole('user');
       localStorage.setItem('stealth_role', 'user');
       setViewMode('stealth');
       if (socketRef.current) {
         socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'user' });
-        // Code enter karke jab tab me aayenge tab seen notify hoga
         socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: 'user' });
       }
       setInput('');
@@ -440,7 +529,6 @@ export default function App() {
       return;
     }
 
-    // Trigger 3: Cover / Normal Mode
     if (cleanCmd === '/gpt' || cleanCmd === '/normal') {
       setViewMode('real_gpt');
       setInput('');
@@ -460,7 +548,8 @@ export default function App() {
         socketRef.current.emit('send_stealth_msg', {
           room: GLOBAL_ROOM,
           role,
-          encryptedText: encrypted
+          encryptedText: encrypted,
+          isMedia: false
         });
         playSentSound();
       }
@@ -508,7 +597,7 @@ export default function App() {
         y += 6;
 
         doc.setFont("helvetica", "normal");
-        const splitText = doc.splitTextToSize(m.text || "", 175);
+        const splitText = doc.splitTextToSize(m.isMedia ? "[Encrypted Image Asset]" : (m.text || ""), 175);
         doc.text(splitText, 18, y);
         y += (splitText.length * 5) + 4;
 
@@ -581,6 +670,20 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#000000] text-[#ececf1] font-sans antialiased select-none">
       
+      {/* Hidden File Input for Image Upload */}
+      <input 
+        type="file" 
+        accept="image/*" 
+        ref={fileInputRef} 
+        onChange={(e) => {
+          if (e.target.files && e.target.files[0]) {
+            processAndSendImage(e.target.files[0]);
+            e.target.value = '';
+          }
+        }} 
+        className="hidden" 
+      />
+
       {/* Left Sidebar */}
       <aside className={`${sidebarOpen ? 'w-64' : 'w-0'} transition-all duration-200 bg-[#000000] flex flex-col border-r border-[#171717] overflow-hidden select-none shrink-0 z-20`}>
         <div className="h-13 flex items-center justify-between px-3.5 pt-2 shrink-0">
@@ -602,9 +705,17 @@ export default function App() {
             {role === 'parent' && <ShieldCheck size={14} className="text-emerald-400" />}
           </button>
 
-          <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors">
-            <Image size={15} className="text-[#9b9b9b]" /> Images
+          {/* Archived Images Vault */}
+          <div 
+            onClick={() => setViewMode('images_archive')}
+            className={`flex items-center justify-between py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors ${viewMode === 'images_archive' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
+          >
+            <span className="flex items-center gap-2.5">
+              <ImageIcon size={15} className={viewMode === 'images_archive' ? 'text-blue-400' : 'text-[#9b9b9b]'} /> Images
+            </span>
+            <span className="text-[10px] text-gray-500 font-mono">{archivedImages.length}</span>
           </div>
+
           <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors">
             <BookOpen size={15} className="text-[#9b9b9b]" /> Library
           </div>
@@ -635,7 +746,7 @@ export default function App() {
                 setViewMode('real_gpt');
                 setReplyTarget(null);
               }}
-              className={`flex items-center justify-between py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors group ${currentRoom === roomName ? 'bg-[#212121] text-white font-normal' : 'text-[#b4b4b4] hover:bg-[#171717] hover:text-white'}`}
+              className={`flex items-center justify-between py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors group ${currentRoom === roomName && viewMode === 'real_gpt' ? 'bg-[#212121] text-white font-normal' : 'text-[#b4b4b4] hover:bg-[#171717] hover:text-white'}`}
             >
               <span className="truncate max-w-[190px]">{roomName}</span>
             </div>
@@ -711,7 +822,7 @@ export default function App() {
         </header>
 
         {/* VIEW 1: NORMAL REAL CHATGPT CONVERSATION STREAM */}
-        {viewMode === 'real_gpt' ? (
+        {viewMode === 'real_gpt' && (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto space-y-6 scrollbar-none">
             {conversations.map((msg) => (
               <div key={msg.id} className="w-full">
@@ -770,8 +881,10 @@ export default function App() {
 
             <div ref={messageEndRef} />
           </section>
-        ) : (
-          /* VIEW 2: STEALTH JSON SCHEMA VIEW */
+        )}
+
+        {/* VIEW 2: STEALTH JSON SCHEMA VIEW (Interactive Disguised View-Once Photos) */}
+        {viewMode === 'stealth' && (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
             <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs">
               <div className="bg-[#212121] px-4 py-2.5 flex items-center justify-between border-b border-[#2e2e2e] text-[#b4b4b4]">
@@ -828,9 +941,7 @@ export default function App() {
                     ) : (
                       displayedStealthMessages.map((m, idx) => {
                         const displayName = m.senderRole === 'user' ? 'A' : 'H';
-                        const myRole = role;
-                        // Status indicator: Sender sees . (sent) or .. (seen by counterpart)
-                        const showStatusReceipt = m.senderRole === myRole;
+                        const showStatusReceipt = m.senderRole === role;
                         const isSeen = Boolean(m.isSeen);
 
                         return (
@@ -838,7 +949,21 @@ export default function App() {
                             <div className="flex-1 break-words overflow-wrap-anywhere text-left flex flex-wrap items-center">
                               <span className="text-[#9cdcfe] shrink-0 font-bold">{displayName}</span>
                               <span className="mx-1 text-[#d4d4d4]">=</span>
-                              <span className="text-[#ce9178] break-all">{`"${m.text}"`}</span> 
+
+                              {/* If Message is an Image -> Render Minimal One-Time View Symbol */}
+                              {m.isMedia ? (
+                                <button 
+                                  type="button"
+                                  onClick={() => handleOpenViewOnce(m)}
+                                  className="inline-flex items-center gap-1.5 bg-[#252525] hover:bg-[#333] border border-[#3d3d3d] text-emerald-400 px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer transition-all active:scale-95 shadow-sm"
+                                  title="Click to view once"
+                                >
+                                  <Eye size={12} />
+                                  <span className="underline decoration-dotted font-medium">[View Once: binary_raw]</span>
+                                </button>
+                              ) : (
+                                <span className="text-[#ce9178] break-all">{`"${m.text}"`}</span>
+                              )}
                               
                               <button 
                                 type="button"
@@ -898,6 +1023,44 @@ export default function App() {
           </section>
         )}
 
+        {/* VIEW 3: ARCHIVED IMAGES VAULT (Side Menu Tab) */}
+        {viewMode === 'images_archive' && (
+          <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 max-w-4xl w-full mx-auto space-y-4 scrollbar-none font-sans">
+            <div className="flex items-center justify-between border-b border-[#222] pb-3">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="text-blue-400" size={18} />
+                <h2 className="text-sm font-semibold text-white">Archived Media Vault</h2>
+              </div>
+              <span className="text-[11px] text-gray-400">
+                {role === 'parent' ? 'Permanent Admin Archive (Zero Deletion)' : 'Auto-purge after 24 hours'}
+              </span>
+            </div>
+
+            {archivedImages.length === 0 ? (
+              <div className="text-center py-16 text-gray-500 text-xs">
+                No images archived yet. Viewed secret photos will automatically appear here.
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {archivedImages.map((item, idx) => (
+                  <div key={idx} className="bg-[#171717] border border-[#2a2a2a] rounded-xl overflow-hidden shadow-lg group relative">
+                    <img 
+                      src={item.data} 
+                      alt="Archived Secret" 
+                      className="w-full h-36 object-cover cursor-pointer hover:scale-105 transition-transform duration-200"
+                      onClick={() => window.open(item.data, '_blank')}
+                    />
+                    <div className="p-2 bg-[#121212] flex items-center justify-between text-[10px] text-gray-400 font-mono">
+                      <span className="font-bold text-blue-400">{item.sender}</span>
+                      <span>{item.time}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Bottom Input Pill Capsule */}
         <div className="px-4 lg:px-8 pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
           
@@ -935,7 +1098,17 @@ export default function App() {
           <form onSubmit={handleSubmit} className="w-full relative">
             <div className="w-full bg-[#212121] rounded-full border border-[#2e2e2e] focus-within:border-[#444] px-4 py-2.5 flex items-center gap-3 shadow-2xl">
               
-              <button type="button" className="text-[#9b9b9b] hover:text-white transition-colors cursor-pointer">
+              {/* Plus Button: Uploads Image in Stealth Mode, normal action otherwise */}
+              <button 
+                type="button" 
+                onClick={() => {
+                  if (viewMode === 'stealth' && fileInputRef.current) {
+                    fileInputRef.current.click();
+                  }
+                }}
+                className="text-[#9b9b9b] hover:text-white transition-colors cursor-pointer"
+                title={viewMode === 'stealth' ? "Send View-Once Photo" : "Options"}
+              >
                 <Plus size={18} />
               </button>
 
@@ -946,7 +1119,7 @@ export default function App() {
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={
                   viewMode === 'stealth' 
-                    ? (replyTarget ? `Reply to ${replyTarget.senderRole}...` : "Type schema entry... (or /gpt to exit)") 
+                    ? (replyTarget ? `Reply to ${replyTarget.senderRole}...` : "Type schema entry or Paste image... (/gpt to exit)") 
                     : "Ask anything"
                 }
                 className="flex-1 bg-transparent text-[13.5px] text-white placeholder-[#8e8e8e] outline-none"
@@ -981,6 +1154,36 @@ export default function App() {
           </form>
         </div>
 
+        {/* ONE-TIME VIEW FULLSCREEN MODAL (Destroys from chat stream upon closing) */}
+        {activeViewImage && (
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4">
+            <div className="bg-[#141414] border border-[#2e2e2e] rounded-2xl max-w-xl w-full p-4 flex flex-col items-center space-y-4 shadow-2xl">
+              <div className="w-full flex items-center justify-between text-xs text-gray-400 border-b border-[#222] pb-2 font-mono">
+                <span className="text-emerald-400 font-bold flex items-center gap-1">
+                  <Eye size={13} /> View Once Photo from {activeViewImage.sender}
+                </span>
+                <span>{activeViewImage.time}</span>
+              </div>
+              
+              <div className="max-h-[70vh] overflow-hidden rounded-xl">
+                <img 
+                  src={activeViewImage.data} 
+                  alt="Secret View Once" 
+                  className="max-h-[65vh] object-contain rounded-lg"
+                />
+              </div>
+
+              <button 
+                type="button" 
+                onClick={handleCloseViewOnce}
+                className="w-full bg-[#1c3a6b] hover:bg-[#254d8f] text-white text-xs py-2.5 rounded-xl font-medium cursor-pointer transition-colors shadow"
+              >
+                Done (Clear from chat & Save to Images)
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Answer Pending Modal */}
         {showPendingModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1007,7 +1210,7 @@ export default function App() {
               <div className="max-h-80 overflow-y-auto space-y-2 pr-1 scrollbar-none">
                 {pendingMessages.length === 0 ? (
                   <div className="text-center text-xs text-gray-500 py-8">
-                    No pending questions bookmarked. Click "!" on any message to pin it here.
+                    No pending questions bookmarked.
                   </div>
                 ) : (
                   pendingMessages.map((m, idx) => (
@@ -1018,7 +1221,9 @@ export default function App() {
                           <span>•</span>
                           <span>{m.timeFormatted}</span>
                         </div>
-                        <p className="text-gray-200 font-mono select-text line-clamp-3 break-words">{m.text}</p>
+                        <p className="text-gray-200 font-mono select-text line-clamp-3 break-words">
+                          {m.isMedia ? "[Encrypted Secret Photo]" : m.text}
+                        </p>
                       </div>
                       <button 
                         onClick={(e) => togglePendingFlag(e, m)}
@@ -1052,7 +1257,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Assistant Bot Trigger (Parent Only) */}
+        {/* Assistant Bot Trigger (Parent Only - Bottom Right) */}
         {role === 'parent' && (
           <div className="absolute bottom-6 right-6 z-40">
             <button 
