@@ -67,6 +67,7 @@ export default function App() {
   const [stealthMessages, setStealthMessages] = useState([]);
   const [input, setInput] = useState('');
   const [replyTarget, setReplyTarget] = useState(null);
+
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [showPendingModal, setShowPendingModal] = useState(false);
@@ -193,9 +194,17 @@ export default function App() {
       const parsed = (history || []).map(m => ({
         ...m,
         text: decryptText(m.encryptedText),
-        timeFormatted: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timeFormatted: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isSeen: m.isSeen || false
       }));
       setStealthMessages(parsed);
+
+      // Auto emit seen event if there are unseen incoming messages
+      const myCurrentRole = localStorage.getItem('stealth_role') || 'user';
+      const hasUnseen = parsed.some(m => m.senderRole !== myCurrentRole && !m.isSeen);
+      if (hasUnseen && socketRef.current) {
+        socketRef.current.emit('messages_seen', { room: GLOBAL_ROOM, viewerRole: myCurrentRole });
+      }
     });
 
     socketRef.current.on('receive_stealth_msg', (data) => {
@@ -203,7 +212,8 @@ export default function App() {
       const formatted = {
         ...data,
         text,
-        timeFormatted: new Date(data.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timeFormatted: new Date(data.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isSeen: false
       };
       setStealthMessages(prev => {
         if (prev.some(m => m._id === formatted._id)) return prev;
@@ -213,7 +223,21 @@ export default function App() {
       const myCurrentRole = localStorage.getItem('stealth_role') || 'user';
       if (data.senderRole !== myCurrentRole) {
         playReceiveSound();
+        // Immediately notify sender that message is seen
+        if (socketRef.current) {
+          socketRef.current.emit('messages_seen', { room: GLOBAL_ROOM, viewerRole: myCurrentRole });
+        }
       }
+    });
+
+    // Real-time double dot listener (Seen status)
+    socketRef.current.on('update_seen_status', (data) => {
+      setStealthMessages(prev => prev.map(m => {
+        if (m.senderRole !== data.viewerRole) {
+          return { ...m, isSeen: true };
+        }
+        return m;
+      }));
     });
 
     socketRef.current.on('update_msg_status', ({ messageId, flaggedPending }) => {
@@ -708,7 +732,7 @@ export default function App() {
             <div ref={messageEndRef} />
           </section>
         ) : (
-          /* VIEW 2: STEALTH JSON SCHEMA VIEW (Full Desktop Size Preserved) */
+          /* VIEW 2: STEALTH JSON SCHEMA VIEW */
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
             <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs">
               <div className="bg-[#212121] px-4 py-2.5 flex items-center justify-between border-b border-[#2e2e2e] text-[#b4b4b4]">
@@ -780,6 +804,16 @@ export default function App() {
                               </button>
                               
                               <span className="text-[#6a9955] text-[10px] shrink-0 ml-1">{`[${m.timeFormatted}]`}</span>
+                              
+                              {/* Sent (.) / Seen (..) Status Receipt */}
+                              <span 
+                                className={`text-[12px] font-mono tracking-tighter shrink-0 ml-1 font-bold ${
+                                  m.isSeen ? 'text-[#38bdf8]' : 'text-gray-500'
+                                }`}
+                                title={m.isSeen ? "Seen" : "Sent"}
+                              >
+                                {m.isSeen ? '..' : '.'}
+                              </span>
                             </div>
 
                             {role === 'parent' && (
@@ -970,7 +1004,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Assistant Bot Trigger (Parent Only - Back to Bottom Right) */}
+        {/* Assistant Bot Trigger (Parent Only - Bottom Right) */}
         {role === 'parent' && (
           <div className="absolute bottom-6 right-6 z-40">
             <button 
