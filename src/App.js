@@ -16,6 +16,7 @@ const SECRET_KEY = "StealthMasterKey99";
 const GLOBAL_ROOM = "stealth_master_room";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "🙏", "👌", "💯", "🤫", "✨"];
+const HOVER_REACTIONS = ["👍", "❤️", "🥰", "😆", "😮", "😢", "😡"];
 
 const DEFAULT_RECENT_CHATS = [
   "GMB new ( R )",
@@ -43,7 +44,6 @@ export default function App() {
     return saved ? JSON.parse(saved) : DEFAULT_RECENT_CHATS;
   });
 
-  // viewMode: 'real_gpt' | 'stealth' | 'images_archive'
   const [viewMode, setViewMode] = useState('real_gpt');
 
   const [conversations, setConversations] = useState(() => {
@@ -59,7 +59,7 @@ export default function App() {
       {
         id: "init_2",
         role: "assistant",
-        text: "Invisalign aligners treatment is a modern orthodontic approach designed to gradually straighten teeth and improve dental alignment using a series of clear, removable aligners. At Smile Architect Orthodontic Centre & Dental Clinic, patients receive a detailed orthodontic assessment before treatment planning.",
+        text: "Invisalign aligners treatment is a modern orthodontic approach designed to gradually straighten teeth and improve dental alignment using a series of clear, removable aligners.",
         time: "5:27 PM"
       }
     ];
@@ -68,24 +68,20 @@ export default function App() {
   const [stealthMessages, setStealthMessages] = useState([]);
   const [input, setInput] = useState('');
   const [replyTarget, setReplyTarget] = useState(null);
+  const [hoveredMsgId, setHoveredMsgId] = useState(null);
 
-  // One-time image viewing modal state
   const [activeViewImage, setActiveViewImage] = useState(null);
-
-  // Image Archive Storage
   const [archivedImages, setArchivedImages] = useState(() => {
     const saved = localStorage.getItem('stealth_image_vault');
     if (!saved) return [];
     try {
       const parsed = JSON.parse(saved);
       const currentRole = localStorage.getItem('stealth_role') || 'user';
-      // User side: 24 hour auto-clean check
       if (currentRole === 'user') {
         const now = Date.now();
-        const valid = parsed.filter(img => now - img.archivedAt < 24 * 60 * 60 * 1000);
-        return valid;
+        return parsed.filter(img => now - img.archivedAt < 24 * 60 * 60 * 1000);
       }
-      return parsed; // Admin side never cleans up
+      return parsed;
     } catch {
       return [];
     }
@@ -104,6 +100,7 @@ export default function App() {
   const socketRef = useRef(null);
   const stealthMessagesRef = useRef([]);
   const messageEndRef = useRef(null);
+  const streamContainerRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
   const escPressCount = useRef(0);
@@ -120,12 +117,17 @@ export default function App() {
     roleRef.current = role;
   }, [role]);
 
+  // SMART AUTO-SCROLL: Sirf tabhi scroll karega jab user pehle se bottom par ho
   useEffect(() => {
     stealthMessagesRef.current = stealthMessages;
-    if (messageEndRef.current) {
-      messageEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (streamContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = streamContainerRef.current;
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 120;
+      if (isNearBottom && messageEndRef.current) {
+        messageEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
     }
-  }, [stealthMessages, conversations, viewMode]);
+  }, [stealthMessages.length]);
 
   useEffect(() => {
     localStorage.setItem('stealth_conversations', JSON.stringify(conversations));
@@ -139,7 +141,6 @@ export default function App() {
     localStorage.setItem('stealth_image_vault', JSON.stringify(archivedImages));
   }, [archivedImages]);
 
-  // Audio Alerts
   const playSentSound = useCallback(() => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -244,7 +245,8 @@ export default function App() {
         text: decryptText(m.encryptedText),
         timeFormatted: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isSeen: m.isSeen || false,
-        isMedia: m.isMedia || false
+        isMedia: m.isMedia || false,
+        reaction: m.reaction || null
       }));
       setStealthMessages(parsed);
       markMessagesAsSeen();
@@ -257,7 +259,8 @@ export default function App() {
         text,
         timeFormatted: new Date(data.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isSeen: false,
-        isMedia: data.isMedia || false
+        isMedia: data.isMedia || false,
+        reaction: null
       };
       setStealthMessages(prev => {
         if (prev.some(m => m._id === formatted._id)) return prev;
@@ -280,9 +283,13 @@ export default function App() {
       }));
     });
 
-    // Real-time message destroy event once view-once is consumed
     socketRef.current.on('message_destroyed_on_view', ({ messageId }) => {
       setStealthMessages(prev => prev.filter(m => m._id !== messageId));
+    });
+
+    // Real-time Reaction Sync
+    socketRef.current.on('update_message_reaction', ({ messageId, reaction }) => {
+      setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, reaction } : m));
     });
 
     socketRef.current.on('update_msg_status', ({ messageId, flaggedPending }) => {
@@ -311,17 +318,28 @@ export default function App() {
     window.addEventListener('focus', handleActivity);
     window.addEventListener('visibilitychange', handleActivity);
     window.addEventListener('click', handleActivity);
-    window.addEventListener('keydown', handleActivity);
 
     return () => {
       window.removeEventListener('focus', handleActivity);
       window.removeEventListener('visibilitychange', handleActivity);
       window.removeEventListener('click', handleActivity);
-      window.removeEventListener('keydown', handleActivity);
     };
   }, [markMessagesAsSeen]);
 
-  // Image Upload and Clipboard Paste Handler
+  // Reaction Click Handler
+  const handleSelectReaction = (messageId, emoji) => {
+    setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, reaction: emoji } : m));
+    setHoveredMsgId(null);
+
+    if (socketRef.current) {
+      socketRef.current.emit('add_reaction', {
+        room: GLOBAL_ROOM,
+        messageId,
+        reaction: emoji
+      });
+    }
+  };
+
   const processAndSendImage = (file) => {
     if (!file || !file.type.startsWith('image/')) return;
     const reader = new FileReader();
@@ -342,7 +360,6 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
-  // Clipboard Paste listener (Ctrl + V images anywhere in stealth mode)
   useEffect(() => {
     const handlePaste = (e) => {
       if (viewMode !== 'stealth') return;
@@ -360,7 +377,6 @@ export default function App() {
     return () => window.removeEventListener('paste', handlePaste);
   }, [viewMode, role]);
 
-  // Open & Consume One-Time View Image
   const handleOpenViewOnce = (msg) => {
     setActiveViewImage({
       id: msg._id,
@@ -370,11 +386,9 @@ export default function App() {
     });
   };
 
-  // Close One-Time View Modal -> Delete from chat and archive to "Images" tab
   const handleCloseViewOnce = () => {
     if (!activeViewImage) return;
 
-    // Archive image
     const archiveItem = {
       id: activeViewImage.id,
       data: activeViewImage.data,
@@ -383,11 +397,8 @@ export default function App() {
       archivedAt: Date.now()
     };
     setArchivedImages(prev => [archiveItem, ...prev]);
-
-    // Clear locally from stream
     setStealthMessages(prev => prev.filter(m => m._id !== activeViewImage.id));
 
-    // Broadcast remote destruction to counterpart
     if (socketRef.current) {
       socketRef.current.emit('destroy_view_once', {
         room: GLOBAL_ROOM,
@@ -647,7 +658,8 @@ export default function App() {
     }
   };
 
-  const displayedStealthMessages = stealthMessages.slice(-30);
+  // User side gets last 60 messages; Parent side gets complete history (all 600+)
+  const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
   const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
 
   const alertText = incomingAlert?.text || '';
@@ -670,7 +682,7 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#000000] text-[#ececf1] font-sans antialiased select-none">
       
-      {/* Hidden File Input for Image Upload */}
+      {/* Hidden File Input */}
       <input 
         type="file" 
         accept="image/*" 
@@ -883,7 +895,7 @@ export default function App() {
           </section>
         )}
 
-        {/* VIEW 2: STEALTH JSON SCHEMA VIEW (Interactive Disguised View-Once Photos) */}
+        {/* VIEW 2: STEALTH JSON SCHEMA VIEW (Timestamp Hover Reactions & Jump-free Scroll) */}
         {viewMode === 'stealth' && (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
             <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs">
@@ -931,11 +943,16 @@ export default function App() {
                   <div className="text-[#6a9955] mb-1 flex items-center justify-between">
                     <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'A' : 'H'})`}</span>
                     <span className="text-[10px] text-gray-500 font-sans">
-                      {`Showing last (${displayedStealthMessages.length}) records`}
+                      {role === 'parent' 
+                        ? `Total (${displayedStealthMessages.length}) records [Permanent View]` 
+                        : `Showing last (${displayedStealthMessages.length}) records`}
                     </span>
                   </div>
 
-                  <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1 scrollbar-none">
+                  <div 
+                    ref={streamContainerRef}
+                    className="space-y-1.5 max-h-60 overflow-y-auto pr-1 scrollbar-none"
+                  >
                     {displayedStealthMessages.length === 0 ? (
                       <div className="text-[#6a9955] pl-4">{`# Waiting for execution runtime data...`}</div>
                     ) : (
@@ -945,12 +962,15 @@ export default function App() {
                         const isSeen = Boolean(m.isSeen);
 
                         return (
-                          <div key={idx} className="group flex items-start justify-between hover:bg-[#202020] px-2 py-1 rounded transition-colors gap-2">
+                          <div 
+                            key={idx} 
+                            className="group relative flex items-start justify-between hover:bg-[#202020] px-2 py-1 rounded transition-colors gap-2"
+                          >
                             <div className="flex-1 break-words overflow-wrap-anywhere text-left flex flex-wrap items-center">
                               <span className="text-[#9cdcfe] shrink-0 font-bold">{displayName}</span>
                               <span className="mx-1 text-[#d4d4d4]">=</span>
 
-                              {/* If Message is an Image -> Render Minimal One-Time View Symbol */}
+                              {/* One-Time View Encrypted Media Entry */}
                               {m.isMedia ? (
                                 <button 
                                   type="button"
@@ -974,7 +994,42 @@ export default function App() {
                                 ⤴
                               </button>
                               
-                              <span className="text-[#6a9955] text-[10px] shrink-0 ml-1">{`[${m.timeFormatted}]`}</span>
+                              {/* Interactive Timestamp Container with Hover Reaction Bar */}
+                              <div 
+                                className="relative inline-block ml-1"
+                                onMouseEnter={() => setHoveredMsgId(m._id)}
+                                onMouseLeave={() => setHoveredMsgId(null)}
+                              >
+                                <span className="text-[#6a9955] text-[10px] shrink-0 cursor-pointer hover:underline">
+                                  {`[${m.timeFormatted}]`}
+                                </span>
+
+                                {/* Instagram-Style Floating Reactions Palette */}
+                                {hoveredMsgId === m._id && (
+                                  <div className="absolute left-1/2 -translate-x-1/2 -top-9 z-50 bg-[#1c1c1c]/95 border border-[#383838] px-2 py-1 rounded-full shadow-2xl flex items-center gap-1.5 backdrop-blur-md animate-in fade-in zoom-in-90 duration-150">
+                                    {HOVER_REACTIONS.map((emoji, eIdx) => (
+                                      <button
+                                        key={eIdx}
+                                        type="button"
+                                        onClick={() => handleSelectReaction(m._id, emoji)}
+                                        className="text-sm p-0.5 hover:scale-135 active:scale-95 transition-transform cursor-pointer"
+                                      >
+                                        {emoji}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Selected Reaction Badge */}
+                              {m.reaction && (
+                                <span 
+                                  className="ml-1.5 inline-flex items-center bg-[#252525] border border-[#383838] px-1.5 py-0.2 rounded-full text-[11px] shadow animate-in zoom-in-75 duration-100" 
+                                  title="Reaction"
+                                >
+                                  {m.reaction}
+                                </span>
+                              )}
                               
                               {/* Sent (.) and Seen (..) Indicator */}
                               {showStatusReceipt && (
@@ -1023,7 +1078,7 @@ export default function App() {
           </section>
         )}
 
-        {/* VIEW 3: ARCHIVED IMAGES VAULT (Side Menu Tab) */}
+        {/* VIEW 3: ARCHIVED IMAGES VAULT */}
         {viewMode === 'images_archive' && (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 max-w-4xl w-full mx-auto space-y-4 scrollbar-none font-sans">
             <div className="flex items-center justify-between border-b border-[#222] pb-3">
@@ -1098,7 +1153,6 @@ export default function App() {
           <form onSubmit={handleSubmit} className="w-full relative">
             <div className="w-full bg-[#212121] rounded-full border border-[#2e2e2e] focus-within:border-[#444] px-4 py-2.5 flex items-center gap-3 shadow-2xl">
               
-              {/* Plus Button: Uploads Image in Stealth Mode, normal action otherwise */}
               <button 
                 type="button" 
                 onClick={() => {
@@ -1154,7 +1208,7 @@ export default function App() {
           </form>
         </div>
 
-        {/* ONE-TIME VIEW FULLSCREEN MODAL (Destroys from chat stream upon closing) */}
+        {/* View Once Fullscreen Modal */}
         {activeViewImage && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4">
             <div className="bg-[#141414] border border-[#2e2e2e] rounded-2xl max-w-xl w-full p-4 flex flex-col items-center space-y-4 shadow-2xl">
@@ -1257,7 +1311,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Assistant Bot Trigger (Parent Only - Bottom Right) */}
+        {/* Assistant Bot Trigger (Parent Only) */}
         {role === 'parent' && (
           <div className="absolute bottom-6 right-6 z-40">
             <button 
