@@ -8,7 +8,7 @@ import {
   Search, PanelLeft, ArrowUp, Plus, RefreshCw, Sparkles, Share,
   Bot, X, Download, AlertCircle, ShieldCheck, Trash2, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
-  Code, Play, CornerUpLeft, Eye
+  Code, Play, CornerUpLeft, Eye, EyeOff, FileDown
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -19,7 +19,7 @@ const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "🙏", "👌", 
 const HOVER_REACTIONS = ["👍", "❤️", "🥰", "😆", "😮", "😢", "😡"];
 
 const DEFAULT_RECENT_CHATS = [
-  "GMB new ( R )",
+  "GMB Review Reply",
   "Prashant chotalia",
   "Shiva Pradakshina Meaning",
   "Generate random code",
@@ -36,12 +36,29 @@ const DEFAULT_RECENT_CHATS = [
   "Punjabi Thali Search"
 ];
 
+// Helper to strip nested reply chains so only pure fresh text remains
+const cleanOriginalText = (raw) => {
+  if (!raw) return "";
+  let cleaned = raw;
+  while (cleaned.includes('[⤴') || cleaned.startsWith('⤴')) {
+    cleaned = cleaned.replace(/^\[⤴\s*[AH]:\s*"[^"]*"\s*\]\s*/g, '');
+    cleaned = cleaned.replace(/^⤴\s*[AH]:\s*"[^"]*"\s*/g, '');
+  }
+  return cleaned.trim();
+};
+
 export default function App() {
   const [role, setRole] = useState(() => localStorage.getItem('stealth_role') || 'user');
-  const [currentRoom, setCurrentRoom] = useState("GMB new ( R )");
+  const [currentRoom, setCurrentRoom] = useState("GMB Review Reply");
   const [roomList, setRoomList] = useState(() => {
     const saved = localStorage.getItem('stealth_rooms');
-    return saved ? JSON.parse(saved) : DEFAULT_RECENT_CHATS;
+    if (!saved) return DEFAULT_RECENT_CHATS;
+    try {
+      const parsed = JSON.parse(saved);
+      return parsed.map(r => (r === "Iron man1" || r === "GMB new ( R )") ? "GMB Review Reply" : r);
+    } catch {
+      return DEFAULT_RECENT_CHATS;
+    }
   });
 
   const [viewMode, setViewMode] = useState('real_gpt');
@@ -69,6 +86,7 @@ export default function App() {
   const [input, setInput] = useState('');
   const [replyTarget, setReplyTarget] = useState(null);
   const [activeReactionMsgId, setActiveReactionMsgId] = useState(null);
+  const [highlightedMsgId, setHighlightedMsgId] = useState(null);
 
   const [activeViewImage, setActiveViewImage] = useState(null);
   const [archivedImages, setArchivedImages] = useState(() => {
@@ -122,9 +140,7 @@ export default function App() {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').then((reg) => {
         swRegistrationRef.current = reg;
-      }).catch((err) => {
-        console.log("SW reg failed", err);
-      });
+      }).catch(() => {});
     }
   }, []);
 
@@ -221,6 +237,7 @@ export default function App() {
 
       osc1.type = 'sine';
       osc2.type = 'sine';
+
       osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
       osc2.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08);
 
@@ -300,6 +317,7 @@ export default function App() {
         timeFormatted: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isSeen: m.isSeen || false,
         isMedia: m.isMedia || false,
+        mediaOpened: m.mediaOpened || false,
         reaction: m.reaction || null
       }));
       setStealthMessages(parsed);
@@ -314,6 +332,7 @@ export default function App() {
         timeFormatted: new Date(data.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isSeen: false,
         isMedia: data.isMedia || false,
+        mediaOpened: false,
         reaction: null
       };
       setStealthMessages(prev => {
@@ -339,6 +358,11 @@ export default function App() {
         }
         return m;
       }));
+    });
+
+    // When an image is opened: Update eye status to opened
+    socketRef.current.on('media_marked_opened', ({ messageId }) => {
+      setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, mediaOpened: true } : m));
     });
 
     socketRef.current.on('message_destroyed_on_view', ({ messageId }) => {
@@ -433,6 +457,13 @@ export default function App() {
   }, [viewMode, role]);
 
   const handleOpenViewOnce = (msg) => {
+    // Notify socket that media is opened
+    if (socketRef.current) {
+      socketRef.current.emit('mark_media_opened', { room: GLOBAL_ROOM, messageId: msg._id });
+    }
+
+    setStealthMessages(prev => prev.map(m => m._id === msg._id ? { ...m, mediaOpened: true } : m));
+
     setActiveViewImage({
       id: msg._id,
       data: msg.text,
@@ -464,6 +495,36 @@ export default function App() {
     setActiveViewImage(null);
   };
 
+  // Jump to quoted message on click
+  const handleScrollToMessage = (targetMsgId) => {
+    if (!targetMsgId) return;
+    const el = document.getElementById(`stealth-msg-${targetMsgId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedMsgId(targetMsgId);
+      setTimeout(() => setHighlightedMsgId(null), 1800);
+    }
+  };
+
+  // Download Full Chat History (Parent Only)
+  const downloadFullChatReport = () => {
+    const lines = stealthMessages.map(m => {
+      const sender = m.senderRole === 'user' ? 'A' : 'H';
+      const clean = cleanOriginalText(m.text);
+      const content = m.isMedia ? '[Image Asset]' : clean;
+      return `[${m.timeFormatted}] ${sender}: ${content}`;
+    });
+
+    const fileData = lines.join('\n\n');
+    const blob = new Blob([fileData], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `GMB_Review_Full_History_${Date.now()}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -493,10 +554,12 @@ export default function App() {
     if (inputRef.current) inputRef.current.focus();
   };
 
+  // Start direct clean reply (Never nests previous tags)
   const handleStartReply = (msg) => {
-    const preview = msg.isMedia ? "[Photo]" : msg.text;
+    const pureText = msg.isMedia ? "[Photo]" : cleanOriginalText(msg.text);
     setReplyTarget({
-      text: preview,
+      id: msg._id,
+      text: pureText,
       senderRole: msg.senderRole === 'user' ? 'A' : 'H'
     });
     if (inputRef.current) inputRef.current.focus();
@@ -607,9 +670,14 @@ export default function App() {
 
     if (viewMode === 'stealth') {
       let finalMessageText = val;
+      let replyRefId = null;
+
+      // Always format clean reply without previous nested tags
       if (replyTarget) {
-        const shortReply = replyTarget.text.length > 28 ? replyTarget.text.substring(0, 25) + '...' : replyTarget.text;
+        const cleanSnippet = cleanOriginalText(replyTarget.text);
+        const shortReply = cleanSnippet.length > 25 ? cleanSnippet.substring(0, 22) + '...' : cleanSnippet;
         finalMessageText = `[⤴ ${replyTarget.senderRole}: "${shortReply}"] ${val}`;
+        replyRefId = replyTarget.id;
       }
 
       const encrypted = encryptText(finalMessageText);
@@ -618,7 +686,8 @@ export default function App() {
           room: GLOBAL_ROOM,
           role,
           encryptedText: encrypted,
-          isMedia: false
+          isMedia: false,
+          replyRefId
         });
         playSentSound();
       }
@@ -666,7 +735,7 @@ export default function App() {
         y += 6;
 
         doc.setFont("helvetica", "normal");
-        const splitText = doc.splitTextToSize(m.isMedia ? "[Encrypted Image Asset]" : (m.text || ""), 175);
+        const splitText = doc.splitTextToSize(m.isMedia ? "[Encrypted Image Asset]" : cleanOriginalText(m.text || ""), 175);
         doc.text(splitText, 18, y);
         y += (splitText.length * 5) + 4;
 
@@ -754,6 +823,7 @@ export default function App() {
         className="hidden" 
       />
 
+      {/* Left Sidebar */}
       <aside className={`${sidebarOpen ? 'w-64' : 'w-0'} transition-all duration-200 bg-[#000000] flex flex-col border-r border-[#171717] overflow-hidden select-none shrink-0 z-20`}>
         <div className="h-13 flex items-center justify-between px-3.5 pt-2 shrink-0">
           <span className="font-semibold text-base tracking-tight text-white flex items-center gap-1">ChatGPT</span>
@@ -860,13 +930,29 @@ export default function App() {
         </div>
       </aside>
 
+      {/* Main Screen */}
       <main className="flex-1 flex flex-col relative bg-[#000000] overflow-hidden">
         <header className="h-12 flex items-center justify-between px-4 shrink-0 z-10">
-          {!sidebarOpen ? (
-            <button onClick={() => setSidebarOpen(true)} className="text-[#9b9b9b] hover:text-white cursor-pointer">
-              <PanelLeft size={18} />
-            </button>
-          ) : <div />}
+          <div className="flex items-center gap-2">
+            {!sidebarOpen && (
+              <button onClick={() => setSidebarOpen(true)} className="text-[#9b9b9b] hover:text-white cursor-pointer mr-2">
+                <PanelLeft size={18} />
+              </button>
+            )}
+            <span className="text-xs font-semibold text-gray-200">{currentRoom}</span>
+
+            {/* FULL CHAT EXPORT BUTTON (PARENT SIDE ONLY) */}
+            {role === 'parent' && (
+              <button
+                onClick={downloadFullChatReport}
+                title="Download Full Raw Chat Log"
+                className="flex items-center gap-1 bg-[#1a1a1a] hover:bg-[#282828] border border-[#333] text-gray-300 hover:text-white px-2 py-0.5 rounded text-[11px] transition-colors ml-1 cursor-pointer font-sans"
+              >
+                <FileDown size={12} className="text-emerald-400" />
+                <span>Export Chat</span>
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center gap-3 text-xs text-[#9b9b9b]">
             <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-rose-500 animate-ping'}`} title={isConnected ? 'Server Online' : 'Connecting...'} />
@@ -884,6 +970,7 @@ export default function App() {
           </div>
         </header>
 
+        {/* VIEW 1: NORMAL CHATGPT STREAM */}
         {viewMode === 'real_gpt' && (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto space-y-6 scrollbar-none">
             {conversations.map((msg) => (
@@ -945,6 +1032,7 @@ export default function App() {
           </section>
         )}
 
+        {/* VIEW 2: STEALTH JSON SCHEMA VIEW */}
         {viewMode === 'stealth' && (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
             <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs">
@@ -1009,30 +1097,67 @@ export default function App() {
                         const showStatusReceipt = m.senderRole === role;
                         const isSeen = Boolean(m.isSeen);
                         const isReactionOpen = activeReactionMsgId === m._id;
+                        const isHighlighted = highlightedMsgId === m._id;
+
+                        // Parse reply prefix if present
+                        const hasReplyTag = m.text && m.text.startsWith('[⤴');
+                        let replySnippet = "";
+                        let cleanBody = m.text;
+
+                        if (hasReplyTag) {
+                          const closingIndex = m.text.indexOf(']');
+                          if (closingIndex !== -1) {
+                            replySnippet = m.text.substring(1, closingIndex);
+                            cleanBody = m.text.substring(closingIndex + 1).trim();
+                          }
+                        }
 
                         return (
                           <div 
                             key={idx} 
-                            className="group relative flex items-start justify-between hover:bg-[#202020] px-2 py-1 rounded transition-colors gap-2"
+                            id={`stealth-msg-${m._id}`}
+                            className={`group relative flex items-start justify-between px-2 py-1 rounded transition-all duration-300 gap-2 ${
+                              isHighlighted ? 'bg-emerald-950/70 border border-emerald-500/50' : 'hover:bg-[#202020]'
+                            }`}
                           >
                             <div className="flex-1 break-words overflow-wrap-anywhere text-left flex flex-wrap items-center">
                               <span className="text-[#9cdcfe] shrink-0 font-bold">{displayName}</span>
                               <span className="mx-1 text-[#d4d4d4]">=</span>
 
+                              {/* CLICKABLE SINGLE-LEVEL REPLY PREVIEW */}
+                              {hasReplyTag && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleScrollToMessage(m.replyRefId)}
+                                  className="inline-flex items-center text-[10px] bg-[#222] hover:bg-[#2d2d2d] text-emerald-400 px-1.5 py-0.5 rounded border border-[#333] mr-1 cursor-pointer"
+                                  title="Jump to quoted message"
+                                >
+                                  {replySnippet}
+                                </button>
+                              )}
+
+                              {/* DYNAMIC EYE MEDIA BUTTON (Closed until viewed) */}
                               {m.isMedia ? (
                                 <button 
                                   type="button"
                                   onClick={() => handleOpenViewOnce(m)}
-                                  className="inline-flex items-center gap-1.5 bg-[#252525] hover:bg-[#333] border border-[#3d3d3d] text-emerald-400 px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer transition-all active:scale-95 shadow-sm"
-                                  title="Click to view once"
+                                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer transition-all active:scale-95 shadow-sm border ${
+                                    m.mediaOpened 
+                                      ? 'bg-[#18261e] border-emerald-700 text-emerald-300' 
+                                      : 'bg-[#252525] hover:bg-[#333] border-[#3d3d3d] text-amber-300'
+                                  }`}
+                                  title={m.mediaOpened ? "Asset viewed" : "Click to view once"}
                                 >
-                                  <Eye size={12} />
-                                  <span className="underline decoration-dotted font-medium">[View Once: binary_raw]</span>
+                                  {m.mediaOpened ? <Eye size={12} className="text-emerald-400" /> : <EyeOff size={12} className="text-amber-400 animate-pulse" />}
+                                  <span className="underline decoration-dotted font-medium">
+                                    {m.mediaOpened ? '[Opened: binary_raw]' : '[View Once: payload_locked]'}
+                                  </span>
                                 </button>
                               ) : (
-                                <span className="text-[#ce9178] break-all">{`"${m.text}"`}</span>
+                                <span className="text-[#ce9178] break-all">{`"${cleanBody}"`}</span>
                               )}
                               
+                              {/* REPLY BUTTON */}
                               <button 
                                 type="button"
                                 onClick={() => handleStartReply(m)}
@@ -1042,6 +1167,7 @@ export default function App() {
                                 ⤴
                               </button>
                               
+                              {/* TIMESTAMP HOVER / TAP REACTION BAR */}
                               <div 
                                 className="relative inline-flex items-center ml-1 py-1"
                                 onMouseEnter={() => setActiveReactionMsgId(m._id)}
@@ -1129,6 +1255,7 @@ export default function App() {
           </section>
         )}
 
+        {/* VIEW 3: ARCHIVED IMAGES VAULT */}
         {viewMode === 'images_archive' && (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 max-w-4xl w-full mx-auto space-y-4 scrollbar-none font-sans">
             <div className="flex items-center justify-between border-b border-[#222] pb-3">
@@ -1166,6 +1293,7 @@ export default function App() {
           </section>
         )}
 
+        {/* Bottom Input Capsule */}
         <div className="px-4 lg:px-8 pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
           {replyTarget && (
             <div className="mb-2 bg-[#1a1a1a] border border-[#333] px-3.5 py-1.5 rounded-xl flex items-center justify-between text-xs animate-in fade-in slide-in-from-bottom-2 duration-150">
@@ -1255,6 +1383,7 @@ export default function App() {
           </form>
         </div>
 
+        {/* View Once Fullscreen Modal */}
         {activeViewImage && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4">
             <div className="bg-[#141414] border border-[#2e2e2e] rounded-2xl max-w-xl w-full p-4 flex flex-col items-center space-y-4 shadow-2xl">
@@ -1284,6 +1413,7 @@ export default function App() {
           </div>
         )}
 
+        {/* Answer Pending Modal */}
         {showPendingModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-[#171717] border border-[#2e2e2e] rounded-2xl w-full max-w-lg p-5 shadow-2xl space-y-4 font-sans">
@@ -1321,7 +1451,7 @@ export default function App() {
                           <span>{m.timeFormatted}</span>
                         </div>
                         <p className="text-gray-200 font-mono select-text line-clamp-3 break-words">
-                          {m.isMedia ? "[Encrypted Secret Photo]" : m.text}
+                          {m.isMedia ? "[Encrypted Secret Photo]" : cleanOriginalText(m.text)}
                         </p>
                       </div>
                       <button 
@@ -1338,6 +1468,7 @@ export default function App() {
           </div>
         )}
 
+        {/* Glass Bubble Alert */}
         {incomingAlert && (
           <div 
             onClick={handleBubbleDismiss}
@@ -1355,6 +1486,7 @@ export default function App() {
           </div>
         )}
 
+        {/* Assistant Bot Trigger (Parent Only) */}
         {role === 'parent' && (
           <div className="absolute bottom-6 right-6 z-40">
             <button 
