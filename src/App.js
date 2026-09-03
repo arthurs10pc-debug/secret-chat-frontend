@@ -105,6 +105,7 @@ export default function App() {
   const fileInputRef = useRef(null);
   const escPressCount = useRef(0);
   const escTimer = useRef(null);
+  const swRegistrationRef = useRef(null);
 
   const viewModeRef = useRef(viewMode);
   const roleRef = useRef(role);
@@ -117,7 +118,60 @@ export default function App() {
     roleRef.current = role;
   }, [role]);
 
-  // Smart Jump-free Scroll
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').then((reg) => {
+        swRegistrationRef.current = reg;
+      }).catch((err) => {
+        console.log("SW reg failed", err);
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (role === 'parent' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+    }
+  }, [role]);
+
+  const triggerParentMobileNotification = useCallback((incomingText) => {
+    const isParent = (roleRef.current || localStorage.getItem('stealth_role')) === 'parent';
+    if (!isParent || !('Notification' in window) || Notification.permission !== 'granted') return;
+
+    const userMsgs = stealthMessagesRef.current
+      .filter(m => m.senderRole === 'user')
+      .map(m => m.isMedia ? "[Photo Asset]" : m.text);
+
+    if (incomingText) {
+      userMsgs.push(incomingText);
+    }
+
+    const last3 = userMsgs.slice(-3);
+    const bodyFormatted = last3.length > 0 
+      ? last3.map(t => `• ${t.length > 40 ? t.substring(0, 37) + '...' : t}`).join('\n')
+      : "• New incoming message";
+
+    const title = `ChatGPT • (A)`;
+    const options = {
+      body: bodyFormatted,
+      icon: 'https://chat.openai.com/favicon.ico',
+      badge: 'https://chat.openai.com/favicon.ico',
+      tag: 'stealth_parent_stream',
+      renotify: true,
+      vibrate: [200, 100, 200]
+    };
+
+    if (swRegistrationRef.current && 'showNotification' in swRegistrationRef.current) {
+      swRegistrationRef.current.showNotification(title, options);
+    } else {
+      try {
+        new Notification(title, options);
+      } catch (e) {}
+    }
+  }, []);
+
   useEffect(() => {
     stealthMessagesRef.current = stealthMessages;
     if (streamContainerRef.current) {
@@ -271,6 +325,10 @@ export default function App() {
       if (data.senderRole !== myCurrentRole) {
         playReceiveSound();
         markMessagesAsSeen();
+
+        if (data.senderRole === 'user') {
+          triggerParentMobileNotification(formatted.isMedia ? "[Photo Asset]" : text);
+        }
       }
     });
 
@@ -287,7 +345,6 @@ export default function App() {
       setStealthMessages(prev => prev.filter(m => m._id !== messageId));
     });
 
-    // Real-Time Reaction Sync
     socketRef.current.on('update_message_reaction', ({ messageId, reaction }) => {
       setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, reaction } : m));
     });
@@ -310,9 +367,8 @@ export default function App() {
     return () => {
       if (socketRef.current) socketRef.current.disconnect();
     };
-  }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen]);
+  }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification]);
 
-  // Tab Activity Listener
   useEffect(() => {
     const handleActivity = () => markMessagesAsSeen();
     window.addEventListener('focus', handleActivity);
@@ -326,7 +382,6 @@ export default function App() {
     };
   }, [markMessagesAsSeen]);
 
-  // Select Reaction
   const handleSelectReaction = (messageId, emoji) => {
     setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, reaction: emoji } : m));
     setActiveReactionMsgId(null);
@@ -409,7 +464,6 @@ export default function App() {
     setActiveViewImage(null);
   };
 
-  // Double 'Esc' Panic Shortcut
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -522,6 +576,9 @@ export default function App() {
       if (socketRef.current) {
         socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'parent' });
         socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: 'parent' });
+      }
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
       }
       setInput('');
       setReplyTarget(null);
@@ -659,7 +716,6 @@ export default function App() {
     }
   };
 
-  // User gets last 60 records, Parent gets all records
   const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
   const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
 
@@ -685,8 +741,6 @@ export default function App() {
       className="flex h-screen w-screen overflow-hidden bg-[#000000] text-[#ececf1] font-sans antialiased select-none"
       onClick={() => setActiveReactionMsgId(null)}
     >
-      
-      {/* Hidden File Input */}
       <input 
         type="file" 
         accept="image/*" 
@@ -700,7 +754,6 @@ export default function App() {
         className="hidden" 
       />
 
-      {/* Left Sidebar */}
       <aside className={`${sidebarOpen ? 'w-64' : 'w-0'} transition-all duration-200 bg-[#000000] flex flex-col border-r border-[#171717] overflow-hidden select-none shrink-0 z-20`}>
         <div className="h-13 flex items-center justify-between px-3.5 pt-2 shrink-0">
           <span className="font-semibold text-base tracking-tight text-white flex items-center gap-1">ChatGPT</span>
@@ -768,7 +821,6 @@ export default function App() {
           ))}
         </div>
 
-        {/* Answer Pending Drawer */}
         {role === 'parent' && (
           <div className="p-2 border-t border-[#1e1e1e] flex items-center gap-1.5 shrink-0 bg-[#0a0a0a]">
             <button 
@@ -790,7 +842,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Bottom Profile Card */}
         <div className="p-2.5 border-t border-[#171717] flex items-center justify-between text-xs bg-[#000000]">
           <div className="flex items-center gap-2 overflow-hidden">
             <div className="w-7 h-7 rounded-full bg-[#1e293b] border border-[#334155] flex items-center justify-center text-white text-[11px] font-bold shrink-0">
@@ -809,10 +860,7 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main Screen */}
       <main className="flex-1 flex flex-col relative bg-[#000000] overflow-hidden">
-        
-        {/* Header */}
         <header className="h-12 flex items-center justify-between px-4 shrink-0 z-10">
           {!sidebarOpen ? (
             <button onClick={() => setSidebarOpen(true)} className="text-[#9b9b9b] hover:text-white cursor-pointer">
@@ -836,7 +884,6 @@ export default function App() {
           </div>
         </header>
 
-        {/* VIEW 1: NORMAL CHATGPT STREAM */}
         {viewMode === 'real_gpt' && (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto space-y-6 scrollbar-none">
             {conversations.map((msg) => (
@@ -898,7 +945,6 @@ export default function App() {
           </section>
         )}
 
-        {/* VIEW 2: STEALTH JSON SCHEMA VIEW */}
         {viewMode === 'stealth' && (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-2 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
             <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs">
@@ -941,7 +987,6 @@ export default function App() {
                 </div>
                 <br />
 
-                {/* Secret Messages Stream */}
                 <div className="border-y border-[#2a2a2a] py-2 my-2 bg-[#121212]/50 rounded px-2">
                   <div className="text-[#6a9955] mb-1 flex items-center justify-between">
                     <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'A' : 'H'})`}</span>
@@ -997,7 +1042,6 @@ export default function App() {
                                 ⤴
                               </button>
                               
-                              {/* TIMESTAMP WITH CONTINUOUS HOVER HITBOX */}
                               <div 
                                 className="relative inline-flex items-center ml-1 py-1"
                                 onMouseEnter={() => setActiveReactionMsgId(m._id)}
@@ -1011,7 +1055,6 @@ export default function App() {
                                   {`[${m.timeFormatted}]`}
                                 </span>
 
-                                {/* FLOATING INSTAGRAM STYLE REACTION BAR */}
                                 {isReactionOpen && (
                                   <div 
                                     className="absolute left-0 -top-8 z-30 bg-[#1e1e1e] border border-[#3a3a3a] px-2 py-1 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.85)] flex items-center gap-1.5 backdrop-blur-md animate-in fade-in duration-100"
@@ -1031,7 +1074,6 @@ export default function App() {
                                 )}
                               </div>
 
-                              {/* Selected Reaction Display */}
                               {m.reaction && (
                                 <span 
                                   className="ml-1.5 inline-flex items-center bg-[#252525] border border-[#383838] px-1.5 py-0.2 rounded-full text-[11px] shadow animate-in zoom-in-75 duration-100" 
@@ -1041,7 +1083,6 @@ export default function App() {
                                 </span>
                               )}
                               
-                              {/* Sent (.) and Seen (..) Indicator */}
                               {showStatusReceipt && (
                                 <span 
                                   className={`text-[12px] font-mono tracking-tighter shrink-0 ml-1 font-bold ${
@@ -1088,7 +1129,6 @@ export default function App() {
           </section>
         )}
 
-        {/* VIEW 3: ARCHIVED IMAGES VAULT */}
         {viewMode === 'images_archive' && (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 max-w-4xl w-full mx-auto space-y-4 scrollbar-none font-sans">
             <div className="flex items-center justify-between border-b border-[#222] pb-3">
@@ -1126,9 +1166,7 @@ export default function App() {
           </section>
         )}
 
-        {/* Bottom Input Pill Capsule */}
         <div className="px-4 lg:px-8 pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
-          
           {replyTarget && (
             <div className="mb-2 bg-[#1a1a1a] border border-[#333] px-3.5 py-1.5 rounded-xl flex items-center justify-between text-xs animate-in fade-in slide-in-from-bottom-2 duration-150">
               <div className="flex items-center gap-2 overflow-hidden">
@@ -1162,7 +1200,6 @@ export default function App() {
 
           <form onSubmit={handleSubmit} className="w-full relative">
             <div className="w-full bg-[#212121] rounded-full border border-[#2e2e2e] focus-within:border-[#444] px-4 py-2.5 flex items-center gap-3 shadow-2xl">
-              
               <button 
                 type="button" 
                 onClick={() => {
@@ -1218,7 +1255,6 @@ export default function App() {
           </form>
         </div>
 
-        {/* View Once Fullscreen Modal */}
         {activeViewImage && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4">
             <div className="bg-[#141414] border border-[#2e2e2e] rounded-2xl max-w-xl w-full p-4 flex flex-col items-center space-y-4 shadow-2xl">
@@ -1248,7 +1284,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Answer Pending Modal */}
         {showPendingModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-[#171717] border border-[#2e2e2e] rounded-2xl w-full max-w-lg p-5 shadow-2xl space-y-4 font-sans">
@@ -1303,7 +1338,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Glass Bubble Alert */}
         {incomingAlert && (
           <div 
             onClick={handleBubbleDismiss}
@@ -1321,7 +1355,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Assistant Bot Trigger */}
         {role === 'parent' && (
           <div className="absolute bottom-6 right-6 z-40">
             <button 
