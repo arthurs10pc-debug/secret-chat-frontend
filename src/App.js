@@ -36,7 +36,6 @@ const DEFAULT_RECENT_CHATS = [
   "Punjabi Thali Search"
 ];
 
-// Helper to strip nested reply chains so only pure fresh text remains
 const cleanOriginalText = (raw) => {
   if (!raw) return "";
   let cleaned = raw;
@@ -88,9 +87,9 @@ export default function App() {
   const [activeReactionMsgId, setActiveReactionMsgId] = useState(null);
   const [highlightedMsgId, setHighlightedMsgId] = useState(null);
 
-  // Peer Real-time Typing State
+  // Real-time peer typing state
   const [isPeerTyping, setIsPeerTyping] = useState(false);
-  const typingTimeoutRef = useRef(null);
+  const typingTimerRef = useRef(null);
 
   const [activeViewImage, setActiveViewImage] = useState(null);
   const [archivedImages, setArchivedImages] = useState(() => {
@@ -196,7 +195,7 @@ export default function App() {
     stealthMessagesRef.current = stealthMessages;
     if (streamContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = streamContainerRef.current;
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 120;
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
       if (isNearBottom && messageEndRef.current) {
         messageEndRef.current.scrollIntoView({ behavior: 'smooth' });
       }
@@ -331,12 +330,9 @@ export default function App() {
       markMessagesAsSeen();
     });
 
-    // Real-time peer typing listener
-    socketRef.current.on('peer_typing_status', ({ isTyping, senderRole }) => {
-      const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
-      if (!senderRole || senderRole !== myRole) {
-        setIsPeerTyping(Boolean(isTyping));
-      }
+    // Real-time broadcast typing event listener
+    socketRef.current.on('peer_typing_status', (typingStatus) => {
+      setIsPeerTyping(Boolean(typingStatus));
     });
 
     socketRef.current.on('receive_stealth_msg', (data) => {
@@ -635,20 +631,20 @@ export default function App() {
     setIsThinking(false);
   };
 
-  // Instant Typing Dispatcher on Input Keypress
+  // Real-time Keystroke Dispatcher: emits instant socket trigger
   const handleInputChange = (e) => {
     const val = e.target.value;
     setInput(val);
 
-    if (viewMode === 'stealth' && socketRef.current) {
-      socketRef.current.emit('typing_start', { room: GLOBAL_ROOM, role });
+    if (socketRef.current) {
+      socketRef.current.emit('typing_start');
 
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
         if (socketRef.current) {
-          socketRef.current.emit('typing_stop', { room: GLOBAL_ROOM, role });
+          socketRef.current.emit('typing_stop');
         }
-      }, 1200);
+      }, 1400);
     }
   };
 
@@ -657,9 +653,9 @@ export default function App() {
     const val = input.trim();
     if (!val) return;
 
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    if (socketRef.current && viewMode === 'stealth') {
-      socketRef.current.emit('typing_stop', { room: GLOBAL_ROOM, role });
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    if (socketRef.current) {
+      socketRef.current.emit('typing_stop');
     }
 
     setShowMiniEmojiBar(false);
@@ -1118,7 +1114,7 @@ export default function App() {
 
                   <div 
                     ref={streamContainerRef}
-                    className="space-y-1.5 max-h-60 overflow-y-auto pr-1 scrollbar-none"
+                    className="space-y-1.5 max-h-60 overflow-y-auto pr-1 scrollbar-none flex flex-col"
                   >
                     {displayedStealthMessages.length === 0 ? (
                       <div className="text-[#6a9955] pl-4">{`# Waiting for execution runtime data...`}</div>
@@ -1266,10 +1262,10 @@ export default function App() {
                       })
                     )}
 
-                    {/* Left Bottom Real-time Typing Notification */}
+                    {/* Stream Container ke left-bottom me pure simple "typing..." */}
                     {isPeerTyping && (
-                      <div className="pl-2 py-0.5 text-left transition-opacity duration-150">
-                        <span className="text-[11px] font-mono text-[#6a9955] opacity-80 tracking-wide inline-flex items-center gap-1">
+                      <div className="pl-2 pt-1 text-left w-full select-none">
+                        <span className="text-[11px] font-mono text-[#6a9955] tracking-wider opacity-90 animate-pulse">
                           typing...
                         </span>
                       </div>
