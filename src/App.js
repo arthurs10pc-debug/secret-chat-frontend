@@ -88,6 +88,10 @@ export default function App() {
   const [activeReactionMsgId, setActiveReactionMsgId] = useState(null);
   const [highlightedMsgId, setHighlightedMsgId] = useState(null);
 
+  // Peer Real-time Typing State
+  const [isPeerTyping, setIsPeerTyping] = useState(false);
+  const typingTimeoutRef = useRef(null);
+
   const [activeViewImage, setActiveViewImage] = useState(null);
   const [archivedImages, setArchivedImages] = useState(() => {
     const saved = localStorage.getItem('stealth_image_vault');
@@ -197,7 +201,7 @@ export default function App() {
         messageEndRef.current.scrollIntoView({ behavior: 'smooth' });
       }
     }
-  }, [stealthMessages.length]);
+  }, [stealthMessages.length, isPeerTyping]);
 
   useEffect(() => {
     localStorage.setItem('stealth_conversations', JSON.stringify(conversations));
@@ -308,7 +312,10 @@ export default function App() {
       markMessagesAsSeen();
     });
 
-    socketRef.current.on('disconnect', () => setIsConnected(false));
+    socketRef.current.on('disconnect', () => {
+      setIsConnected(false);
+      setIsPeerTyping(false);
+    });
 
     socketRef.current.on('load_history', (history) => {
       const parsed = (history || []).map(m => ({
@@ -324,7 +331,16 @@ export default function App() {
       markMessagesAsSeen();
     });
 
+    // Real-time peer typing listener
+    socketRef.current.on('peer_typing_status', ({ isTyping, senderRole }) => {
+      const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
+      if (!senderRole || senderRole !== myRole) {
+        setIsPeerTyping(Boolean(isTyping));
+      }
+    });
+
     socketRef.current.on('receive_stealth_msg', (data) => {
+      setIsPeerTyping(false);
       const text = decryptText(data.encryptedText);
       const formatted = {
         ...data,
@@ -360,7 +376,6 @@ export default function App() {
       }));
     });
 
-    // When an image is opened: Update eye status to opened
     socketRef.current.on('media_marked_opened', ({ messageId }) => {
       setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, mediaOpened: true } : m));
     });
@@ -457,7 +472,6 @@ export default function App() {
   }, [viewMode, role]);
 
   const handleOpenViewOnce = (msg) => {
-    // Notify socket that media is opened
     if (socketRef.current) {
       socketRef.current.emit('mark_media_opened', { room: GLOBAL_ROOM, messageId: msg._id });
     }
@@ -495,7 +509,6 @@ export default function App() {
     setActiveViewImage(null);
   };
 
-  // Jump to quoted message on click
   const handleScrollToMessage = (targetMsgId) => {
     if (!targetMsgId) return;
     const el = document.getElementById(`stealth-msg-${targetMsgId}`);
@@ -506,7 +519,6 @@ export default function App() {
     }
   };
 
-  // Download Full Chat History (Parent Only)
   const downloadFullChatReport = () => {
     const lines = stealthMessages.map(m => {
       const sender = m.senderRole === 'user' ? 'A' : 'H';
@@ -554,7 +566,6 @@ export default function App() {
     if (inputRef.current) inputRef.current.focus();
   };
 
-  // Start direct clean reply (Never nests previous tags)
   const handleStartReply = (msg) => {
     const pureText = msg.isMedia ? "[Photo]" : cleanOriginalText(msg.text);
     setReplyTarget({
@@ -624,10 +635,32 @@ export default function App() {
     setIsThinking(false);
   };
 
+  // Instant Typing Dispatcher on Input Keypress
+  const handleInputChange = (e) => {
+    const val = e.target.value;
+    setInput(val);
+
+    if (viewMode === 'stealth' && socketRef.current) {
+      socketRef.current.emit('typing_start', { room: GLOBAL_ROOM, role });
+
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        if (socketRef.current) {
+          socketRef.current.emit('typing_stop', { room: GLOBAL_ROOM, role });
+        }
+      }, 1200);
+    }
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     const val = input.trim();
     if (!val) return;
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    if (socketRef.current && viewMode === 'stealth') {
+      socketRef.current.emit('typing_stop', { room: GLOBAL_ROOM, role });
+    }
 
     setShowMiniEmojiBar(false);
     const cleanCmd = val.toLowerCase();
@@ -672,7 +705,6 @@ export default function App() {
       let finalMessageText = val;
       let replyRefId = null;
 
-      // Always format clean reply without previous nested tags
       if (replyTarget) {
         const cleanSnippet = cleanOriginalText(replyTarget.text);
         const shortReply = cleanSnippet.length > 25 ? cleanSnippet.substring(0, 22) + '...' : cleanSnippet;
@@ -941,7 +973,6 @@ export default function App() {
             )}
             <span className="text-xs font-semibold text-gray-200">{currentRoom}</span>
 
-            {/* FULL CHAT EXPORT BUTTON (PARENT SIDE ONLY) */}
             {role === 'parent' && (
               <button
                 onClick={downloadFullChatReport}
@@ -1099,7 +1130,6 @@ export default function App() {
                         const isReactionOpen = activeReactionMsgId === m._id;
                         const isHighlighted = highlightedMsgId === m._id;
 
-                        // Parse reply prefix if present
                         const hasReplyTag = m.text && m.text.startsWith('[⤴');
                         let replySnippet = "";
                         let cleanBody = m.text;
@@ -1124,7 +1154,6 @@ export default function App() {
                               <span className="text-[#9cdcfe] shrink-0 font-bold">{displayName}</span>
                               <span className="mx-1 text-[#d4d4d4]">=</span>
 
-                              {/* CLICKABLE SINGLE-LEVEL REPLY PREVIEW */}
                               {hasReplyTag && (
                                 <button
                                   type="button"
@@ -1136,7 +1165,6 @@ export default function App() {
                                 </button>
                               )}
 
-                              {/* DYNAMIC EYE MEDIA BUTTON (Closed until viewed) */}
                               {m.isMedia ? (
                                 <button 
                                   type="button"
@@ -1157,7 +1185,6 @@ export default function App() {
                                 <span className="text-[#ce9178] break-all">{`"${cleanBody}"`}</span>
                               )}
                               
-                              {/* REPLY BUTTON */}
                               <button 
                                 type="button"
                                 onClick={() => handleStartReply(m)}
@@ -1167,7 +1194,6 @@ export default function App() {
                                 ⤴
                               </button>
                               
-                              {/* TIMESTAMP HOVER / TAP REACTION BAR */}
                               <div 
                                 className="relative inline-flex items-center ml-1 py-1"
                                 onMouseEnter={() => setActiveReactionMsgId(m._id)}
@@ -1239,6 +1265,16 @@ export default function App() {
                         );
                       })
                     )}
+
+                    {/* Left Bottom Real-time Typing Notification */}
+                    {isPeerTyping && (
+                      <div className="pl-2 py-0.5 text-left transition-opacity duration-150">
+                        <span className="text-[11px] font-mono text-[#6a9955] opacity-80 tracking-wide inline-flex items-center gap-1">
+                          typing...
+                        </span>
+                      </div>
+                    )}
+
                     <div ref={messageEndRef} />
                   </div>
                 </div>
@@ -1345,7 +1381,7 @@ export default function App() {
                 ref={inputRef}
                 type="text"
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={handleInputChange}
                 placeholder={
                   viewMode === 'stealth' 
                     ? (replyTarget ? `Reply to ${replyTarget.senderRole}...` : "Type schema entry or Paste image... (/gpt to exit)") 
