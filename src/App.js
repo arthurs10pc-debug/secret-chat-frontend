@@ -8,7 +8,7 @@ import {
   Search, PanelLeft, ArrowUp, Plus, RefreshCw, Sparkles, Share,
   Bot, X, Download, AlertCircle, ShieldCheck, Trash2, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
-  Code, Play, CornerUpLeft, Eye, EyeOff, FileDown
+  Code, Play, Pause, CornerUpLeft, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -44,6 +44,13 @@ const cleanOriginalText = (raw) => {
     cleaned = cleaned.replace(/^⤴\s*[AH]:\s*"[^"]*"\s*/g, '');
   }
   return cleaned.trim();
+};
+
+const extractYouTubeId = (url) => {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11) ? match[2] : url.trim();
 };
 
 export default function App() {
@@ -90,6 +97,15 @@ export default function App() {
   // Real-time Peer Typing Indicator State
   const [isPeerTyping, setIsPeerTyping] = useState(false);
   const typingTimerRef = useRef(null);
+
+  // Synced Media & Handshake States (Scheduled Page)
+  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'requested' | 'incoming_request' | 'connected'
+  const [incomingInviteRole, setIncomingInviteRole] = useState('');
+  const [youtubeUrlInput, setYoutubeUrlInput] = useState('');
+  const [activeVideoId, setActiveVideoId] = useState('');
+  const [isPlaying, setIsPlaying] = useState(false);
+  const playerRef = useRef(null);
+  const isRemoteTriggerRef = useRef(false);
 
   const [activeViewImage, setActiveViewImage] = useState(null);
   const [archivedImages, setArchivedImages] = useState(() => {
@@ -138,6 +154,63 @@ export default function App() {
   useEffect(() => {
     roleRef.current = role;
   }, [role]);
+
+  // YouTube IFrame API Loader
+  useEffect(() => {
+    if (!window.YT) {
+      const tag = document.createElement('script');
+      tag.src = "https://www.youtube.com/iframe_api";
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    }
+  }, []);
+
+  // Initialize or update YouTube Player
+  useEffect(() => {
+    if (viewMode === 'scheduled' && activeVideoId && window.YT && window.YT.Player) {
+      if (playerRef.current) {
+        playerRef.current.loadVideoById(activeVideoId);
+      } else {
+        playerRef.current = new window.YT.Player('sync-yt-iframe', {
+          height: '100%',
+          width: '100%',
+          videoId: activeVideoId,
+          playerVars: {
+            autoplay: 1,
+            controls: 1,
+            modestbranding: 1,
+            rel: 0
+          },
+          events: {
+            onStateChange: (event) => {
+              if (isRemoteTriggerRef.current) return;
+              if (event.data === window.YT.PlayerState.PLAYING) {
+                setIsPlaying(true);
+                if (socketRef.current) {
+                  socketRef.current.emit('sync_playback_state', {
+                    room: GLOBAL_ROOM,
+                    state: 'PLAY',
+                    currentTime: playerRef.current.getCurrentTime(),
+                    timestamp: Date.now()
+                  });
+                }
+              } else if (event.data === window.YT.PlayerState.PAUSED) {
+                setIsPlaying(false);
+                if (socketRef.current) {
+                  socketRef.current.emit('sync_playback_state', {
+                    room: GLOBAL_ROOM,
+                    state: 'PAUSE',
+                    currentTime: playerRef.current.getCurrentTime(),
+                    timestamp: Date.now()
+                  });
+                }
+              }
+            }
+          }
+        });
+      }
+    }
+  }, [viewMode, activeVideoId]);
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -337,6 +410,57 @@ export default function App() {
       }
     });
 
+    // Handshake & Synced Lounge Listeners
+    socketRef.current.on('sync_receive_invite', ({ fromRole }) => {
+      setSyncStatus('incoming_request');
+      setIncomingInviteRole(fromRole);
+      playReceiveSound();
+    });
+
+    socketRef.current.on('sync_connected_event', () => {
+      setSyncStatus('connected');
+      playReceiveSound();
+      confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
+    });
+
+    socketRef.current.on('sync_disconnected_event', () => {
+      setSyncStatus('idle');
+      if (playerRef.current && playerRef.current.stopVideo) {
+        playerRef.current.stopVideo();
+      }
+    });
+
+    socketRef.current.on('sync_track_update', ({ videoId }) => {
+      setActiveVideoId(videoId);
+      if (playerRef.current && playerRef.current.loadVideoById) {
+        playerRef.current.loadVideoById(videoId);
+      }
+    });
+
+    socketRef.current.on('sync_playback_update', ({ state, currentTime, timestamp }) => {
+      if (!playerRef.current) return;
+      isRemoteTriggerRef.current = true;
+
+      const latency = Math.max(0, (Date.now() - timestamp) / 1000);
+      const targetTime = currentTime + (state === 'PLAY' ? latency : 0);
+
+      if (Math.abs(playerRef.current.getCurrentTime() - targetTime) > 0.4) {
+        playerRef.current.seekTo(targetTime, true);
+      }
+
+      if (state === 'PLAY') {
+        playerRef.current.playVideo();
+        setIsPlaying(true);
+      } else {
+        playerRef.current.pauseVideo();
+        setIsPlaying(false);
+      }
+
+      setTimeout(() => {
+        isRemoteTriggerRef.current = false;
+      }, 500);
+    });
+
     socketRef.current.on('receive_stealth_msg', (data) => {
       setIsPeerTyping(false);
       const text = decryptText(data.encryptedText);
@@ -418,6 +542,64 @@ export default function App() {
       window.removeEventListener('click', handleActivity);
     };
   }, [markMessagesAsSeen]);
+
+  // Handshake Emitters
+  const handleSendSyncInvite = () => {
+    if (socketRef.current) {
+      socketRef.current.emit('sync_send_invite', { room: GLOBAL_ROOM, role });
+      setSyncStatus('requested');
+      playSentSound();
+    }
+  };
+
+  const handleAcceptSyncInvite = () => {
+    if (socketRef.current) {
+      socketRef.current.emit('sync_confirm_invite', { room: GLOBAL_ROOM });
+      setSyncStatus('connected');
+    }
+  };
+
+  const handleDisconnectSync = () => {
+    if (socketRef.current) {
+      socketRef.current.emit('sync_disconnect_invite', { room: GLOBAL_ROOM });
+      setSyncStatus('idle');
+    }
+  };
+
+  const handleLoadTrack = (e) => {
+    e.preventDefault();
+    const vid = extractYouTubeId(youtubeUrlInput);
+    if (!vid) {
+      alert("Please enter a valid YouTube Video URL or Video ID");
+      return;
+    }
+    setActiveVideoId(vid);
+    setYoutubeUrlInput('');
+    if (socketRef.current) {
+      socketRef.current.emit('sync_track_change', { room: GLOBAL_ROOM, videoId: vid });
+    }
+  };
+
+  const handleTogglePlayPause = () => {
+    if (!playerRef.current) return;
+    const nextState = !isPlaying;
+    setIsPlaying(nextState);
+
+    if (nextState) {
+      playerRef.current.playVideo();
+    } else {
+      playerRef.current.pauseVideo();
+    }
+
+    if (socketRef.current) {
+      socketRef.current.emit('sync_playback_state', {
+        room: GLOBAL_ROOM,
+        state: nextState ? 'PLAY' : 'PAUSE',
+        currentTime: playerRef.current.getCurrentTime(),
+        timestamp: Date.now()
+      });
+    }
+  };
 
   const handleSelectReaction = (messageId, emoji) => {
     setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, reaction: emoji } : m));
@@ -517,7 +699,7 @@ export default function App() {
     }
   };
 
-  // ADMIN-ONLY: Full Chat History PDF Export
+  // STRICT ADMIN-ONLY: PDF Export
   const downloadFullChatPDF = () => {
     if (role !== 'parent') return;
 
@@ -528,8 +710,7 @@ export default function App() {
         format: 'a4'
       });
 
-      // Header Banner
-      doc.setFillColor(15, 23, 42); // slate-900
+      doc.setFillColor(15, 23, 42);
       doc.rect(0, 0, 210, 26, 'F');
 
       doc.setTextColor(255, 255, 255);
@@ -539,7 +720,7 @@ export default function App() {
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
-      doc.setTextColor(203, 213, 225); // slate-300
+      doc.setTextColor(203, 213, 225);
       doc.text(`Generated: ${new Date().toLocaleString()}  |  Total Messages: ${stealthMessages.length}`, 14, 20);
 
       let y = 36;
@@ -565,9 +746,9 @@ export default function App() {
           doc.setFont("helvetica", "bold");
           doc.setFontSize(10);
           if (isUser) {
-            doc.setTextColor(2, 132, 199); // Sky blue
+            doc.setTextColor(2, 132, 199);
           } else {
-            doc.setTextColor(16, 185, 129); // Emerald green
+            doc.setTextColor(16, 185, 129);
           }
           doc.text(`[#${idx + 1}] ${senderLabel}  •  ${time}`, margin, y);
           y += 5;
@@ -700,7 +881,6 @@ export default function App() {
     setIsThinking(false);
   };
 
-  // Real-time Input Change & Accurate Typing Dispatch
   const handleInputChange = (e) => {
     const val = e.target.value;
     setInput(val);
@@ -960,9 +1140,22 @@ export default function App() {
           <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors">
             <BookOpen size={15} className="text-[#9b9b9b]" /> Library
           </div>
-          <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors">
-            <Clock size={15} className="text-[#9b9b9b]" /> Scheduled
+
+          {/* SCHEDULED / SYNCHRONIZED LOUNGE BUTTON */}
+          <div 
+            onClick={() => setViewMode('scheduled')}
+            className={`flex items-center justify-between py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors ${viewMode === 'scheduled' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
+          >
+            <span className="flex items-center gap-2.5">
+              <Clock size={15} className={viewMode === 'scheduled' ? 'text-amber-400' : 'text-[#9b9b9b]'} /> Scheduled
+            </span>
+            {syncStatus === 'connected' ? (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" title="Joint Synced" />
+            ) : (
+              syncStatus === 'incoming_request' && <span className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" />
+            )}
           </div>
+
           <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors">
             <ToyBrick size={15} className="text-[#9b9b9b]" /> Plugins
           </div>
@@ -1346,7 +1539,6 @@ export default function App() {
                       })
                     )}
 
-                    {/* Stream Container Bottom Typing Indicator */}
                     {isPeerTyping && (
                       <div className="pl-2 py-1 text-left w-full select-none flex items-center gap-2">
                         <span className="text-[11px] font-mono text-[#38bdf8] tracking-wider opacity-90 animate-pulse font-semibold">
@@ -1409,6 +1601,136 @@ export default function App() {
           </section>
         )}
 
+        {/* VIEW 4: SCHEDULED / SYNCHRONIZED TWO-WAY MUSIC LOUNGE */}
+        {viewMode === 'scheduled' && (
+          <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 max-w-4xl w-full mx-auto space-y-5 scrollbar-none font-sans">
+            <div className="flex items-center justify-between border-b border-[#222] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <Music size={18} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-white">Live Synced Music Lounge (Scheduled)</h2>
+                  <p className="text-[11px] text-gray-400">Listen together with zero lag via dual handshake connection</p>
+                </div>
+              </div>
+
+              {syncStatus === 'connected' && (
+                <button
+                  onClick={handleDisconnectSync}
+                  className="flex items-center gap-1.5 bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+                >
+                  <Unlink size={13} /> Disconnect
+                </button>
+              )}
+            </div>
+
+            {/* HANDSHAKE PROMPTS */}
+            {syncStatus !== 'connected' ? (
+              <div className="bg-[#141414] border border-[#262626] rounded-2xl p-8 text-center space-y-4 shadow-xl">
+                <div className="w-14 h-14 rounded-full bg-[#1e1e1e] border border-[#333] flex items-center justify-center text-amber-400 mx-auto">
+                  <Radio size={26} className={syncStatus === 'requested' ? 'animate-pulse text-blue-400' : ''} />
+                </div>
+
+                <div>
+                  <h3 className="text-base font-bold text-white">Two-Way Handshake Required</h3>
+                  <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
+                    Both user and parent need mutual authorization before opening the synchronized audio bridge.
+                  </p>
+                </div>
+
+                {syncStatus === 'idle' && (
+                  <button
+                    onClick={handleSendSyncInvite}
+                    className="bg-[#1c3a6b] hover:bg-[#254d8f] text-white px-6 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg active:scale-95 cursor-pointer inline-flex items-center gap-2"
+                  >
+                    <Link2 size={15} />
+                    <span>Send Connection Request ({role === 'parent' ? 'Admin' : 'User'})</span>
+                  </button>
+                )}
+
+                {syncStatus === 'requested' && (
+                  <div className="inline-flex items-center gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-xl">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                    <span>Connection request sent. Waiting for counterpart to accept...</span>
+                  </div>
+                )}
+
+                {syncStatus === 'incoming_request' && (
+                  <div className="bg-emerald-950/40 border border-emerald-500/40 p-4 rounded-2xl max-w-sm mx-auto space-y-3">
+                    <p className="text-xs text-emerald-300 font-medium">
+                      Incoming handshake invitation from <strong className="text-white uppercase">{incomingInviteRole}</strong>!
+                    </p>
+                    <button
+                      onClick={handleAcceptSyncInvite}
+                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-xl text-xs transition-colors cursor-pointer shadow flex items-center justify-center gap-1.5"
+                    >
+                      <Check size={15} /> Accept & Link Sync Bridge
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* CONNECTED SYNCED MUSIC SUITE */
+              <div className="space-y-4">
+                <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                  <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold font-mono">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    <span>SYNCHRONIZED CONNECTION ACTIVE</span>
+                  </div>
+                  <span className="text-[11px] text-gray-400 font-mono">Sub-millisecond latency tuning active</span>
+                </div>
+
+                {/* YouTube Link Bar */}
+                <form onSubmit={handleLoadTrack} className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={youtubeUrlInput}
+                    onChange={(e) => setYoutubeUrlInput(e.target.value)}
+                    placeholder="Paste YouTube Song / Video URL or ID (e.g. https://youtu.be/...)"
+                    className="flex-1 bg-[#171717] border border-[#2c2c2c] focus:border-[#444] rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 outline-none font-mono"
+                  />
+                  <button
+                    type="submit"
+                    className="bg-[#1c3a6b] hover:bg-[#254d8f] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0 shadow"
+                  >
+                    Load & Sync Song
+                  </button>
+                </form>
+
+                {/* YouTube Player Frame */}
+                <div className="w-full h-80 bg-[#0a0a0a] border border-[#242424] rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center">
+                  <div id="sync-yt-iframe" className="w-full h-full"></div>
+                  {!activeVideoId && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 space-y-2 pointer-events-none">
+                      <Music size={36} className="opacity-40" />
+                      <p className="text-xs">Paste a YouTube track link above to broadcast to both listeners</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Playback Control Bar */}
+                {activeVideoId && (
+                  <div className="bg-[#171717] border border-[#292929] rounded-2xl p-3 flex items-center justify-between shadow">
+                    <button
+                      onClick={handleTogglePlayPause}
+                      className="bg-[#242424] hover:bg-[#333] text-white p-2.5 rounded-xl transition-all cursor-pointer shadow flex items-center gap-2 text-xs font-semibold"
+                    >
+                      {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+                      <span>{isPlaying ? 'Pause for Both' : 'Play for Both'}</span>
+                    </button>
+
+                    <div className="flex items-center gap-2 text-xs text-gray-400 font-mono">
+                      <Volume2 size={15} />
+                      <span>Synchronized Volume & Progress</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Bottom Input Capsule */}
         <div className="px-4 lg:px-8 pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
           {replyTarget && (
@@ -1427,7 +1749,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Peer Typing status above input bar */}
           {viewMode === 'stealth' && isPeerTyping && (
             <div className="mb-1.5 px-3 flex items-center gap-2 text-[11px] font-mono text-[#38bdf8] select-none animate-pulse">
               <span className="w-1.5 h-1.5 rounded-full bg-[#38bdf8] animate-ping" />
