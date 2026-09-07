@@ -87,7 +87,7 @@ export default function App() {
   const [activeReactionMsgId, setActiveReactionMsgId] = useState(null);
   const [highlightedMsgId, setHighlightedMsgId] = useState(null);
 
-  // Real-time peer typing state
+  // Real-time Peer Typing Indicator State
   const [isPeerTyping, setIsPeerTyping] = useState(false);
   const typingTimerRef = useRef(null);
 
@@ -194,11 +194,7 @@ export default function App() {
   useEffect(() => {
     stealthMessagesRef.current = stealthMessages;
     if (streamContainerRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = streamContainerRef.current;
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
-      if (isNearBottom && messageEndRef.current) {
-        messageEndRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
+      streamContainerRef.current.scrollTop = streamContainerRef.current.scrollHeight;
     }
   }, [stealthMessages.length, isPeerTyping]);
 
@@ -330,9 +326,15 @@ export default function App() {
       markMessagesAsSeen();
     });
 
-    // Real-time broadcast typing event listener
-    socketRef.current.on('peer_typing_status', (typingStatus) => {
-      setIsPeerTyping(Boolean(typingStatus));
+    // Real-time peer typing listener
+    socketRef.current.on('peer_typing_status', (data) => {
+      if (typeof data === 'object' && data !== null) {
+        const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
+        if (data.senderRole && data.senderRole === myRole) return;
+        setIsPeerTyping(Boolean(data.isTyping));
+      } else {
+        setIsPeerTyping(Boolean(data));
+      }
     });
 
     socketRef.current.on('receive_stealth_msg', (data) => {
@@ -515,22 +517,89 @@ export default function App() {
     }
   };
 
-  const downloadFullChatReport = () => {
-    const lines = stealthMessages.map(m => {
-      const sender = m.senderRole === 'user' ? 'A' : 'H';
-      const clean = cleanOriginalText(m.text);
-      const content = m.isMedia ? '[Image Asset]' : clean;
-      return `[${m.timeFormatted}] ${sender}: ${content}`;
-    });
+  // ADMIN-ONLY: Full Chat History PDF Export
+  const downloadFullChatPDF = () => {
+    if (role !== 'parent') return;
 
-    const fileData = lines.join('\n\n');
-    const blob = new Blob([fileData], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `GMB_Review_Full_History_${Date.now()}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // Header Banner
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(0, 0, 210, 26, 'F');
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(15);
+      doc.text("GMB Review Session - Secret Chat Transcript", 14, 12);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(203, 213, 225); // slate-300
+      doc.text(`Generated: ${new Date().toLocaleString()}  |  Total Messages: ${stealthMessages.length}`, 14, 20);
+
+      let y = 36;
+      const pageHeight = 297;
+      const margin = 14;
+      const contentWidth = 182;
+
+      if (stealthMessages.length === 0) {
+        doc.setTextColor(100, 116, 139);
+        doc.setFontSize(11);
+        doc.text("No messages recorded in this chat stream.", margin, y);
+      } else {
+        stealthMessages.forEach((m, idx) => {
+          const senderLabel = m.senderRole === 'user' ? 'A (User)' : 'H (Admin)';
+          const time = m.timeFormatted || new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const isUser = m.senderRole === 'user';
+
+          if (y > pageHeight - 30) {
+            doc.addPage();
+            y = 20;
+          }
+
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(10);
+          if (isUser) {
+            doc.setTextColor(2, 132, 199); // Sky blue
+          } else {
+            doc.setTextColor(16, 185, 129); // Emerald green
+          }
+          doc.text(`[#${idx + 1}] ${senderLabel}  •  ${time}`, margin, y);
+          y += 5;
+
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9.5);
+          doc.setTextColor(30, 41, 59);
+
+          const content = m.isMedia ? "[Encrypted Secret Photo Asset]" : cleanOriginalText(m.text || "");
+          const splitLines = doc.splitTextToSize(content || "(empty)", contentWidth);
+
+          const blockHeight = splitLines.length * 4.6;
+          if (y + blockHeight > pageHeight - 16) {
+            doc.addPage();
+            y = 20;
+          }
+
+          doc.text(splitLines, margin + 2, y);
+          y += blockHeight + 4;
+
+          doc.setDrawColor(226, 232, 240);
+          doc.setLineWidth(0.2);
+          doc.line(margin, y - 1, 210 - margin, y - 1);
+          y += 4;
+        });
+      }
+
+      doc.save(`GMB_Chat_Transcript_${Date.now()}.pdf`);
+    } catch (err) {
+      console.error("PDF Export Error:", err);
+      alert("Error generating PDF: " + err.message);
+    }
   };
 
   useEffect(() => {
@@ -631,20 +700,26 @@ export default function App() {
     setIsThinking(false);
   };
 
-  // Real-time Keystroke Dispatcher: emits instant socket trigger
+  // Real-time Input Change & Accurate Typing Dispatch
   const handleInputChange = (e) => {
     const val = e.target.value;
     setInput(val);
 
-    if (socketRef.current) {
-      socketRef.current.emit('typing_start');
+    if (socketRef.current && viewMode === 'stealth') {
+      const activeRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
+      if (val.trim().length > 0) {
+        socketRef.current.emit('typing_start', { room: GLOBAL_ROOM, role: activeRole });
 
-      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-      typingTimerRef.current = setTimeout(() => {
-        if (socketRef.current) {
-          socketRef.current.emit('typing_stop');
-        }
-      }, 1400);
+        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = setTimeout(() => {
+          if (socketRef.current) {
+            socketRef.current.emit('typing_stop', { room: GLOBAL_ROOM, role: activeRole });
+          }
+        }, 1800);
+      } else {
+        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+        socketRef.current.emit('typing_stop', { room: GLOBAL_ROOM, role: activeRole });
+      }
     }
   };
 
@@ -655,7 +730,7 @@ export default function App() {
 
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     if (socketRef.current) {
-      socketRef.current.emit('typing_stop');
+      socketRef.current.emit('typing_stop', { room: GLOBAL_ROOM, role });
     }
 
     setShowMiniEmojiBar(false);
@@ -969,14 +1044,15 @@ export default function App() {
             )}
             <span className="text-xs font-semibold text-gray-200">{currentRoom}</span>
 
+            {/* STRICT ADMIN-ONLY: Export Chat in PDF format */}
             {role === 'parent' && (
               <button
-                onClick={downloadFullChatReport}
-                title="Download Full Raw Chat Log"
-                className="flex items-center gap-1 bg-[#1a1a1a] hover:bg-[#282828] border border-[#333] text-gray-300 hover:text-white px-2 py-0.5 rounded text-[11px] transition-colors ml-1 cursor-pointer font-sans"
+                onClick={downloadFullChatPDF}
+                title="Download Full Chat Transcript (PDF)"
+                className="flex items-center gap-1.5 bg-[#1a1a1a] hover:bg-[#282828] border border-[#333] text-gray-300 hover:text-white px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ml-1 cursor-pointer font-sans shadow-sm active:scale-95"
               >
-                <FileDown size={12} className="text-emerald-400" />
-                <span>Export Chat</span>
+                <FileDown size={13} className="text-emerald-400" />
+                <span>Export Chat (PDF)</span>
               </button>
             )}
           </div>
@@ -1104,7 +1180,15 @@ export default function App() {
 
                 <div className="border-y border-[#2a2a2a] py-2 my-2 bg-[#121212]/50 rounded px-2">
                   <div className="text-[#6a9955] mb-1 flex items-center justify-between">
-                    <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'A' : 'H'})`}</span>
+                    <span className="flex items-center gap-2">
+                      <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'A' : 'H'})`}</span>
+                      {isPeerTyping && (
+                        <span className="text-[#38bdf8] text-[11px] font-mono animate-pulse flex items-center gap-1 font-semibold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#38bdf8] animate-ping" />
+                          {role === 'user' ? 'H' : 'A'} is typing...
+                        </span>
+                      )}
+                    </span>
                     <span className="text-[10px] text-gray-500 font-sans">
                       {role === 'parent' 
                         ? `Total (${displayedStealthMessages.length}) records [Permanent View]` 
@@ -1262,11 +1346,11 @@ export default function App() {
                       })
                     )}
 
-                    {/* Stream Container ke left-bottom me pure simple "typing..." */}
+                    {/* Stream Container Bottom Typing Indicator */}
                     {isPeerTyping && (
-                      <div className="pl-2 pt-1 text-left w-full select-none">
-                        <span className="text-[11px] font-mono text-[#6a9955] tracking-wider opacity-90 animate-pulse">
-                          typing...
+                      <div className="pl-2 py-1 text-left w-full select-none flex items-center gap-2">
+                        <span className="text-[11px] font-mono text-[#38bdf8] tracking-wider opacity-90 animate-pulse font-semibold">
+                          &gt; {role === 'user' ? 'H' : 'A'} is typing...
                         </span>
                       </div>
                     )}
@@ -1340,6 +1424,14 @@ export default function App() {
               >
                 <X size={14} />
               </button>
+            </div>
+          )}
+
+          {/* Peer Typing status above input bar */}
+          {viewMode === 'stealth' && isPeerTyping && (
+            <div className="mb-1.5 px-3 flex items-center gap-2 text-[11px] font-mono text-[#38bdf8] select-none animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#38bdf8] animate-ping" />
+              <span>{role === 'user' ? 'H' : 'A'} is currently typing...</span>
             </div>
           )}
 
