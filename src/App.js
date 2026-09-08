@@ -169,7 +169,7 @@ export default function App() {
     roleRef.current = role;
   }, [role]);
 
-  // Load YouTube IFrame API
+  // Load YouTube IFrame API once
   useEffect(() => {
     if (!window.YT) {
       const tag = document.createElement('script');
@@ -179,7 +179,7 @@ export default function App() {
     }
   }, []);
 
-  const initGlobalPlayer = useCallback((initialVideoId = 'dQw4w9WgXcQ') => {
+  const initGlobalPlayer = useCallback((initialVideoId = '') => {
     if (window.YT && window.YT.Player && !playerRef.current) {
       try {
         playerRef.current = new window.YT.Player('persistent-sync-iframe', {
@@ -187,7 +187,7 @@ export default function App() {
           width: '100%',
           videoId: initialVideoId,
           playerVars: {
-            autoplay: 1,
+            autoplay: 0,
             controls: 1,
             modestbranding: 1,
             rel: 0,
@@ -449,26 +449,19 @@ export default function App() {
       playReceiveSound();
     });
 
-    socketRef.current.on('sync_connected_event', (data) => {
+    // CLEAN SLATE RECONNECT: Reset track state on new connection
+    socketRef.current.on('sync_connected_event', () => {
       setSyncStatus('connected');
       playReceiveSound();
       confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
 
-      if (data && data.videoId) {
-        setActiveTrackTitle(data.title || "YouTube Track");
-        setActiveVideoId(data.videoId);
-        setIsPlaying(data.state === 'PLAY');
-
-        if (playerRef.current && playerRef.current.loadVideoById) {
-          isRemoteTriggerRef.current = true;
-          playerRef.current.loadVideoById(data.videoId);
-          playerRef.current.unMute();
-          playerRef.current.setVolume(100);
-          if (data.state === 'PLAY') {
-            playerRef.current.playVideo();
-          }
-          setTimeout(() => { isRemoteTriggerRef.current = false; }, 1500);
-        }
+      // Always clear out old playback states on fresh connection
+      setActiveVideoId('');
+      setActiveTrackTitle('');
+      setYoutubeUrlInput('');
+      setIsPlaying(false);
+      if (playerRef.current && playerRef.current.stopVideo) {
+        playerRef.current.stopVideo();
       }
     });
 
@@ -477,6 +470,7 @@ export default function App() {
       setIsPlaying(false);
       setActiveTrackTitle('');
       setActiveVideoId('');
+      setYoutubeUrlInput('');
       if (playerRef.current && playerRef.current.stopVideo) {
         playerRef.current.stopVideo();
       }
@@ -492,7 +486,10 @@ export default function App() {
       if (playerRef.current && playerRef.current.loadVideoById) {
         isRemoteTriggerRef.current = true;
         try {
-          playerRef.current.loadVideoById(videoId);
+          playerRef.current.loadVideoById({
+            videoId: videoId,
+            startSeconds: 0
+          });
           playerRef.current.unMute();
           playerRef.current.setVolume(100);
           const playPromise = playerRef.current.playVideo();
@@ -641,7 +638,7 @@ export default function App() {
     handleTriggerSong(suggestion, suggestion);
   };
 
-  // UNIVERSAL RESOLVER: Resolves ANY query/link into exact Video ID so both devices receive identical track
+  // UNIVERSAL RESOLVER: Resolves input into identical Video ID across both sides
   const handleTriggerSong = async (rawInput, displayTitle = '') => {
     if (!rawInput || !rawInput.trim()) return;
     setIsLoadingTrack(true);
@@ -667,11 +664,10 @@ export default function App() {
     setIsLoadingTrack(false);
 
     if (!vid) {
-      alert("Could not find video. Please paste a direct YouTube link or try another search title.");
+      alert("Could not load track. Try pasting a direct YouTube watch link.");
       return;
     }
 
-    // Unlock local audio context directly on user click
     if (playerRef.current && playerRef.current.unMute) {
       try {
         playerRef.current.unMute();
@@ -699,12 +695,10 @@ export default function App() {
   };
 
   const handleAcceptSyncInvite = () => {
-    // Prime player on click to bypass mobile/browser autoplay restrictions
     if (playerRef.current && playerRef.current.unMute) {
       try {
         playerRef.current.unMute();
         playerRef.current.setVolume(100);
-        playerRef.current.playVideo();
       } catch (e) {}
     }
 
@@ -733,6 +727,7 @@ export default function App() {
       setIsPlaying(false);
       setActiveTrackTitle('');
       setActiveVideoId('');
+      setYoutubeUrlInput('');
       if (playerRef.current && playerRef.current.stopVideo) {
         playerRef.current.stopVideo();
       }
@@ -1304,7 +1299,6 @@ export default function App() {
           left: '-9999px',
           width: '320px',
           height: '240px',
-          visibility: 'hidden',
           pointerEvents: 'none',
           zIndex: -9999
         }}
@@ -1472,7 +1466,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* AUTOPLAY BLOCKED BANNER (One click solves browser security policy) */}
+        {/* AUTOPLAY RESTRICTION UNMUTE BANNER */}
         {autoplayBlocked && (
           <div 
             onClick={handleManualUnmuteClick}
@@ -1480,21 +1474,21 @@ export default function App() {
           >
             <div className="flex items-center gap-2">
               <VolumeX size={16} />
-              <span>Click here to enable sound playback (Browser requires 1 tap to unmute)</span>
+              <span>Browser blocked autoplay: Tap here once to unmute synchronized playback</span>
             </div>
-            <span className="bg-amber-500 text-black font-bold px-2 py-0.5 rounded text-[11px]">Unmute Now</span>
+            <span className="bg-amber-500 text-black font-bold px-2 py-0.5 rounded text-[11px]">Unmute Sound</span>
           </div>
         )}
 
         {/* PERSISTENT FLOATING AUDIO BAR IN CHAT */}
-        {syncStatus === 'connected' && viewMode !== 'scheduled' && (
+        {syncStatus === 'connected' && activeVideoId && viewMode !== 'scheduled' && (
           <div className="bg-[#141414]/95 border-b border-[#2a2a2a] px-4 py-2 flex items-center justify-between z-20 text-xs backdrop-blur-md shadow-lg">
             <div className="flex items-center gap-2.5 overflow-hidden">
               <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
                 <Music size={13} className={isPlaying ? 'animate-bounce' : ''} />
               </div>
               <span className="text-gray-300 truncate max-w-xs font-mono text-[11px]">
-                🎵 <strong className="text-white">Synced Audio:</strong> {activeTrackTitle || "Live Stream Active"}
+                🎵 <strong className="text-white">Playing in Sync:</strong> {activeTrackTitle || "Live Stream Active"}
               </span>
             </div>
 
@@ -1927,12 +1921,12 @@ export default function App() {
                 )}
               </div>
             ) : (
-              /* CONNECTED ACTIVE LOUNGE */
+              /* CONNECTED ACTIVE LOUNGE - CLEAN FRESH SLATE ON RECONNECT */
               <div className="space-y-4">
                 <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3.5 flex items-center justify-between shadow-lg">
                   <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold font-mono">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    <span>LINKED ACTIVE (Universal Sync Engine)</span>
+                    <span>LINKED ACTIVE (Clean Sync Engine)</span>
                   </div>
                   <span className="text-[11px] text-gray-400 font-mono">Synced on Both Devices</span>
                 </div>
@@ -1945,7 +1939,7 @@ export default function App() {
                       value={youtubeUrlInput}
                       onChange={(e) => handleQueryChange(e.target.value)}
                       onFocus={() => { if (ytSuggestions.length > 0) setShowSuggestions(true); }}
-                      placeholder="Type song name or YouTube link (Plays exact same song on both sides)..."
+                      placeholder="Paste YouTube link or type song name to play on both screens..."
                       className="flex-1 bg-[#171717] border border-[#2c2c2c] focus:border-[#444] rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 outline-none font-mono"
                     />
                     <button
@@ -1975,39 +1969,45 @@ export default function App() {
                   )}
                 </div>
 
-                {/* VISIBLE ACTIVE TRACK SUMMARY */}
+                {/* TRACK STATUS CARD */}
                 <div className="w-full bg-[#121212] border border-[#242424] rounded-2xl p-6 shadow-2xl flex flex-col items-center justify-center text-center space-y-3">
                   <div className="w-16 h-16 rounded-full bg-[#1c1c1c] border border-[#2e2e2e] flex items-center justify-center text-emerald-400 shadow-inner">
                     <Volume2 size={26} className={isPlaying ? 'animate-bounce' : ''} />
                   </div>
                   <div>
-                    <span className="text-[11px] text-gray-500 font-mono uppercase tracking-wider block">Live Synchronized Track</span>
+                    <span className="text-[11px] text-gray-500 font-mono uppercase tracking-wider block">
+                      {activeVideoId ? "Live Synchronized Track" : "Ready for Playback"}
+                    </span>
                     <h3 className="text-base font-bold text-white mt-1">
-                      {activeTrackTitle || "No track loaded yet. Search or paste link above."}
+                      {activeTrackTitle || "No track loaded yet. Paste a link or search above to start together."}
                     </h3>
                   </div>
                   <p className="text-xs text-gray-500 max-w-md">
-                    Either side can change the track or pause/resume anytime — it automatically stays locked together.
+                    {activeVideoId 
+                      ? "Either side can switch song, pause, or resume anytime. Playback continues in chat seamlessly."
+                      : "Fresh connection established. Start typing above to broadcast simultaneously on both sides."}
                   </p>
                 </div>
 
                 {/* CONTROLS */}
-                <div className="bg-[#171717] border border-[#292929] rounded-2xl p-3 flex items-center justify-between shadow">
-                  <button
-                    onClick={handleTogglePlayPause}
-                    className="bg-[#242424] hover:bg-[#333] text-white p-2.5 rounded-xl transition-all cursor-pointer shadow flex items-center gap-2 text-xs font-semibold"
-                  >
-                    {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-                    <span>{isPlaying ? 'Pause for Both' : 'Play for Both'}</span>
-                  </button>
+                {activeVideoId && (
+                  <div className="bg-[#171717] border border-[#292929] rounded-2xl p-3 flex items-center justify-between shadow">
+                    <button
+                      onClick={handleTogglePlayPause}
+                      className="bg-[#242424] hover:bg-[#333] text-white p-2.5 rounded-xl transition-all cursor-pointer shadow flex items-center gap-2 text-xs font-semibold"
+                    >
+                      {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+                      <span>{isPlaying ? 'Pause for Both' : 'Play for Both'}</span>
+                    </button>
 
-                  <button
-                    onClick={handleDisconnectSync}
-                    className="text-xs text-rose-400 hover:text-rose-300 px-3 py-1.5 rounded-lg border border-rose-900/50 hover:bg-rose-950/40 cursor-pointer transition-colors"
-                  >
-                    Stop & Disconnect
-                  </button>
-                </div>
+                    <button
+                      onClick={handleDisconnectSync}
+                      className="text-xs text-rose-400 hover:text-rose-300 px-3 py-1.5 rounded-lg border border-rose-900/50 hover:bg-rose-950/40 cursor-pointer transition-colors"
+                    >
+                      Stop & Disconnect
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </section>
@@ -2213,7 +2213,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ADMIN BOT DRAWER: DUAL TIME SLOT SCHEDULER */}
+        {/* ADMIN BOT DRAWER */}
         {role === 'parent' && (
           <div className="absolute bottom-6 right-6 z-40">
             <button 
