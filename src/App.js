@@ -165,7 +165,7 @@ export default function App() {
     roleRef.current = role;
   }, [role]);
 
-  // Load YouTube API once globally
+  // Load YouTube IFrame API once
   useEffect(() => {
     if (!window.YT) {
       const tag = document.createElement('script');
@@ -178,48 +178,52 @@ export default function App() {
   // Initialize persistent global player
   const initGlobalPlayer = useCallback((initialVideoId = 'dQw4w9WgXcQ') => {
     if (window.YT && window.YT.Player && !playerRef.current) {
-      playerRef.current = new window.YT.Player('persistent-sync-iframe', {
-        height: '100%',
-        width: '100%',
-        videoId: initialVideoId,
-        playerVars: {
-          autoplay: 1,
-          controls: 1,
-          modestbranding: 1,
-          rel: 0
-        },
-        events: {
-          onReady: () => {
-            if (playerRef.current && playerRef.current.pauseVideo) {
-              playerRef.current.pauseVideo();
-            }
+      try {
+        playerRef.current = new window.YT.Player('persistent-sync-iframe', {
+          height: '100%',
+          width: '100%',
+          videoId: initialVideoId,
+          playerVars: {
+            autoplay: 1,
+            controls: 1,
+            modestbranding: 1,
+            rel: 0
           },
-          onStateChange: (event) => {
-            if (isRemoteTriggerRef.current) return;
-            if (event.data === window.YT.PlayerState.PLAYING) {
-              setIsPlaying(true);
-              if (socketRef.current) {
-                socketRef.current.emit('sync_playback_state', {
-                  room: GLOBAL_ROOM,
-                  state: 'PLAY',
-                  currentTime: playerRef.current.getCurrentTime(),
-                  timestamp: Date.now()
-                });
+          events: {
+            onReady: () => {
+              if (playerRef.current && playerRef.current.pauseVideo) {
+                playerRef.current.pauseVideo();
               }
-            } else if (event.data === window.YT.PlayerState.PAUSED) {
-              setIsPlaying(false);
-              if (socketRef.current) {
-                socketRef.current.emit('sync_playback_state', {
-                  room: GLOBAL_ROOM,
-                  state: 'PAUSE',
-                  currentTime: playerRef.current.getCurrentTime(),
-                  timestamp: Date.now()
-                });
+            },
+            onStateChange: (event) => {
+              if (isRemoteTriggerRef.current) return;
+              if (event.data === window.YT.PlayerState.PLAYING) {
+                setIsPlaying(true);
+                if (socketRef.current) {
+                  socketRef.current.emit('sync_playback_state', {
+                    room: GLOBAL_ROOM,
+                    state: 'PLAY',
+                    currentTime: playerRef.current.getCurrentTime(),
+                    timestamp: Date.now()
+                  });
+                }
+              } else if (event.data === window.YT.PlayerState.PAUSED) {
+                setIsPlaying(false);
+                if (socketRef.current) {
+                  socketRef.current.emit('sync_playback_state', {
+                    room: GLOBAL_ROOM,
+                    state: 'PAUSE',
+                    currentTime: playerRef.current.getCurrentTime(),
+                    timestamp: Date.now()
+                  });
+                }
               }
             }
           }
-        }
-      });
+        });
+      } catch (e) {
+        console.error("Player initialization skipped", e);
+      }
     }
   }, []);
 
@@ -229,7 +233,7 @@ export default function App() {
         initGlobalPlayer();
         clearInterval(timer);
       }
-    }, 500);
+    }, 600);
     return () => clearInterval(timer);
   }, [initGlobalPlayer]);
 
@@ -565,7 +569,7 @@ export default function App() {
     };
   }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification]);
 
-  // YouTube Autocomplete Suggestions API (Native fetch - zero dependency)
+  // YouTube Autocomplete Suggestions API (Native fetch)
   const handleQueryChange = (val) => {
     setYoutubeUrlInput(val);
     if (!val.trim() || val.includes('youtu')) {
@@ -1186,7 +1190,7 @@ export default function App() {
 
   return (
     <div 
-      className="flex h-screen w-screen overflow-hidden bg-[#000000] text-[#ececf1] font-sans antialiased select-none"
+      className="flex h-screen w-screen overflow-hidden bg-[#000000] text-[#ececf1] font-sans antialiased select-none relative"
       onClick={() => setActiveReactionMsgId(null)}
     >
       <input 
@@ -1202,21 +1206,27 @@ export default function App() {
         className="hidden" 
       />
 
-      {/* PERMANENT PERSISTENT YOUTUBE PLAYER CONTAINER */}
+      {/* FIXED PERSISTENT YOUTUBE PLAYER - NEVER PARTICIPATES IN FLEX FLOW, ZERO LAYOUT BREAK */}
       <div 
         style={{
-          position: viewMode === 'scheduled' && syncStatus === 'connected' ? 'relative' : 'fixed',
-          top: viewMode === 'scheduled' && syncStatus === 'connected' ? 'auto' : '-9999px',
-          left: viewMode === 'scheduled' && syncStatus === 'connected' ? 'auto' : '-9999px',
-          width: viewMode === 'scheduled' && syncStatus === 'connected' ? '100%' : '200px',
-          height: viewMode === 'scheduled' && syncStatus === 'connected' ? '320px' : '200px',
-          opacity: viewMode === 'scheduled' && syncStatus === 'connected' ? 1 : 0.01,
+          position: 'fixed',
+          bottom: '16px',
+          right: '16px',
+          width: viewMode === 'scheduled' && syncStatus === 'connected' ? '360px' : '1px',
+          height: viewMode === 'scheduled' && syncStatus === 'connected' ? '202px' : '1px',
+          maxWidth: 'calc(100vw - 32px)',
+          opacity: viewMode === 'scheduled' && syncStatus === 'connected' ? 1 : 0.001,
           pointerEvents: viewMode === 'scheduled' && syncStatus === 'connected' ? 'auto' : 'none',
-          zIndex: viewMode === 'scheduled' && syncStatus === 'connected' ? 10 : -10
+          zIndex: viewMode === 'scheduled' && syncStatus === 'connected' ? 50 : -9999,
+          borderRadius: '16px',
+          overflow: 'hidden',
+          backgroundColor: '#000000',
+          boxShadow: viewMode === 'scheduled' && syncStatus === 'connected' ? '0 16px 40px rgba(0,0,0,0.85)' : 'none',
+          border: viewMode === 'scheduled' && syncStatus === 'connected' ? '2px solid #2e2e2e' : 'none',
+          transition: 'width 0.2s ease, height 0.2s ease, opacity 0.2s ease'
         }}
-        className="rounded-2xl overflow-hidden bg-black shadow-2xl border border-[#262626]"
       >
-        <div id="persistent-sync-iframe" className="w-full h-full"></div>
+        <div id="persistent-sync-iframe" style={{ width: '100%', height: '100%' }}></div>
       </div>
 
       {/* Left Sidebar */}
@@ -1341,7 +1351,7 @@ export default function App() {
 
       {/* Main Workspace */}
       <main className="flex-1 flex flex-col relative bg-[#000000] overflow-hidden">
-        <header className="h-12 flex items-center justify-between px-4 shrink-0 z-10">
+        <header className="h-12 flex items-center justify-between px-4 shrink-0 z-10 border-b border-[#141414]">
           <div className="flex items-center gap-2">
             {!sidebarOpen && (
               <button onClick={() => setSidebarOpen(true)} className="text-[#9b9b9b] hover:text-white cursor-pointer mr-2">
@@ -1379,15 +1389,15 @@ export default function App() {
           </div>
         </header>
 
-        {/* FLOATING PERSISTENT AUDIO CONTROLLER */}
+        {/* FLOATING PERSISTENT AUDIO CONTROLLER IN CHAT */}
         {syncStatus === 'connected' && viewMode !== 'scheduled' && (
-          <div className="bg-[#141414]/95 border-y border-[#2a2a2a] px-4 py-2 flex items-center justify-between z-20 text-xs backdrop-blur-md shadow-lg animate-in slide-in-from-top-2 duration-150">
+          <div className="bg-[#141414]/95 border-b border-[#2a2a2a] px-4 py-2 flex items-center justify-between z-20 text-xs backdrop-blur-md shadow-lg">
             <div className="flex items-center gap-2.5 overflow-hidden">
               <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
                 <Music size={13} className={isPlaying ? 'animate-bounce' : ''} />
               </div>
               <span className="text-gray-300 truncate max-w-xs font-mono text-[11px]">
-                🎵 <strong className="text-white">Playing in Background:</strong> {activeTrackTitle || "YouTube Synced Audio"}
+                🎵 <strong className="text-white">Playing:</strong> {activeTrackTitle || "Synced Audio Track"}
               </span>
             </div>
 
@@ -1761,7 +1771,7 @@ export default function App() {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-white">Live Synced Music Lounge (Scheduled)</h2>
-                  <p className="text-[11px] text-gray-400">Audio continues playing in background even when viewing chat</p>
+                  <p className="text-[11px] text-gray-400">Audio plays continuously in background across all views</p>
                 </div>
               </div>
 
@@ -1828,7 +1838,7 @@ export default function App() {
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                     <span>LINKED ACTIVE (Background Audio Enabled)</span>
                   </div>
-                  <span className="text-[11px] text-gray-400 font-mono">Sub-millisecond sync tuning active</span>
+                  <span className="text-[11px] text-gray-400 font-mono">Zero-Lag Latency Compensation</span>
                 </div>
 
                 {/* YOUTUBE SEARCH & AUTOCOMPLETE BAR */}
@@ -1867,16 +1877,19 @@ export default function App() {
                   )}
                 </div>
 
-                {/* VISIBLE VIDEO STAGE IN SCHEDULED TAB */}
-                <div className="w-full bg-[#0a0a0a] border border-[#242424] rounded-2xl p-4 shadow-2xl flex flex-col items-center justify-center text-center space-y-2">
-                  <div className="flex items-center gap-2 text-amber-400">
-                    <Volume2 size={20} className={isPlaying ? 'animate-pulse' : ''} />
-                    <span className="text-sm font-bold text-white">
-                      {activeTrackTitle || "Waiting to broadcast song..."}
-                    </span>
+                {/* VISIBLE ACTIVE TRACK SUMMARY */}
+                <div className="w-full bg-[#121212] border border-[#242424] rounded-2xl p-6 shadow-2xl flex flex-col items-center justify-center text-center space-y-3">
+                  <div className="w-16 h-16 rounded-full bg-[#1c1c1c] border border-[#2e2e2e] flex items-center justify-center text-emerald-400 shadow-inner">
+                    <Volume2 size={26} className={isPlaying ? 'animate-bounce' : ''} />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-gray-500 font-mono uppercase tracking-wider block">Currently Broadcasting</span>
+                    <h3 className="text-base font-bold text-white mt-1">
+                      {activeTrackTitle || "No track loaded yet. Search or paste link above."}
+                    </h3>
                   </div>
                   <p className="text-xs text-gray-500 max-w-md">
-                    Note: Audio remains synchronized in background even if you open chat, recents, or switch rooms[cite: 1].
+                    Switch to any chat or recent room without worrying — playback continues nonstop until you disconnect[cite: 1].
                   </p>
                 </div>
 
