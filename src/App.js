@@ -6,10 +6,9 @@ import confetti from 'canvas-confetti';
 import { 
   SquarePen, Image as ImageIcon, BookOpen, Clock, ToyBrick, FolderGit2, TerminalSquare, MoreHorizontal,
   Search, PanelLeft, ArrowUp, Plus, RefreshCw, Sparkles, Share,
-  Bot, X, Download, AlertCircle, ShieldCheck, Trash2, Smile,
+  Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
-  Code, Play, Pause, CornerUpLeft, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2,
-  Calendar, Send
+  Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -566,7 +565,7 @@ export default function App() {
     };
   }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification]);
 
-  // YouTube Autocomplete Suggestions API
+  // YouTube Autocomplete Suggestions API (Native fetch - zero dependency)
   const handleQueryChange = (val) => {
     setYoutubeUrlInput(val);
     if (!val.trim() || val.includes('youtu')) {
@@ -578,9 +577,12 @@ export default function App() {
     if (suggestDebounceRef.current) clearTimeout(suggestDebounceRef.current);
     suggestDebounceRef.current = setTimeout(async () => {
       try {
-        const res = await axios.get(`${SOCKET_URL}/api/yt-suggest?q=${encodeURIComponent(val)}`);
-        setYtSuggestions(Array.isArray(res.data) ? res.data : []);
-        setShowSuggestions(true);
+        const res = await fetch(`${SOCKET_URL}/api/yt-suggest?q=${encodeURIComponent(val)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setYtSuggestions(Array.isArray(data) ? data : []);
+          setShowSuggestions(true);
+        }
       } catch (e) {
         setYtSuggestions([]);
       }
@@ -1200,7 +1202,7 @@ export default function App() {
         className="hidden" 
       />
 
-      {/* PERMANENT PERSISTENT YOUTUBE PLAYER CONTAINER (NEVER DESTROYED ON TAB CHANGE) */}
+      {/* PERMANENT PERSISTENT YOUTUBE PLAYER CONTAINER */}
       <div 
         style={{
           position: viewMode === 'scheduled' && syncStatus === 'connected' ? 'relative' : 'fixed',
@@ -1377,7 +1379,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* FLOATING PERSISTENT AUDIO CONTROLLER (Visible in chat when music is playing in background) */}
+        {/* FLOATING PERSISTENT AUDIO CONTROLLER */}
         {syncStatus === 'connected' && viewMode !== 'scheduled' && (
           <div className="bg-[#141414]/95 border-y border-[#2a2a2a] px-4 py-2 flex items-center justify-between z-20 text-xs backdrop-blur-md shadow-lg animate-in slide-in-from-top-2 duration-150">
             <div className="flex items-center gap-2.5 overflow-hidden">
