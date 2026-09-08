@@ -8,7 +8,7 @@ import {
   Search, PanelLeft, ArrowUp, Plus, RefreshCw, Sparkles, Share,
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
-  Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2
+  Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -48,7 +48,7 @@ const cleanOriginalText = (raw) => {
 
 const extractYouTubeId = (url) => {
   if (!url) return null;
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=[&?]?|v=)([^#&?]*).*/;
   const match = url.match(regExp);
   return (match && match[2].length === 11) ? match[2] : null;
 };
@@ -104,6 +104,7 @@ export default function App() {
   const [youtubeUrlInput, setYoutubeUrlInput] = useState('');
   const [activeTrackTitle, setActiveTrackTitle] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoadingTrack, setIsLoadingTrack] = useState(false);
   const [ytSuggestions, setYtSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
@@ -113,7 +114,7 @@ export default function App() {
 
   // Bot Scheduled Message States (Admin only - 2 time slots)
   const [isBotOpen, setIsBotOpen] = useState(false);
-  const [botTab, setBotTab] = useState('instant'); // 'instant' | 'schedule'
+  const [botTab, setBotTab] = useState('instant');
   const [customMsg, setCustomMsg] = useState('');
   const [schedMsg, setSchedMsg] = useState('');
   const [schedTime1, setSchedTime1] = useState('');
@@ -175,7 +176,7 @@ export default function App() {
     }
   }, []);
 
-  // Initialize persistent global player
+  // Initialize YouTube Player
   const initGlobalPlayer = useCallback((initialVideoId = 'dQw4w9WgXcQ') => {
     if (window.YT && window.YT.Player && !playerRef.current) {
       try {
@@ -222,7 +223,7 @@ export default function App() {
           }
         });
       } catch (e) {
-        console.error("Player initialization skipped", e);
+        console.error("Player init skipped:", e);
       }
     }
   }, []);
@@ -233,7 +234,7 @@ export default function App() {
         initGlobalPlayer();
         clearInterval(timer);
       }
-    }, 600);
+    }, 500);
     return () => clearInterval(timer);
   }, [initGlobalPlayer]);
 
@@ -441,10 +442,27 @@ export default function App() {
       playReceiveSound();
     });
 
-    socketRef.current.on('sync_connected_event', () => {
+    socketRef.current.on('sync_connected_event', (data) => {
       setSyncStatus('connected');
       playReceiveSound();
       confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
+
+      if (data && data.videoId) {
+        setActiveTrackTitle(data.title || "YouTube Track");
+        setIsPlaying(data.state === 'PLAY');
+        if (playerRef.current && playerRef.current.loadVideoById) {
+          isRemoteTriggerRef.current = true;
+          playerRef.current.loadVideoById(data.videoId);
+          playerRef.current.unMute();
+          playerRef.current.setVolume(100);
+          if (data.state === 'PLAY') {
+            playerRef.current.playVideo();
+          } else {
+            playerRef.current.pauseVideo();
+          }
+          setTimeout(() => { isRemoteTriggerRef.current = false; }, 1200);
+        }
+      }
     });
 
     socketRef.current.on('sync_disconnected_event', () => {
@@ -456,16 +474,19 @@ export default function App() {
       }
     });
 
-    socketRef.current.on('sync_track_update', ({ trackData, title }) => {
-      setActiveTrackTitle(title || trackData);
+    // BIDIRECTIONAL TRACK SYNC: When either user or admin changes track, both load same videoId
+    socketRef.current.on('sync_track_update', ({ videoId, title }) => {
+      setActiveTrackTitle(title || "YouTube Track");
       setIsPlaying(true);
-      if (playerRef.current) {
-        const directId = extractYouTubeId(trackData);
-        if (directId) {
-          playerRef.current.loadVideoById(directId);
-        } else if (playerRef.current.loadPlaylist) {
-          playerRef.current.loadPlaylist({ list: trackData, listType: 'search' });
-        }
+      if (playerRef.current && playerRef.current.loadVideoById) {
+        isRemoteTriggerRef.current = true;
+        playerRef.current.loadVideoById(videoId);
+        playerRef.current.unMute();
+        playerRef.current.setVolume(100);
+        playerRef.current.playVideo();
+        setTimeout(() => {
+          isRemoteTriggerRef.current = false;
+        }, 1200);
       }
     });
 
@@ -482,6 +503,7 @@ export default function App() {
         }
 
         if (state === 'PLAY') {
+          playerRef.current.unMute();
           playerRef.current.playVideo();
           setIsPlaying(true);
         } else {
@@ -569,7 +591,7 @@ export default function App() {
     };
   }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification]);
 
-  // YouTube Autocomplete Suggestions API (Native fetch)
+  // YouTube Live Suggestions (Native fetch)
   const handleQueryChange = (val) => {
     setYoutubeUrlInput(val);
     if (!val.trim() || val.includes('youtu')) {
@@ -599,25 +621,42 @@ export default function App() {
     handleTriggerSong(suggestion, suggestion);
   };
 
-  const handleTriggerSong = (trackData, title = '') => {
-    if (!trackData) return;
-    setActiveTrackTitle(title || trackData);
-    setIsPlaying(true);
+  // CORE RESOLVER: Resolves ANY query/link into exact Video ID so both devices receive exact same track
+  const handleTriggerSong = async (rawInput, displayTitle = '') => {
+    if (!rawInput || !rawInput.trim()) return;
+    setIsLoadingTrack(true);
 
-    if (playerRef.current) {
-      const directId = extractYouTubeId(trackData);
-      if (directId) {
-        playerRef.current.loadVideoById(directId);
-      } else if (playerRef.current.loadPlaylist) {
-        playerRef.current.loadPlaylist({ list: trackData, listType: 'search' });
+    let vid = extractYouTubeId(rawInput.trim());
+    let finalTitle = displayTitle || rawInput.trim();
+
+    if (!vid) {
+      try {
+        const res = await fetch(`${SOCKET_URL}/api/yt-search?q=${encodeURIComponent(rawInput.trim())}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.videoId) {
+            vid = data.videoId;
+            finalTitle = data.title || finalTitle;
+          }
+        }
+      } catch (err) {
+        console.error("Search resolver error:", err);
       }
     }
 
+    setIsLoadingTrack(false);
+
+    if (!vid) {
+      alert("Could not load YouTube track. Please try pasting a direct YouTube link.");
+      return;
+    }
+
+    // Broadcast resolved videoId to BOTH sides
     if (socketRef.current) {
       socketRef.current.emit('sync_track_change', {
         room: GLOBAL_ROOM,
-        trackData,
-        title: title || trackData
+        videoId: vid,
+        title: finalTitle
       });
     }
   };
@@ -638,7 +677,6 @@ export default function App() {
     }
   };
 
-  // Disconnect song on BOTH devices
   const handleDisconnectSync = () => {
     if (socketRef.current) {
       socketRef.current.emit('sync_disconnect_invite', { room: GLOBAL_ROOM });
@@ -657,6 +695,7 @@ export default function App() {
     setIsPlaying(nextState);
 
     if (nextState) {
+      playerRef.current.unMute();
       playerRef.current.playVideo();
     } else {
       playerRef.current.pauseVideo();
@@ -672,7 +711,7 @@ export default function App() {
     }
   };
 
-  // Admin Schedule Bubble Alerts Handler (Up to 2 timestamps)
+  // Admin Schedule Bubble Alerts Handler
   const handleScheduleAlertSubmit = (e) => {
     e.preventDefault();
     if (!schedMsg.trim() || (!schedTime1 && !schedTime2)) {
@@ -1206,24 +1245,22 @@ export default function App() {
         className="hidden" 
       />
 
-      {/* FIXED PERSISTENT YOUTUBE PLAYER - NEVER PARTICIPATES IN FLEX FLOW, ZERO LAYOUT BREAK */}
+      {/* FIXED PERSISTENT YOUTUBE PLAYER CONTAINER (NEVER DESTROYED, NEVER BREAKS LAYOUT) */}
       <div 
         style={{
           position: 'fixed',
-          bottom: '16px',
-          right: '16px',
-          width: viewMode === 'scheduled' && syncStatus === 'connected' ? '360px' : '1px',
-          height: viewMode === 'scheduled' && syncStatus === 'connected' ? '202px' : '1px',
-          maxWidth: 'calc(100vw - 32px)',
-          opacity: viewMode === 'scheduled' && syncStatus === 'connected' ? 1 : 0.001,
+          bottom: '20px',
+          right: '20px',
+          width: '280px',
+          height: '158px',
+          opacity: viewMode === 'scheduled' && syncStatus === 'connected' ? 1 : 0.0001,
           pointerEvents: viewMode === 'scheduled' && syncStatus === 'connected' ? 'auto' : 'none',
           zIndex: viewMode === 'scheduled' && syncStatus === 'connected' ? 50 : -9999,
           borderRadius: '16px',
           overflow: 'hidden',
           backgroundColor: '#000000',
-          boxShadow: viewMode === 'scheduled' && syncStatus === 'connected' ? '0 16px 40px rgba(0,0,0,0.85)' : 'none',
-          border: viewMode === 'scheduled' && syncStatus === 'connected' ? '2px solid #2e2e2e' : 'none',
-          transition: 'width 0.2s ease, height 0.2s ease, opacity 0.2s ease'
+          boxShadow: viewMode === 'scheduled' && syncStatus === 'connected' ? '0 12px 35px rgba(0,0,0,0.9)' : 'none',
+          border: viewMode === 'scheduled' && syncStatus === 'connected' ? '2px solid #2f2f2f' : 'none'
         }}
       >
         <div id="persistent-sync-iframe" style={{ width: '100%', height: '100%' }}></div>
@@ -1389,7 +1426,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* FLOATING PERSISTENT AUDIO CONTROLLER IN CHAT */}
+        {/* PERSISTENT FLOATING AUDIO BAR */}
         {syncStatus === 'connected' && viewMode !== 'scheduled' && (
           <div className="bg-[#141414]/95 border-b border-[#2a2a2a] px-4 py-2 flex items-center justify-between z-20 text-xs backdrop-blur-md shadow-lg">
             <div className="flex items-center gap-2.5 overflow-hidden">
@@ -1771,7 +1808,7 @@ export default function App() {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-white">Live Synced Music Lounge (Scheduled)</h2>
-                  <p className="text-[11px] text-gray-400">Audio plays continuously in background across all views</p>
+                  <p className="text-[11px] text-gray-400">Both users can search and switch songs in exact sync</p>
                 </div>
               </div>
 
@@ -1785,7 +1822,6 @@ export default function App() {
               )}
             </div>
 
-            {/* HANDSHAKE PROMPTS */}
             {syncStatus !== 'connected' ? (
               <div className="bg-[#141414] border border-[#262626] rounded-2xl p-8 text-center space-y-4 shadow-xl">
                 <div className="w-14 h-14 rounded-full bg-[#1e1e1e] border border-[#333] flex items-center justify-center text-amber-400 mx-auto">
@@ -1838,25 +1874,27 @@ export default function App() {
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                     <span>LINKED ACTIVE (Background Audio Enabled)</span>
                   </div>
-                  <span className="text-[11px] text-gray-400 font-mono">Zero-Lag Latency Compensation</span>
+                  <span className="text-[11px] text-gray-400 font-mono">Synced on Both Devices</span>
                 </div>
 
                 {/* YOUTUBE SEARCH & AUTOCOMPLETE BAR */}
                 <div className="relative">
-                  <form onSubmit={(e) => { e.preventDefault(); handleTriggerSong(youtubeUrlInput, youtubeUrlInput); }} className="flex gap-2">
+                  <form onSubmit={(e) => { e.preventDefault(); handleTriggerSong(youtubeUrlInput); }} className="flex gap-2">
                     <input 
                       type="text" 
                       value={youtubeUrlInput}
                       onChange={(e) => handleQueryChange(e.target.value)}
                       onFocus={() => { if (ytSuggestions.length > 0) setShowSuggestions(true); }}
-                      placeholder="Search songs or paste YouTube URL (Live Suggestions enabled)..."
+                      placeholder="Type song name or YouTube link (Both will play exact same song)..."
                       className="flex-1 bg-[#171717] border border-[#2c2c2c] focus:border-[#444] rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 outline-none font-mono"
                     />
                     <button
                       type="submit"
-                      className="bg-[#1c3a6b] hover:bg-[#254d8f] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0 shadow"
+                      disabled={isLoadingTrack}
+                      className="bg-[#1c3a6b] hover:bg-[#254d8f] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0 shadow flex items-center gap-1.5"
                     >
-                      Sync & Play
+                      {isLoadingTrack ? <Loader2 size={14} className="animate-spin" /> : null}
+                      <span>{isLoadingTrack ? 'Syncing...' : 'Sync & Play'}</span>
                     </button>
                   </form>
 
@@ -1883,13 +1921,13 @@ export default function App() {
                     <Volume2 size={26} className={isPlaying ? 'animate-bounce' : ''} />
                   </div>
                   <div>
-                    <span className="text-[11px] text-gray-500 font-mono uppercase tracking-wider block">Currently Broadcasting</span>
+                    <span className="text-[11px] text-gray-500 font-mono uppercase tracking-wider block">Live Synchronized Track</span>
                     <h3 className="text-base font-bold text-white mt-1">
                       {activeTrackTitle || "No track loaded yet. Search or paste link above."}
                     </h3>
                   </div>
                   <p className="text-xs text-gray-500 max-w-md">
-                    Switch to any chat or recent room without worrying — playback continues nonstop until you disconnect[cite: 1].
+                    Either you or the other side can change the song anytime. It will automatically switch on both screens together.
                   </p>
                 </div>
 
@@ -2115,7 +2153,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ADMIN BOT DRAWER: WITH DUAL TIME SLOT SCHEDULER */}
+        {/* ADMIN BOT DRAWER: DUAL TIME SLOT SCHEDULER */}
         {role === 'parent' && (
           <div className="absolute bottom-6 right-6 z-40">
             <button 
@@ -2145,7 +2183,6 @@ export default function App() {
                   <button onClick={() => setIsBotOpen(false)} className="text-gray-400 hover:text-white"><X size={14} /></button>
                 </div>
 
-                {/* Instant Send Tab */}
                 {botTab === 'instant' ? (
                   <div className="space-y-2.5">
                     <textarea 
@@ -2169,7 +2206,6 @@ export default function App() {
                     </button>
                   </div>
                 ) : (
-                  /* Dual-Time Scheduler Tab */
                   <form onSubmit={handleScheduleAlertSubmit} className="space-y-2.5 text-xs text-left">
                     <textarea 
                       rows={2}
@@ -2208,7 +2244,6 @@ export default function App() {
                       Schedule Alert (Dual Time)
                     </button>
 
-                    {/* Active Scheduled Jobs List */}
                     {scheduledJobs.length > 0 && (
                       <div className="pt-2 border-t border-[#222] max-h-24 overflow-y-auto space-y-1">
                         <span className="text-[10px] text-gray-500 font-bold block">Active Queued Alarms:</span>
