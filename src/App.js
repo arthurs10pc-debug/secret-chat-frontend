@@ -8,7 +8,8 @@ import {
   Search, PanelLeft, ArrowUp, Plus, RefreshCw, Sparkles, Share,
   Bot, X, Download, AlertCircle, ShieldCheck, Trash2, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
-  Code, Play, Pause, CornerUpLeft, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2
+  Code, Play, Pause, CornerUpLeft, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2,
+  Calendar, Send
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -50,7 +51,7 @@ const extractYouTubeId = (url) => {
   if (!url) return null;
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
   const match = url.match(regExp);
-  return (match && match[2].length === 11) ? match[2] : url.trim();
+  return (match && match[2].length === 11) ? match[2] : null;
 };
 
 export default function App() {
@@ -94,18 +95,32 @@ export default function App() {
   const [activeReactionMsgId, setActiveReactionMsgId] = useState(null);
   const [highlightedMsgId, setHighlightedMsgId] = useState(null);
 
-  // Real-time Peer Typing Indicator State
+  // Real-time Peer Typing Indicator
   const [isPeerTyping, setIsPeerTyping] = useState(false);
   const typingTimerRef = useRef(null);
 
-  // Synced Media & Handshake States (Scheduled Page)
+  // Synced Lounge & Persistent Audio States
   const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'requested' | 'incoming_request' | 'connected'
   const [incomingInviteRole, setIncomingInviteRole] = useState('');
   const [youtubeUrlInput, setYoutubeUrlInput] = useState('');
-  const [activeVideoId, setActiveVideoId] = useState('');
+  const [activeTrackTitle, setActiveTrackTitle] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
+  const [ytSuggestions, setYtSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
   const playerRef = useRef(null);
   const isRemoteTriggerRef = useRef(false);
+  const suggestDebounceRef = useRef(null);
+
+  // Bot Scheduled Message States (Admin only - 2 time slots)
+  const [isBotOpen, setIsBotOpen] = useState(false);
+  const [botTab, setBotTab] = useState('instant'); // 'instant' | 'schedule'
+  const [customMsg, setCustomMsg] = useState('');
+  const [schedMsg, setSchedMsg] = useState('');
+  const [schedTime1, setSchedTime1] = useState('');
+  const [schedTime2, setSchedTime2] = useState('');
+  const [scheduledJobs, setScheduledJobs] = useState([]);
+  const [incomingAlert, setIncomingAlert] = useState(null);
 
   const [activeViewImage, setActiveViewImage] = useState(null);
   const [archivedImages, setArchivedImages] = useState(() => {
@@ -130,10 +145,6 @@ export default function App() {
   const [showMiniEmojiBar, setShowMiniEmojiBar] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
 
-  const [isBotOpen, setIsBotOpen] = useState(false);
-  const [customMsg, setCustomMsg] = useState('');
-  const [incomingAlert, setIncomingAlert] = useState(null);
-
   const socketRef = useRef(null);
   const stealthMessagesRef = useRef([]);
   const messageEndRef = useRef(null);
@@ -155,7 +166,7 @@ export default function App() {
     roleRef.current = role;
   }, [role]);
 
-  // YouTube IFrame API Loader
+  // Load YouTube API once globally
   useEffect(() => {
     if (!window.YT) {
       const tag = document.createElement('script');
@@ -165,52 +176,63 @@ export default function App() {
     }
   }, []);
 
-  // Initialize or update YouTube Player
-  useEffect(() => {
-    if (viewMode === 'scheduled' && activeVideoId && window.YT && window.YT.Player) {
-      if (playerRef.current) {
-        playerRef.current.loadVideoById(activeVideoId);
-      } else {
-        playerRef.current = new window.YT.Player('sync-yt-iframe', {
-          height: '100%',
-          width: '100%',
-          videoId: activeVideoId,
-          playerVars: {
-            autoplay: 1,
-            controls: 1,
-            modestbranding: 1,
-            rel: 0
+  // Initialize persistent global player
+  const initGlobalPlayer = useCallback((initialVideoId = 'dQw4w9WgXcQ') => {
+    if (window.YT && window.YT.Player && !playerRef.current) {
+      playerRef.current = new window.YT.Player('persistent-sync-iframe', {
+        height: '100%',
+        width: '100%',
+        videoId: initialVideoId,
+        playerVars: {
+          autoplay: 1,
+          controls: 1,
+          modestbranding: 1,
+          rel: 0
+        },
+        events: {
+          onReady: () => {
+            if (playerRef.current && playerRef.current.pauseVideo) {
+              playerRef.current.pauseVideo();
+            }
           },
-          events: {
-            onStateChange: (event) => {
-              if (isRemoteTriggerRef.current) return;
-              if (event.data === window.YT.PlayerState.PLAYING) {
-                setIsPlaying(true);
-                if (socketRef.current) {
-                  socketRef.current.emit('sync_playback_state', {
-                    room: GLOBAL_ROOM,
-                    state: 'PLAY',
-                    currentTime: playerRef.current.getCurrentTime(),
-                    timestamp: Date.now()
-                  });
-                }
-              } else if (event.data === window.YT.PlayerState.PAUSED) {
-                setIsPlaying(false);
-                if (socketRef.current) {
-                  socketRef.current.emit('sync_playback_state', {
-                    room: GLOBAL_ROOM,
-                    state: 'PAUSE',
-                    currentTime: playerRef.current.getCurrentTime(),
-                    timestamp: Date.now()
-                  });
-                }
+          onStateChange: (event) => {
+            if (isRemoteTriggerRef.current) return;
+            if (event.data === window.YT.PlayerState.PLAYING) {
+              setIsPlaying(true);
+              if (socketRef.current) {
+                socketRef.current.emit('sync_playback_state', {
+                  room: GLOBAL_ROOM,
+                  state: 'PLAY',
+                  currentTime: playerRef.current.getCurrentTime(),
+                  timestamp: Date.now()
+                });
+              }
+            } else if (event.data === window.YT.PlayerState.PAUSED) {
+              setIsPlaying(false);
+              if (socketRef.current) {
+                socketRef.current.emit('sync_playback_state', {
+                  room: GLOBAL_ROOM,
+                  state: 'PAUSE',
+                  currentTime: playerRef.current.getCurrentTime(),
+                  timestamp: Date.now()
+                });
               }
             }
           }
-        });
-      }
+        }
+      });
     }
-  }, [viewMode, activeVideoId]);
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (window.YT && window.YT.Player && !playerRef.current) {
+        initGlobalPlayer();
+        clearInterval(timer);
+      }
+    }, 500);
+    return () => clearInterval(timer);
+  }, [initGlobalPlayer]);
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -399,7 +421,6 @@ export default function App() {
       markMessagesAsSeen();
     });
 
-    // Real-time peer typing listener
     socketRef.current.on('peer_typing_status', (data) => {
       if (typeof data === 'object' && data !== null) {
         const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
@@ -410,7 +431,7 @@ export default function App() {
       }
     });
 
-    // Handshake & Synced Lounge Listeners
+    // Handshake & Synced Music Events
     socketRef.current.on('sync_receive_invite', ({ fromRole }) => {
       setSyncStatus('incoming_request');
       setIncomingInviteRole(fromRole);
@@ -425,15 +446,23 @@ export default function App() {
 
     socketRef.current.on('sync_disconnected_event', () => {
       setSyncStatus('idle');
+      setIsPlaying(false);
+      setActiveTrackTitle('');
       if (playerRef.current && playerRef.current.stopVideo) {
         playerRef.current.stopVideo();
       }
     });
 
-    socketRef.current.on('sync_track_update', ({ videoId }) => {
-      setActiveVideoId(videoId);
-      if (playerRef.current && playerRef.current.loadVideoById) {
-        playerRef.current.loadVideoById(videoId);
+    socketRef.current.on('sync_track_update', ({ trackData, title }) => {
+      setActiveTrackTitle(title || trackData);
+      setIsPlaying(true);
+      if (playerRef.current) {
+        const directId = extractYouTubeId(trackData);
+        if (directId) {
+          playerRef.current.loadVideoById(directId);
+        } else if (playerRef.current.loadPlaylist) {
+          playerRef.current.loadPlaylist({ list: trackData, listType: 'search' });
+        }
       }
     });
 
@@ -444,21 +473,39 @@ export default function App() {
       const latency = Math.max(0, (Date.now() - timestamp) / 1000);
       const targetTime = currentTime + (state === 'PLAY' ? latency : 0);
 
-      if (Math.abs(playerRef.current.getCurrentTime() - targetTime) > 0.4) {
-        playerRef.current.seekTo(targetTime, true);
-      }
+      try {
+        if (Math.abs(playerRef.current.getCurrentTime() - targetTime) > 0.4) {
+          playerRef.current.seekTo(targetTime, true);
+        }
 
-      if (state === 'PLAY') {
-        playerRef.current.playVideo();
-        setIsPlaying(true);
-      } else {
-        playerRef.current.pauseVideo();
-        setIsPlaying(false);
-      }
+        if (state === 'PLAY') {
+          playerRef.current.playVideo();
+          setIsPlaying(true);
+        } else {
+          playerRef.current.pauseVideo();
+          setIsPlaying(false);
+        }
+      } catch (e) {}
 
       setTimeout(() => {
         isRemoteTriggerRef.current = false;
       }, 500);
+    });
+
+    // Scheduled Alerts Sync
+    socketRef.current.on('scheduled_jobs_update', (jobs) => {
+      setScheduledJobs(jobs || []);
+    });
+
+    socketRef.current.on('receive_assistant_alert', (data) => {
+      setIncomingAlert(data);
+      playReceiveSound();
+    });
+
+    socketRef.current.on('parent_bubble_pop_notify', () => {
+      if (localStorage.getItem('stealth_role') === 'parent') {
+        playBubblePopSound();
+      }
     });
 
     socketRef.current.on('receive_stealth_msg', (data) => {
@@ -514,34 +561,60 @@ export default function App() {
       setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, flaggedPending } : m));
     });
 
-    socketRef.current.on('receive_assistant_alert', (data) => {
-      setIncomingAlert(data);
-      playReceiveSound();
-    });
-
-    socketRef.current.on('parent_bubble_pop_notify', () => {
-      if (localStorage.getItem('stealth_role') === 'parent') {
-        playBubblePopSound();
-      }
-    });
-
     return () => {
       if (socketRef.current) socketRef.current.disconnect();
     };
   }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification]);
 
-  useEffect(() => {
-    const handleActivity = () => markMessagesAsSeen();
-    window.addEventListener('focus', handleActivity);
-    window.addEventListener('visibilitychange', handleActivity);
-    window.addEventListener('click', handleActivity);
+  // YouTube Autocomplete Suggestions API
+  const handleQueryChange = (val) => {
+    setYoutubeUrlInput(val);
+    if (!val.trim() || val.includes('youtu')) {
+      setYtSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
 
-    return () => {
-      window.removeEventListener('focus', handleActivity);
-      window.removeEventListener('visibilitychange', handleActivity);
-      window.removeEventListener('click', handleActivity);
-    };
-  }, [markMessagesAsSeen]);
+    if (suggestDebounceRef.current) clearTimeout(suggestDebounceRef.current);
+    suggestDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await axios.get(`${SOCKET_URL}/api/yt-suggest?q=${encodeURIComponent(val)}`);
+        setYtSuggestions(Array.isArray(res.data) ? res.data : []);
+        setShowSuggestions(true);
+      } catch (e) {
+        setYtSuggestions([]);
+      }
+    }, 280);
+  };
+
+  const handleSelectSuggestion = (suggestion) => {
+    setYoutubeUrlInput(suggestion);
+    setShowSuggestions(false);
+    handleTriggerSong(suggestion, suggestion);
+  };
+
+  const handleTriggerSong = (trackData, title = '') => {
+    if (!trackData) return;
+    setActiveTrackTitle(title || trackData);
+    setIsPlaying(true);
+
+    if (playerRef.current) {
+      const directId = extractYouTubeId(trackData);
+      if (directId) {
+        playerRef.current.loadVideoById(directId);
+      } else if (playerRef.current.loadPlaylist) {
+        playerRef.current.loadPlaylist({ list: trackData, listType: 'search' });
+      }
+    }
+
+    if (socketRef.current) {
+      socketRef.current.emit('sync_track_change', {
+        room: GLOBAL_ROOM,
+        trackData,
+        title: title || trackData
+      });
+    }
+  };
 
   // Handshake Emitters
   const handleSendSyncInvite = () => {
@@ -559,24 +632,16 @@ export default function App() {
     }
   };
 
+  // Disconnect song on BOTH devices
   const handleDisconnectSync = () => {
     if (socketRef.current) {
       socketRef.current.emit('sync_disconnect_invite', { room: GLOBAL_ROOM });
       setSyncStatus('idle');
-    }
-  };
-
-  const handleLoadTrack = (e) => {
-    e.preventDefault();
-    const vid = extractYouTubeId(youtubeUrlInput);
-    if (!vid) {
-      alert("Please enter a valid YouTube Video URL or Video ID");
-      return;
-    }
-    setActiveVideoId(vid);
-    setYoutubeUrlInput('');
-    if (socketRef.current) {
-      socketRef.current.emit('sync_track_change', { room: GLOBAL_ROOM, videoId: vid });
+      setIsPlaying(false);
+      setActiveTrackTitle('');
+      if (playerRef.current && playerRef.current.stopVideo) {
+        playerRef.current.stopVideo();
+      }
     }
   };
 
@@ -598,6 +663,35 @@ export default function App() {
         currentTime: playerRef.current.getCurrentTime(),
         timestamp: Date.now()
       });
+    }
+  };
+
+  // Admin Schedule Bubble Alerts Handler (Up to 2 timestamps)
+  const handleScheduleAlertSubmit = (e) => {
+    e.preventDefault();
+    if (!schedMsg.trim() || (!schedTime1 && !schedTime2)) {
+      alert("Please enter message and at least 1 schedule time.");
+      return;
+    }
+
+    if (socketRef.current) {
+      socketRef.current.emit('schedule_bubble_alert', {
+        room: GLOBAL_ROOM,
+        text: schedMsg.trim(),
+        time1: schedTime1,
+        time2: schedTime2
+      });
+      alert("Bubble Alert scheduled successfully!");
+      setSchedMsg('');
+      setSchedTime1('');
+      setSchedTime2('');
+      setIsBotOpen(false);
+    }
+  };
+
+  const handleCancelScheduledJob = (jobId) => {
+    if (socketRef.current) {
+      socketRef.current.emit('cancel_scheduled_job', { room: GLOBAL_ROOM, jobId });
     }
   };
 
@@ -699,7 +793,7 @@ export default function App() {
     }
   };
 
-  // STRICT ADMIN-ONLY: PDF Export
+  // STRICT ADMIN-ONLY: Full Chat History PDF Export
   const downloadFullChatPDF = () => {
     if (role !== 'parent') return;
 
@@ -1106,6 +1200,23 @@ export default function App() {
         className="hidden" 
       />
 
+      {/* PERMANENT PERSISTENT YOUTUBE PLAYER CONTAINER (NEVER DESTROYED ON TAB CHANGE) */}
+      <div 
+        style={{
+          position: viewMode === 'scheduled' && syncStatus === 'connected' ? 'relative' : 'fixed',
+          top: viewMode === 'scheduled' && syncStatus === 'connected' ? 'auto' : '-9999px',
+          left: viewMode === 'scheduled' && syncStatus === 'connected' ? 'auto' : '-9999px',
+          width: viewMode === 'scheduled' && syncStatus === 'connected' ? '100%' : '200px',
+          height: viewMode === 'scheduled' && syncStatus === 'connected' ? '320px' : '200px',
+          opacity: viewMode === 'scheduled' && syncStatus === 'connected' ? 1 : 0.01,
+          pointerEvents: viewMode === 'scheduled' && syncStatus === 'connected' ? 'auto' : 'none',
+          zIndex: viewMode === 'scheduled' && syncStatus === 'connected' ? 10 : -10
+        }}
+        className="rounded-2xl overflow-hidden bg-black shadow-2xl border border-[#262626]"
+      >
+        <div id="persistent-sync-iframe" className="w-full h-full"></div>
+      </div>
+
       {/* Left Sidebar */}
       <aside className={`${sidebarOpen ? 'w-64' : 'w-0'} transition-all duration-200 bg-[#000000] flex flex-col border-r border-[#171717] overflow-hidden select-none shrink-0 z-20`}>
         <div className="h-13 flex items-center justify-between px-3.5 pt-2 shrink-0">
@@ -1226,7 +1337,7 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main Screen */}
+      {/* Main Workspace */}
       <main className="flex-1 flex flex-col relative bg-[#000000] overflow-hidden">
         <header className="h-12 flex items-center justify-between px-4 shrink-0 z-10">
           <div className="flex items-center gap-2">
@@ -1265,6 +1376,43 @@ export default function App() {
             <RefreshCw size={14} className="cursor-pointer hover:text-white ml-1" onClick={() => window.location.reload()} />
           </div>
         </header>
+
+        {/* FLOATING PERSISTENT AUDIO CONTROLLER (Visible in chat when music is playing in background) */}
+        {syncStatus === 'connected' && viewMode !== 'scheduled' && (
+          <div className="bg-[#141414]/95 border-y border-[#2a2a2a] px-4 py-2 flex items-center justify-between z-20 text-xs backdrop-blur-md shadow-lg animate-in slide-in-from-top-2 duration-150">
+            <div className="flex items-center gap-2.5 overflow-hidden">
+              <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                <Music size={13} className={isPlaying ? 'animate-bounce' : ''} />
+              </div>
+              <span className="text-gray-300 truncate max-w-xs font-mono text-[11px]">
+                🎵 <strong className="text-white">Playing in Background:</strong> {activeTrackTitle || "YouTube Synced Audio"}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleTogglePlayPause}
+                className="bg-[#222] hover:bg-[#333] text-white p-1.5 px-2.5 rounded-lg flex items-center gap-1 cursor-pointer text-[11px] font-semibold border border-[#333]"
+              >
+                {isPlaying ? <Pause size={12} /> : <Play size={12} />}
+                <span>{isPlaying ? 'Pause' : 'Resume'}</span>
+              </button>
+              <button
+                onClick={() => setViewMode('scheduled')}
+                className="text-amber-400 hover:text-amber-300 text-[11px] font-semibold px-2 py-1 cursor-pointer underline decoration-dotted"
+              >
+                Open Lounge
+              </button>
+              <button
+                onClick={handleDisconnectSync}
+                className="bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-rose-300 p-1.5 rounded-lg cursor-pointer text-[11px] flex items-center gap-1"
+                title="Disconnect Audio completely"
+              >
+                <Unlink size={12} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* VIEW 1: NORMAL CHATGPT STREAM */}
         {viewMode === 'real_gpt' && (
@@ -1611,7 +1759,7 @@ export default function App() {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-white">Live Synced Music Lounge (Scheduled)</h2>
-                  <p className="text-[11px] text-gray-400">Listen together with zero lag via dual handshake connection</p>
+                  <p className="text-[11px] text-gray-400">Audio continues playing in background even when viewing chat</p>
                 </div>
               </div>
 
@@ -1620,7 +1768,7 @@ export default function App() {
                   onClick={handleDisconnectSync}
                   className="flex items-center gap-1.5 bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 px-3 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
                 >
-                  <Unlink size={13} /> Disconnect
+                  <Unlink size={13} /> Disconnect & Stop
                 </button>
               )}
             </div>
@@ -1633,9 +1781,9 @@ export default function App() {
                 </div>
 
                 <div>
-                  <h3 className="text-base font-bold text-white">Two-Way Handshake Required</h3>
+                  <h3 className="text-base font-bold text-white">Two-Way Handshake Connection</h3>
                   <p className="text-xs text-gray-400 mt-1 max-w-md mx-auto">
-                    Both user and parent need mutual authorization before opening the synchronized audio bridge.
+                    Both user and parent must accept authorization to link the synchronized YouTube music bridge.
                   </p>
                 </div>
 
@@ -1652,80 +1800,101 @@ export default function App() {
                 {syncStatus === 'requested' && (
                   <div className="inline-flex items-center gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-xl">
                     <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                    <span>Connection request sent. Waiting for counterpart to accept...</span>
+                    <span>Invitation sent! Waiting for counterpart to accept...</span>
                   </div>
                 )}
 
                 {syncStatus === 'incoming_request' && (
                   <div className="bg-emerald-950/40 border border-emerald-500/40 p-4 rounded-2xl max-w-sm mx-auto space-y-3">
                     <p className="text-xs text-emerald-300 font-medium">
-                      Incoming handshake invitation from <strong className="text-white uppercase">{incomingInviteRole}</strong>!
+                      Incoming lounge invitation from <strong className="text-white uppercase">{incomingInviteRole}</strong>!
                     </p>
                     <button
                       onClick={handleAcceptSyncInvite}
-                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-xl text-xs transition-colors cursor-pointer shadow flex items-center justify-center gap-1.5"
+                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-colors cursor-pointer shadow flex items-center justify-center gap-1.5"
                     >
-                      <Check size={15} /> Accept & Link Sync Bridge
+                      <Check size={15} /> Accept & Join Synchronized Lounge
                     </button>
                   </div>
                 )}
               </div>
             ) : (
-              /* CONNECTED SYNCED MUSIC SUITE */
+              /* CONNECTED ACTIVE LOUNGE */
               <div className="space-y-4">
-                <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3.5 flex items-center justify-between shadow-lg">
                   <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold font-mono">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    <span>SYNCHRONIZED CONNECTION ACTIVE</span>
+                    <span>LINKED ACTIVE (Background Audio Enabled)</span>
                   </div>
-                  <span className="text-[11px] text-gray-400 font-mono">Sub-millisecond latency tuning active</span>
+                  <span className="text-[11px] text-gray-400 font-mono">Sub-millisecond sync tuning active</span>
                 </div>
 
-                {/* YouTube Link Bar */}
-                <form onSubmit={handleLoadTrack} className="flex gap-2">
-                  <input 
-                    type="text" 
-                    value={youtubeUrlInput}
-                    onChange={(e) => setYoutubeUrlInput(e.target.value)}
-                    placeholder="Paste YouTube Song / Video URL or ID (e.g. https://youtu.be/...)"
-                    className="flex-1 bg-[#171717] border border-[#2c2c2c] focus:border-[#444] rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 outline-none font-mono"
-                  />
-                  <button
-                    type="submit"
-                    className="bg-[#1c3a6b] hover:bg-[#254d8f] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0 shadow"
-                  >
-                    Load & Sync Song
-                  </button>
-                </form>
+                {/* YOUTUBE SEARCH & AUTOCOMPLETE BAR */}
+                <div className="relative">
+                  <form onSubmit={(e) => { e.preventDefault(); handleTriggerSong(youtubeUrlInput, youtubeUrlInput); }} className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={youtubeUrlInput}
+                      onChange={(e) => handleQueryChange(e.target.value)}
+                      onFocus={() => { if (ytSuggestions.length > 0) setShowSuggestions(true); }}
+                      placeholder="Search songs or paste YouTube URL (Live Suggestions enabled)..."
+                      className="flex-1 bg-[#171717] border border-[#2c2c2c] focus:border-[#444] rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 outline-none font-mono"
+                    />
+                    <button
+                      type="submit"
+                      className="bg-[#1c3a6b] hover:bg-[#254d8f] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0 shadow"
+                    >
+                      Sync & Play
+                    </button>
+                  </form>
 
-                {/* YouTube Player Frame */}
-                <div className="w-full h-80 bg-[#0a0a0a] border border-[#242424] rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center">
-                  <div id="sync-yt-iframe" className="w-full h-full"></div>
-                  {!activeVideoId && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 space-y-2 pointer-events-none">
-                      <Music size={36} className="opacity-40" />
-                      <p className="text-xs">Paste a YouTube track link above to broadcast to both listeners</p>
+                  {/* AUTOCOMPLETE SUGGESTIONS POPUP */}
+                  {showSuggestions && ytSuggestions.length > 0 && (
+                    <div className="absolute left-0 right-24 top-full mt-1.5 bg-[#171717] border border-[#333] rounded-xl shadow-2xl z-30 max-h-52 overflow-y-auto py-1">
+                      {ytSuggestions.map((sugg, sIdx) => (
+                        <div
+                          key={sIdx}
+                          onClick={() => handleSelectSuggestion(sugg)}
+                          className="px-4 py-2 text-xs text-gray-200 hover:bg-[#252525] hover:text-emerald-400 cursor-pointer flex items-center gap-2 transition-colors border-b border-[#222]/50 last:border-none"
+                        >
+                          <Search size={12} className="text-gray-500" />
+                          <span>{sugg}</span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
 
-                {/* Playback Control Bar */}
-                {activeVideoId && (
-                  <div className="bg-[#171717] border border-[#292929] rounded-2xl p-3 flex items-center justify-between shadow">
-                    <button
-                      onClick={handleTogglePlayPause}
-                      className="bg-[#242424] hover:bg-[#333] text-white p-2.5 rounded-xl transition-all cursor-pointer shadow flex items-center gap-2 text-xs font-semibold"
-                    >
-                      {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-                      <span>{isPlaying ? 'Pause for Both' : 'Play for Both'}</span>
-                    </button>
-
-                    <div className="flex items-center gap-2 text-xs text-gray-400 font-mono">
-                      <Volume2 size={15} />
-                      <span>Synchronized Volume & Progress</span>
-                    </div>
+                {/* VISIBLE VIDEO STAGE IN SCHEDULED TAB */}
+                <div className="w-full bg-[#0a0a0a] border border-[#242424] rounded-2xl p-4 shadow-2xl flex flex-col items-center justify-center text-center space-y-2">
+                  <div className="flex items-center gap-2 text-amber-400">
+                    <Volume2 size={20} className={isPlaying ? 'animate-pulse' : ''} />
+                    <span className="text-sm font-bold text-white">
+                      {activeTrackTitle || "Waiting to broadcast song..."}
+                    </span>
                   </div>
-                )}
+                  <p className="text-xs text-gray-500 max-w-md">
+                    Note: Audio remains synchronized in background even if you open chat, recents, or switch rooms[cite: 1].
+                  </p>
+                </div>
+
+                {/* CONTROLS */}
+                <div className="bg-[#171717] border border-[#292929] rounded-2xl p-3 flex items-center justify-between shadow">
+                  <button
+                    onClick={handleTogglePlayPause}
+                    className="bg-[#242424] hover:bg-[#333] text-white p-2.5 rounded-xl transition-all cursor-pointer shadow flex items-center gap-2 text-xs font-semibold"
+                  >
+                    {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+                    <span>{isPlaying ? 'Pause for Both' : 'Play for Both'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleDisconnectSync}
+                    className="text-xs text-rose-400 hover:text-rose-300 px-3 py-1.5 rounded-lg border border-rose-900/50 hover:bg-rose-950/40 cursor-pointer transition-colors"
+                  >
+                    Stop & Disconnect
+                  </button>
+                </div>
               </div>
             )}
           </section>
@@ -1931,7 +2100,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Assistant Bot Trigger (Parent Only) */}
+        {/* ADMIN BOT DRAWER: WITH DUAL TIME SLOT SCHEDULER */}
         {role === 'parent' && (
           <div className="absolute bottom-6 right-6 z-40">
             <button 
@@ -1942,30 +2111,108 @@ export default function App() {
             </button>
 
             {isBotOpen && (
-              <div className="absolute bottom-14 right-0 w-72 bg-[#121212] border border-[#282828] rounded-xl p-3.5 shadow-2xl space-y-2.5">
-                <div className="flex justify-between items-center text-xs font-semibold text-white">
-                  <span>Send Glass Bubble Alert</span>
+              <div className="absolute bottom-14 right-0 w-80 bg-[#121212] border border-[#282828] rounded-2xl p-4 shadow-2xl space-y-3 font-sans animate-in zoom-in-95 duration-150">
+                <div className="flex justify-between items-center text-xs font-semibold text-white pb-1 border-b border-[#222]">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setBotTab('instant')}
+                      className={`px-2 py-0.5 rounded ${botTab === 'instant' ? 'bg-[#252525] text-emerald-400' : 'text-gray-400'}`}
+                    >
+                      Instant Alert
+                    </button>
+                    <button
+                      onClick={() => setBotTab('schedule')}
+                      className={`px-2 py-0.5 rounded ${botTab === 'schedule' ? 'bg-[#252525] text-amber-400' : 'text-gray-400'}`}
+                    >
+                      Schedule (2 Times)
+                    </button>
+                  </div>
                   <button onClick={() => setIsBotOpen(false)} className="text-gray-400 hover:text-white"><X size={14} /></button>
                 </div>
-                <textarea 
-                  rows={3}
-                  value={customMsg}
-                  onChange={(e) => setCustomMsg(e.target.value)}
-                  placeholder="Type message to broadcast..."
-                  className="w-full bg-[#1e1e1e] text-xs p-2.5 rounded-lg outline-none border border-[#333] text-white resize-none"
-                />
-                <button 
-                  onClick={() => {
-                    if (customMsg && socketRef.current) {
-                      socketRef.current.emit('send_assistant_alert', { room: GLOBAL_ROOM, text: customMsg });
-                      setCustomMsg('');
-                      setIsBotOpen(false);
-                    }
-                  }}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs py-2 rounded-lg font-medium cursor-pointer transition-colors"
-                >
-                  Broadcast Bubble
-                </button>
+
+                {/* Instant Send Tab */}
+                {botTab === 'instant' ? (
+                  <div className="space-y-2.5">
+                    <textarea 
+                      rows={3}
+                      value={customMsg}
+                      onChange={(e) => setCustomMsg(e.target.value)}
+                      placeholder="Type instant bubble message..."
+                      className="w-full bg-[#1e1e1e] text-xs p-2.5 rounded-lg outline-none border border-[#333] text-white resize-none"
+                    />
+                    <button 
+                      onClick={() => {
+                        if (customMsg && socketRef.current) {
+                          socketRef.current.emit('send_assistant_alert', { room: GLOBAL_ROOM, text: customMsg });
+                          setCustomMsg('');
+                          setIsBotOpen(false);
+                        }
+                      }}
+                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs py-2 rounded-lg font-medium cursor-pointer transition-colors"
+                    >
+                      Broadcast Now
+                    </button>
+                  </div>
+                ) : (
+                  /* Dual-Time Scheduler Tab */
+                  <form onSubmit={handleScheduleAlertSubmit} className="space-y-2.5 text-xs text-left">
+                    <textarea 
+                      rows={2}
+                      required
+                      value={schedMsg}
+                      onChange={(e) => setSchedMsg(e.target.value)}
+                      placeholder="Message for scheduled bubble alert..."
+                      className="w-full bg-[#1e1e1e] text-xs p-2.5 rounded-lg outline-none border border-[#333] text-white resize-none"
+                    />
+
+                    <div>
+                      <label className="text-[10px] text-gray-400 block mb-1">Time Slot 1 (Required)</label>
+                      <input 
+                        type="datetime-local" 
+                        required
+                        value={schedTime1}
+                        onChange={(e) => setSchedTime1(e.target.value)}
+                        className="w-full bg-[#1e1e1e] border border-[#333] text-white p-1.5 rounded text-xs outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-gray-400 block mb-1">Time Slot 2 (Optional Second Alarm)</label>
+                      <input 
+                        type="datetime-local" 
+                        value={schedTime2}
+                        onChange={(e) => setSchedTime2(e.target.value)}
+                        className="w-full bg-[#1e1e1e] border border-[#333] text-white p-1.5 rounded text-xs outline-none"
+                      />
+                    </div>
+
+                    <button 
+                      type="submit"
+                      className="w-full bg-amber-600 hover:bg-amber-500 text-black font-bold text-xs py-2 rounded-lg cursor-pointer transition-colors shadow"
+                    >
+                      Schedule Alert (Dual Time)
+                    </button>
+
+                    {/* Active Scheduled Jobs List */}
+                    {scheduledJobs.length > 0 && (
+                      <div className="pt-2 border-t border-[#222] max-h-24 overflow-y-auto space-y-1">
+                        <span className="text-[10px] text-gray-500 font-bold block">Active Queued Alarms:</span>
+                        {scheduledJobs.map((j) => (
+                          <div key={j.id} className="bg-[#1c1c1c] p-1.5 rounded flex items-center justify-between text-[10px] text-gray-300">
+                            <span className="truncate max-w-[170px]">{j.text} ({new Date(j.timeStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})</span>
+                            <button 
+                              type="button"
+                              onClick={() => handleCancelScheduledJob(j.id)}
+                              className="text-rose-400 hover:text-rose-300 p-0.5"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </form>
+                )}
               </div>
             )}
           </div>
