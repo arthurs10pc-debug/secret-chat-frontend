@@ -8,7 +8,7 @@ import {
   Search, PanelLeft, ArrowUp, Plus, RefreshCw, Sparkles, Share,
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
-  Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2
+  Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -103,16 +103,19 @@ export default function App() {
   const [incomingInviteRole, setIncomingInviteRole] = useState('');
   const [youtubeUrlInput, setYoutubeUrlInput] = useState('');
   const [activeTrackTitle, setActiveTrackTitle] = useState('');
+  const [activeVideoId, setActiveVideoId] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoadingTrack, setIsLoadingTrack] = useState(false);
   const [ytSuggestions, setYtSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
   const playerRef = useRef(null);
   const isRemoteTriggerRef = useRef(false);
   const suggestDebounceRef = useRef(null);
+  const lastSyncActionTimeRef = useRef(0);
 
-  // Bot Scheduled Message States (Admin only - 2 time slots)
+  // Bot Scheduled Message States (Admin only)
   const [isBotOpen, setIsBotOpen] = useState(false);
   const [botTab, setBotTab] = useState('instant');
   const [customMsg, setCustomMsg] = useState('');
@@ -166,7 +169,7 @@ export default function App() {
     roleRef.current = role;
   }, [role]);
 
-  // Load YouTube IFrame API once
+  // Load YouTube IFrame API
   useEffect(() => {
     if (!window.YT) {
       const tag = document.createElement('script');
@@ -176,7 +179,6 @@ export default function App() {
     }
   }, []);
 
-  // Initialize YouTube Player
   const initGlobalPlayer = useCallback((initialVideoId = 'dQw4w9WgXcQ') => {
     if (window.YT && window.YT.Player && !playerRef.current) {
       try {
@@ -188,7 +190,9 @@ export default function App() {
             autoplay: 1,
             controls: 1,
             modestbranding: 1,
-            rel: 0
+            rel: 0,
+            enablejsapi: 1,
+            origin: window.location.origin
           },
           events: {
             onReady: () => {
@@ -198,8 +202,11 @@ export default function App() {
             },
             onStateChange: (event) => {
               if (isRemoteTriggerRef.current) return;
+              if (Date.now() - lastSyncActionTimeRef.current < 2500) return;
+
               if (event.data === window.YT.PlayerState.PLAYING) {
                 setIsPlaying(true);
+                setAutoplayBlocked(false);
                 if (socketRef.current) {
                   socketRef.current.emit('sync_playback_state', {
                     room: GLOBAL_ROOM,
@@ -449,7 +456,9 @@ export default function App() {
 
       if (data && data.videoId) {
         setActiveTrackTitle(data.title || "YouTube Track");
+        setActiveVideoId(data.videoId);
         setIsPlaying(data.state === 'PLAY');
+
         if (playerRef.current && playerRef.current.loadVideoById) {
           isRemoteTriggerRef.current = true;
           playerRef.current.loadVideoById(data.videoId);
@@ -457,10 +466,8 @@ export default function App() {
           playerRef.current.setVolume(100);
           if (data.state === 'PLAY') {
             playerRef.current.playVideo();
-          } else {
-            playerRef.current.pauseVideo();
           }
-          setTimeout(() => { isRemoteTriggerRef.current = false; }, 1200);
+          setTimeout(() => { isRemoteTriggerRef.current = false; }, 1500);
         }
       }
     });
@@ -469,36 +476,46 @@ export default function App() {
       setSyncStatus('idle');
       setIsPlaying(false);
       setActiveTrackTitle('');
+      setActiveVideoId('');
       if (playerRef.current && playerRef.current.stopVideo) {
         playerRef.current.stopVideo();
       }
     });
 
-    // BIDIRECTIONAL TRACK SYNC: When either user or admin changes track, both load same videoId
+    // EXACT 1-TO-1 INSTANT TRACK BROADCAST ON BOTH DEVICES
     socketRef.current.on('sync_track_update', ({ videoId, title }) => {
       setActiveTrackTitle(title || "YouTube Track");
+      setActiveVideoId(videoId);
       setIsPlaying(true);
+      lastSyncActionTimeRef.current = Date.now();
+
       if (playerRef.current && playerRef.current.loadVideoById) {
         isRemoteTriggerRef.current = true;
-        playerRef.current.loadVideoById(videoId);
-        playerRef.current.unMute();
-        playerRef.current.setVolume(100);
-        playerRef.current.playVideo();
-        setTimeout(() => {
-          isRemoteTriggerRef.current = false;
-        }, 1200);
+        try {
+          playerRef.current.loadVideoById(videoId);
+          playerRef.current.unMute();
+          playerRef.current.setVolume(100);
+          const playPromise = playerRef.current.playVideo();
+          if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => setAutoplayBlocked(true));
+          }
+        } catch (e) {
+          setAutoplayBlocked(true);
+        }
+        setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
       }
     });
 
     socketRef.current.on('sync_playback_update', ({ state, currentTime, timestamp }) => {
       if (!playerRef.current) return;
       isRemoteTriggerRef.current = true;
+      lastSyncActionTimeRef.current = Date.now();
 
       const latency = Math.max(0, (Date.now() - timestamp) / 1000);
       const targetTime = currentTime + (state === 'PLAY' ? latency : 0);
 
       try {
-        if (Math.abs(playerRef.current.getCurrentTime() - targetTime) > 0.4) {
+        if (Math.abs(playerRef.current.getCurrentTime() - targetTime) > 0.5) {
           playerRef.current.seekTo(targetTime, true);
         }
 
@@ -506,15 +523,18 @@ export default function App() {
           playerRef.current.unMute();
           playerRef.current.playVideo();
           setIsPlaying(true);
+          setAutoplayBlocked(false);
         } else {
           playerRef.current.pauseVideo();
           setIsPlaying(false);
         }
-      } catch (e) {}
+      } catch (e) {
+        setAutoplayBlocked(true);
+      }
 
       setTimeout(() => {
         isRemoteTriggerRef.current = false;
-      }, 500);
+      }, 1000);
     });
 
     // Scheduled Alerts Sync
@@ -621,7 +641,7 @@ export default function App() {
     handleTriggerSong(suggestion, suggestion);
   };
 
-  // CORE RESOLVER: Resolves ANY query/link into exact Video ID so both devices receive exact same track
+  // UNIVERSAL RESOLVER: Resolves ANY query/link into exact Video ID so both devices receive identical track
   const handleTriggerSong = async (rawInput, displayTitle = '') => {
     if (!rawInput || !rawInput.trim()) return;
     setIsLoadingTrack(true);
@@ -647,8 +667,16 @@ export default function App() {
     setIsLoadingTrack(false);
 
     if (!vid) {
-      alert("Could not load YouTube track. Please try pasting a direct YouTube link.");
+      alert("Could not find video. Please paste a direct YouTube link or try another search title.");
       return;
+    }
+
+    // Unlock local audio context directly on user click
+    if (playerRef.current && playerRef.current.unMute) {
+      try {
+        playerRef.current.unMute();
+        playerRef.current.setVolume(100);
+      } catch (e) {}
     }
 
     // Broadcast resolved videoId to BOTH sides
@@ -671,18 +699,40 @@ export default function App() {
   };
 
   const handleAcceptSyncInvite = () => {
+    // Prime player on click to bypass mobile/browser autoplay restrictions
+    if (playerRef.current && playerRef.current.unMute) {
+      try {
+        playerRef.current.unMute();
+        playerRef.current.setVolume(100);
+        playerRef.current.playVideo();
+      } catch (e) {}
+    }
+
     if (socketRef.current) {
       socketRef.current.emit('sync_confirm_invite', { room: GLOBAL_ROOM });
       setSyncStatus('connected');
     }
   };
 
+  const handleManualUnmuteClick = () => {
+    if (playerRef.current) {
+      try {
+        playerRef.current.unMute();
+        playerRef.current.setVolume(100);
+        playerRef.current.playVideo();
+        setAutoplayBlocked(false);
+      } catch (e) {}
+    }
+  };
+
+  // Disconnect song on BOTH devices
   const handleDisconnectSync = () => {
     if (socketRef.current) {
       socketRef.current.emit('sync_disconnect_invite', { room: GLOBAL_ROOM });
       setSyncStatus('idle');
       setIsPlaying(false);
       setActiveTrackTitle('');
+      setActiveVideoId('');
       if (playerRef.current && playerRef.current.stopVideo) {
         playerRef.current.stopVideo();
       }
@@ -693,6 +743,7 @@ export default function App() {
     if (!playerRef.current) return;
     const nextState = !isPlaying;
     setIsPlaying(nextState);
+    lastSyncActionTimeRef.current = Date.now();
 
     if (nextState) {
       playerRef.current.unMute();
@@ -1245,25 +1296,20 @@ export default function App() {
         className="hidden" 
       />
 
-      {/* FIXED PERSISTENT YOUTUBE PLAYER CONTAINER (NEVER DESTROYED, NEVER BREAKS LAYOUT) */}
+      {/* CONTINUOUS BACKGROUND AUDIO IFRAME - NEVER UNMOUNTS, POSITION FIXED */}
       <div 
         style={{
           position: 'fixed',
-          bottom: '20px',
-          right: '20px',
-          width: '280px',
-          height: '158px',
-          opacity: viewMode === 'scheduled' && syncStatus === 'connected' ? 1 : 0.0001,
-          pointerEvents: viewMode === 'scheduled' && syncStatus === 'connected' ? 'auto' : 'none',
-          zIndex: viewMode === 'scheduled' && syncStatus === 'connected' ? 50 : -9999,
-          borderRadius: '16px',
-          overflow: 'hidden',
-          backgroundColor: '#000000',
-          boxShadow: viewMode === 'scheduled' && syncStatus === 'connected' ? '0 12px 35px rgba(0,0,0,0.9)' : 'none',
-          border: viewMode === 'scheduled' && syncStatus === 'connected' ? '2px solid #2f2f2f' : 'none'
+          top: '-9999px',
+          left: '-9999px',
+          width: '320px',
+          height: '240px',
+          visibility: 'hidden',
+          pointerEvents: 'none',
+          zIndex: -9999
         }}
       >
-        <div id="persistent-sync-iframe" style={{ width: '100%', height: '100%' }}></div>
+        <div id="persistent-sync-iframe"></div>
       </div>
 
       {/* Left Sidebar */}
@@ -1426,7 +1472,21 @@ export default function App() {
           </div>
         </header>
 
-        {/* PERSISTENT FLOATING AUDIO BAR */}
+        {/* AUTOPLAY BLOCKED BANNER (One click solves browser security policy) */}
+        {autoplayBlocked && (
+          <div 
+            onClick={handleManualUnmuteClick}
+            className="bg-amber-500/20 border-b border-amber-500/40 text-amber-300 px-4 py-2 text-xs flex items-center justify-between cursor-pointer animate-pulse z-30"
+          >
+            <div className="flex items-center gap-2">
+              <VolumeX size={16} />
+              <span>Click here to enable sound playback (Browser requires 1 tap to unmute)</span>
+            </div>
+            <span className="bg-amber-500 text-black font-bold px-2 py-0.5 rounded text-[11px]">Unmute Now</span>
+          </div>
+        )}
+
+        {/* PERSISTENT FLOATING AUDIO BAR IN CHAT */}
         {syncStatus === 'connected' && viewMode !== 'scheduled' && (
           <div className="bg-[#141414]/95 border-b border-[#2a2a2a] px-4 py-2 flex items-center justify-between z-20 text-xs backdrop-blur-md shadow-lg">
             <div className="flex items-center gap-2.5 overflow-hidden">
@@ -1434,7 +1494,7 @@ export default function App() {
                 <Music size={13} className={isPlaying ? 'animate-bounce' : ''} />
               </div>
               <span className="text-gray-300 truncate max-w-xs font-mono text-[11px]">
-                🎵 <strong className="text-white">Playing:</strong> {activeTrackTitle || "Synced Audio Track"}
+                🎵 <strong className="text-white">Synced Audio:</strong> {activeTrackTitle || "Live Stream Active"}
               </span>
             </div>
 
@@ -1808,7 +1868,7 @@ export default function App() {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-white">Live Synced Music Lounge (Scheduled)</h2>
-                  <p className="text-[11px] text-gray-400">Both users can search and switch songs in exact sync</p>
+                  <p className="text-[11px] text-gray-400">Audio plays continuously on both devices in background</p>
                 </div>
               </div>
 
@@ -1872,7 +1932,7 @@ export default function App() {
                 <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3.5 flex items-center justify-between shadow-lg">
                   <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold font-mono">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    <span>LINKED ACTIVE (Background Audio Enabled)</span>
+                    <span>LINKED ACTIVE (Universal Sync Engine)</span>
                   </div>
                   <span className="text-[11px] text-gray-400 font-mono">Synced on Both Devices</span>
                 </div>
@@ -1885,7 +1945,7 @@ export default function App() {
                       value={youtubeUrlInput}
                       onChange={(e) => handleQueryChange(e.target.value)}
                       onFocus={() => { if (ytSuggestions.length > 0) setShowSuggestions(true); }}
-                      placeholder="Type song name or YouTube link (Both will play exact same song)..."
+                      placeholder="Type song name or YouTube link (Plays exact same song on both sides)..."
                       className="flex-1 bg-[#171717] border border-[#2c2c2c] focus:border-[#444] rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 outline-none font-mono"
                     />
                     <button
@@ -1927,7 +1987,7 @@ export default function App() {
                     </h3>
                   </div>
                   <p className="text-xs text-gray-500 max-w-md">
-                    Either you or the other side can change the song anytime. It will automatically switch on both screens together.
+                    Either side can change the track or pause/resume anytime — it automatically stays locked together.
                   </p>
                 </div>
 
