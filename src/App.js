@@ -4,11 +4,12 @@ import CryptoJS from 'crypto-js';
 import jsPDF from 'jspdf';
 import confetti from 'canvas-confetti';
 import { 
-  SquarePen, Image as ImageIcon, BookOpen, Clock, ToyBrick, FolderGit2, TerminalSquare, MoreHorizontal,
+  SquarePen, Image as ImageIcon, BookOpen, Clock, ToyBrick, FolderGit2, MoreHorizontal,
   Search, PanelLeft, ArrowUp, Plus, RefreshCw, Sparkles, Share,
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
-  Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX
+  Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
+  Film, Tv, Video
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -67,7 +68,7 @@ export default function App() {
     }
   });
 
-  const [viewMode, setViewMode] = useState('real_gpt');
+  const [viewMode, setViewMode] = useState('real_gpt'); // 'real_gpt' | 'stealth' | 'images_archive' | 'scheduled' | 'codex'
 
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem('stealth_conversations');
@@ -94,12 +95,11 @@ export default function App() {
   const [activeReactionMsgId, setActiveReactionMsgId] = useState(null);
   const [highlightedMsgId, setHighlightedMsgId] = useState(null);
 
-  // Real-time Peer Typing Indicator
   const [isPeerTyping, setIsPeerTyping] = useState(false);
   const typingTimerRef = useRef(null);
 
-  // Synced Lounge & Persistent Audio States
-  const [syncStatus, setSyncStatus] = useState('idle');
+  // Synced Lounge States
+  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'requested' | 'incoming_request' | 'connected'
   const [incomingInviteRole, setIncomingInviteRole] = useState('');
   const [youtubeUrlInput, setYoutubeUrlInput] = useState('');
   const [activeTrackTitle, setActiveTrackTitle] = useState('');
@@ -110,12 +110,22 @@ export default function App() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
+  // CODEX THEATER STATES (2 MODES)
+  const [codexEngine, setCodexEngine] = useState('gofile'); // 'gofile' | 'youtube'
+  const [movieInputUrl, setMovieInputUrl] = useState('');
+  const [activeMovieSrc, setActiveMovieSrc] = useState('');
+  const [activeMovieYTId, setActiveMovieYTId] = useState('');
+  const [isMoviePlaying, setIsMoviePlaying] = useState(false);
+  const html5VideoRef = useRef(null);
+  const isMovieRemoteTriggerRef = useRef(false);
+
   const playerRef = useRef(null);
   const isRemoteTriggerRef = useRef(false);
   const suggestDebounceRef = useRef(null);
   const lastSyncActionTimeRef = useRef(0);
+  const pendingRestoreRef = useRef(null);
 
-  // Bot Scheduled Message States (Admin only)
+  // Bot Scheduled Message States
   const [isBotOpen, setIsBotOpen] = useState(false);
   const [botTab, setBotTab] = useState('instant');
   const [customMsg, setCustomMsg] = useState('');
@@ -169,7 +179,7 @@ export default function App() {
     roleRef.current = role;
   }, [role]);
 
-  // Load YouTube IFrame API once
+  // Load YouTube API
   useEffect(() => {
     if (!window.YT) {
       const tag = document.createElement('script');
@@ -187,7 +197,7 @@ export default function App() {
           width: '100%',
           videoId: initialVideoId,
           playerVars: {
-            autoplay: 0,
+            autoplay: 1,
             controls: 1,
             modestbranding: 1,
             rel: 0,
@@ -196,8 +206,25 @@ export default function App() {
           },
           events: {
             onReady: () => {
-              if (playerRef.current && playerRef.current.pauseVideo) {
-                playerRef.current.pauseVideo();
+              if (pendingRestoreRef.current) {
+                const p = pendingRestoreRef.current;
+                pendingRestoreRef.current = null;
+                isRemoteTriggerRef.current = true;
+                playerRef.current.loadVideoById({
+                  videoId: p.videoId,
+                  startSeconds: p.currentTime || 0
+                });
+                playerRef.current.unMute();
+                playerRef.current.setVolume(100);
+                if (p.state === 'PLAY') {
+                  const playPromise = playerRef.current.playVideo();
+                  if (playPromise && typeof playPromise.catch === 'function') {
+                    playPromise.catch(() => setAutoplayBlocked(true));
+                  }
+                } else {
+                  playerRef.current.pauseVideo();
+                }
+                setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
               }
             },
             onStateChange: (event) => {
@@ -230,7 +257,7 @@ export default function App() {
           }
         });
       } catch (e) {
-        console.error("Player init skipped:", e);
+        console.error("Player initialization skipped", e);
       }
     }
   }, []);
@@ -241,7 +268,7 @@ export default function App() {
         initGlobalPlayer();
         clearInterval(timer);
       }
-    }, 500);
+    }, 400);
     return () => clearInterval(timer);
   }, [initGlobalPlayer]);
 
@@ -388,6 +415,7 @@ export default function App() {
     }
   };
 
+  // Ultra-Fast Instant Mark Seen
   const markMessagesAsSeen = useCallback(() => {
     const isCurrentlyStealth = viewModeRef.current === 'stealth';
     const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
@@ -398,7 +426,6 @@ export default function App() {
     }
   }, []);
 
-  // When switching directly into stealth view, auto mark unseen messages seen
   useEffect(() => {
     if (viewMode === 'stealth') {
       markMessagesAsSeen();
@@ -407,11 +434,12 @@ export default function App() {
     }
   }, [viewMode, markMessagesAsSeen]);
 
+  // Main Socket Connection & Event Registry
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 25,
+      reconnectionAttempts: 30,
       reconnectionDelay: 1000
     });
 
@@ -451,6 +479,41 @@ export default function App() {
       }
     });
 
+    // 1. RELOAD / REFRESH AUTO-RESTORE ENGINE (Song keeps playing seamlessly on F5)
+    socketRef.current.on('sync_restore_state', (data) => {
+      if (!data || !data.connected) return;
+      setSyncStatus('connected');
+
+      if (data.videoId) {
+        setActiveVideoId(data.videoId);
+        setActiveTrackTitle(data.title || "YouTube Track");
+        setIsPlaying(data.state === 'PLAY');
+
+        if (playerRef.current && playerRef.current.loadVideoById) {
+          isRemoteTriggerRef.current = true;
+          playerRef.current.loadVideoById({
+            videoId: data.videoId,
+            startSeconds: data.currentTime || 0
+          });
+          playerRef.current.unMute();
+          playerRef.current.setVolume(100);
+          if (data.state === 'PLAY') {
+            const p = playerRef.current.playVideo();
+            if (p && typeof p.catch === 'function') {
+              p.catch(() => setAutoplayBlocked(true));
+            }
+          } else {
+            playerRef.current.pauseVideo();
+          }
+          setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
+        } else {
+          // If player iframe not yet loaded on DOM, keep in ref and play in onReady
+          pendingRestoreRef.current = data;
+        }
+      }
+    });
+
+    // Handshake Invitations
     socketRef.current.on('sync_receive_invite', ({ fromRole }) => {
       setSyncStatus('incoming_request');
       setIncomingInviteRole(fromRole);
@@ -461,14 +524,6 @@ export default function App() {
       setSyncStatus('connected');
       playReceiveSound();
       confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
-
-      setActiveVideoId('');
-      setActiveTrackTitle('');
-      setYoutubeUrlInput('');
-      setIsPlaying(false);
-      if (playerRef.current && playerRef.current.stopVideo) {
-        playerRef.current.stopVideo();
-      }
     });
 
     socketRef.current.on('sync_disconnected_event', () => {
@@ -482,6 +537,7 @@ export default function App() {
       }
     });
 
+    // Track Change Broadcast
     socketRef.current.on('sync_track_update', ({ videoId, title }) => {
       setActiveTrackTitle(title || "YouTube Track");
       setActiveVideoId(videoId);
@@ -505,6 +561,7 @@ export default function App() {
       }
     });
 
+    // Playback State Broadcast
     socketRef.current.on('sync_playback_update', ({ state, currentTime, timestamp }) => {
       if (!playerRef.current) return;
       isRemoteTriggerRef.current = true;
@@ -514,7 +571,7 @@ export default function App() {
       const targetTime = currentTime + (state === 'PLAY' ? latency : 0);
 
       try {
-        if (Math.abs(playerRef.current.getCurrentTime() - targetTime) > 0.5) {
+        if (Math.abs(playerRef.current.getCurrentTime() - targetTime) > 0.4) {
           playerRef.current.seekTo(targetTime, true);
         }
 
@@ -536,6 +593,56 @@ export default function App() {
       }, 1000);
     });
 
+    // 2. CODEX CINEMA RESTORE & SYNC LISTENERS
+    socketRef.current.on('codex_restore_state', (data) => {
+      if (!data) return;
+      setCodexEngine(data.engine || 'gofile');
+      if (data.engine === 'youtube') {
+        setActiveMovieYTId(data.ytId || '');
+        setActiveMovieSrc('');
+      } else {
+        setActiveMovieSrc(data.url || '');
+        setActiveMovieYTId('');
+      }
+    });
+
+    socketRef.current.on('codex_movie_load_broadcast', ({ engine, url, ytId }) => {
+      setCodexEngine(engine);
+      if (engine === 'gofile') {
+        setActiveMovieSrc(url);
+        setActiveMovieYTId('');
+        setIsMoviePlaying(false);
+      } else {
+        setActiveMovieYTId(ytId);
+        setActiveMovieSrc('');
+        setIsMoviePlaying(true);
+      }
+      playReceiveSound();
+    });
+
+    socketRef.current.on('codex_movie_sync_broadcast', ({ state, currentTime, timestamp }) => {
+      if (codexEngine === 'gofile' && html5VideoRef.current) {
+        isMovieRemoteTriggerRef.current = true;
+        const latency = Math.max(0, (Date.now() - timestamp) / 1000);
+        const target = currentTime + (state === 'PLAY' ? latency : 0);
+
+        if (Math.abs(html5VideoRef.current.currentTime - target) > 0.4) {
+          html5VideoRef.current.currentTime = target;
+        }
+
+        if (state === 'PLAY') {
+          html5VideoRef.current.play().catch(() => {});
+          setIsMoviePlaying(true);
+        } else {
+          html5VideoRef.current.pause();
+          setIsMoviePlaying(false);
+        }
+
+        setTimeout(() => { isMovieRemoteTriggerRef.current = false; }, 600);
+      }
+    });
+
+    // Scheduled Alerts
     socketRef.current.on('scheduled_jobs_update', (jobs) => {
       setScheduledJobs(jobs || []);
     });
@@ -551,6 +658,7 @@ export default function App() {
       }
     });
 
+    // 3. FAST REAL-TIME SEEN & MESSAGE RELAY
     socketRef.current.on('receive_stealth_msg', (data) => {
       setIsPeerTyping(false);
       const text = decryptText(data.encryptedText);
@@ -576,8 +684,9 @@ export default function App() {
 
       if (data.senderRole !== myCurrentRole) {
         playReceiveSound();
-        if (shouldAutoSeen) {
-          markMessagesAsSeen();
+        if (shouldAutoSeen && socketRef.current) {
+          // Instantly send mark seen back to peer
+          socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: myCurrentRole });
         }
 
         if (data.senderRole === 'user') {
@@ -586,9 +695,10 @@ export default function App() {
       }
     });
 
-    socketRef.current.on('messages_marked_seen', (data) => {
+    // Microsecond instant .. (Seen) update on screen
+    socketRef.current.on('messages_marked_seen', ({ viewerRole }) => {
       setStealthMessages(prev => prev.map(m => {
-        if (m.senderRole !== data.viewerRole) {
+        if (m.senderRole !== viewerRole) {
           return { ...m, isSeen: true };
         }
         return m;
@@ -614,8 +724,83 @@ export default function App() {
     return () => {
       if (socketRef.current) socketRef.current.disconnect();
     };
-  }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification]);
+  }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification, codexEngine]);
 
+  // CODEX VIDEO CONTROLS
+  const handleLoadMovie = (e) => {
+    e.preventDefault();
+    if (!movieInputUrl.trim()) return;
+
+    if (codexEngine === 'youtube') {
+      const vid = extractYouTubeId(movieInputUrl.trim());
+      if (!vid) {
+        alert("Please paste a valid YouTube movie watch link.");
+        return;
+      }
+      setActiveMovieYTId(vid);
+      setActiveMovieSrc('');
+      setIsMoviePlaying(true);
+      if (socketRef.current) {
+        socketRef.current.emit('codex_movie_load', {
+          room: GLOBAL_ROOM,
+          engine: 'youtube',
+          ytId: vid
+        });
+      }
+    } else {
+      setActiveMovieSrc(movieInputUrl.trim());
+      setActiveMovieYTId('');
+      setIsMoviePlaying(false);
+      if (socketRef.current) {
+        socketRef.current.emit('codex_movie_load', {
+          room: GLOBAL_ROOM,
+          engine: 'gofile',
+          url: movieInputUrl.trim()
+        });
+      }
+    }
+    setMovieInputUrl('');
+  };
+
+  const handleHtml5Play = () => {
+    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
+    setIsMoviePlaying(true);
+    if (socketRef.current) {
+      socketRef.current.emit('codex_movie_sync', {
+        room: GLOBAL_ROOM,
+        state: 'PLAY',
+        currentTime: html5VideoRef.current.currentTime,
+        timestamp: Date.now()
+      });
+    }
+  };
+
+  const handleHtml5Pause = () => {
+    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
+    setIsMoviePlaying(false);
+    if (socketRef.current) {
+      socketRef.current.emit('codex_movie_sync', {
+        room: GLOBAL_ROOM,
+        state: 'PAUSE',
+        currentTime: html5VideoRef.current.currentTime,
+        timestamp: Date.now()
+      });
+    }
+  };
+
+  const handleHtml5Seeked = () => {
+    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
+    if (socketRef.current) {
+      socketRef.current.emit('codex_movie_sync', {
+        room: GLOBAL_ROOM,
+        state: html5VideoRef.current.paused ? 'PAUSE' : 'PLAY',
+        currentTime: html5VideoRef.current.currentTime,
+        timestamp: Date.now()
+      });
+    }
+  };
+
+  // YouTube Autocomplete Suggestions
   const handleQueryChange = (val) => {
     setYoutubeUrlInput(val);
     if (!val.trim() || val.includes('youtu')) {
@@ -886,7 +1071,6 @@ export default function App() {
     }
   };
 
-  // STRICT ADMIN-ONLY: Full Chat History PDF Export
   const downloadFullChatPDF = () => {
     if (role !== 'parent') return;
 
@@ -1257,8 +1441,6 @@ export default function App() {
 
   const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
   const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
-
-  // UNSEEN MESSAGE DETECTION FOR HEADER DOT
   const hasUnreadSecret = stealthMessages.some(m => m.senderRole !== role && !m.isSeen);
 
   const alertText = incomingAlert?.text || '';
@@ -1296,7 +1478,7 @@ export default function App() {
         className="hidden" 
       />
 
-      {/* CONTINUOUS BACKGROUND AUDIO IFRAME */}
+      {/* PERSISTENT AUDIO PLAYER (Keeps playing even on F5 / Page reload) */}
       <div 
         style={{
           position: 'fixed',
@@ -1346,7 +1528,6 @@ export default function App() {
             <BookOpen size={15} className="text-[#9b9b9b]" /> Library
           </div>
 
-          {/* SCHEDULED / SYNCHRONIZED LOUNGE BUTTON */}
           <div 
             onClick={() => setViewMode('scheduled')}
             className={`flex items-center justify-between py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors ${viewMode === 'scheduled' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
@@ -1367,9 +1548,18 @@ export default function App() {
           <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors">
             <FolderGit2 size={15} className="text-[#9b9b9b]" /> Projects
           </div>
-          <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors">
-            <TerminalSquare size={15} className="text-[#9b9b9b]" /> Codex
+
+          {/* CODEX THEATER CINEMA TAB */}
+          <div 
+            onClick={() => setViewMode('codex')}
+            className={`flex items-center justify-between py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors ${viewMode === 'codex' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
+          >
+            <span className="flex items-center gap-2.5">
+              <Film size={15} className={viewMode === 'codex' ? 'text-emerald-400' : 'text-[#9b9b9b]'} /> Codex Cinema
+            </span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 font-mono">PRO</span>
           </div>
+
           <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors">
             <MoreHorizontal size={15} className="text-[#9b9b9b]" /> More
           </div>
@@ -1440,9 +1630,8 @@ export default function App() {
                 <PanelLeft size={18} />
               </button>
             )}
-            <span className="text-xs font-semibold text-gray-200">{currentRoom}</span>
+            <span className="text-xs font-semibold text-gray-200">{viewMode === 'codex' ? 'Codex Cinema Lounge' : currentRoom}</span>
 
-            {/* STRICT ADMIN-ONLY: Export Chat in PDF format */}
             {role === 'parent' && (
               <button
                 onClick={downloadFullChatPDF}
@@ -1455,7 +1644,7 @@ export default function App() {
             )}
           </div>
 
-          {/* DYNAMIC HEADER NOTIFICATION DOT: GREEN NORMALLY / RED ON UNSEEN MESSAGE */}
+          {/* DYNAMIC HEADER NOTIFICATION DOT: GREEN / RED ON UNSEEN SECRET */}
           <div className="flex items-center gap-3 text-xs text-[#9b9b9b]">
             <span 
               className={`w-2 h-2 rounded-full transition-all duration-300 ${
@@ -1483,7 +1672,6 @@ export default function App() {
           </div>
         </header>
 
-        {/* AUTOPLAY RESTRICTION UNMUTE BANNER */}
         {autoplayBlocked && (
           <div 
             onClick={handleManualUnmuteClick}
@@ -1491,14 +1679,14 @@ export default function App() {
           >
             <div className="flex items-center gap-2">
               <VolumeX size={16} />
-              <span>Browser blocked autoplay: Tap here once to unmute synchronized playback</span>
+              <span>Tap here to enable sound playback (Browser audio lock)</span>
             </div>
             <span className="bg-amber-500 text-black font-bold px-2 py-0.5 rounded text-[11px]">Unmute Sound</span>
           </div>
         )}
 
         {/* PERSISTENT FLOATING AUDIO BAR IN CHAT */}
-        {syncStatus === 'connected' && activeVideoId && viewMode !== 'scheduled' && (
+        {syncStatus === 'connected' && activeVideoId && viewMode !== 'scheduled' && viewMode !== 'codex' && (
           <div className="bg-[#141414]/95 border-b border-[#2a2a2a] px-4 py-2 flex items-center justify-between z-20 text-xs backdrop-blur-md shadow-lg">
             <div className="flex items-center gap-2.5 overflow-hidden">
               <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
@@ -1776,9 +1964,10 @@ export default function App() {
                                 </span>
                               )}
                               
+                              {/* SUPER FAST SEEN DOT INDICATOR (. = Sent, .. = Seen) */}
                               {showStatusReceipt && (
                                 <span 
-                                  className={`text-[12px] font-mono tracking-tighter shrink-0 ml-1 font-bold ${
+                                  className={`text-[12px] font-mono tracking-tighter shrink-0 ml-1 font-bold transition-colors duration-100 ${
                                     isSeen ? 'text-[#38bdf8]' : 'text-gray-500'
                                   }`}
                                   title={isSeen ? "Seen by counterpart" : "Sent"}
@@ -1879,7 +2068,7 @@ export default function App() {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-white">Live Synced Music Lounge (Scheduled)</h2>
-                  <p className="text-[11px] text-gray-400">Audio plays continuously on both devices in background</p>
+                  <p className="text-[11px] text-gray-400">Audio plays continuously on both devices in background (Refreshes persist)</p>
                 </div>
               </div>
 
@@ -1938,17 +2127,15 @@ export default function App() {
                 )}
               </div>
             ) : (
-              /* CONNECTED ACTIVE LOUNGE */
               <div className="space-y-4">
                 <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3.5 flex items-center justify-between shadow-lg">
                   <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold font-mono">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    <span>LINKED ACTIVE (Clean Sync Engine)</span>
+                    <span>LINKED ACTIVE (Auto-Resumes on Refresh)</span>
                   </div>
                   <span className="text-[11px] text-gray-400 font-mono">Synced on Both Devices</span>
                 </div>
 
-                {/* YOUTUBE SEARCH & AUTOCOMPLETE BAR */}
                 <div className="relative">
                   <form onSubmit={(e) => { e.preventDefault(); handleTriggerSong(youtubeUrlInput); }} className="flex gap-2">
                     <input 
@@ -1969,7 +2156,6 @@ export default function App() {
                     </button>
                   </form>
 
-                  {/* AUTOCOMPLETE SUGGESTIONS POPUP */}
                   {showSuggestions && ytSuggestions.length > 0 && (
                     <div className="absolute left-0 right-24 top-full mt-1.5 bg-[#171717] border border-[#333] rounded-xl shadow-2xl z-30 max-h-52 overflow-y-auto py-1">
                       {ytSuggestions.map((sugg, sIdx) => (
@@ -1986,7 +2172,6 @@ export default function App() {
                   )}
                 </div>
 
-                {/* TRACK STATUS CARD */}
                 <div className="w-full bg-[#121212] border border-[#242424] rounded-2xl p-6 shadow-2xl flex flex-col items-center justify-center text-center space-y-3">
                   <div className="w-16 h-16 rounded-full bg-[#1c1c1c] border border-[#2e2e2e] flex items-center justify-center text-emerald-400 shadow-inner">
                     <Volume2 size={26} className={isPlaying ? 'animate-bounce' : ''} />
@@ -2001,12 +2186,11 @@ export default function App() {
                   </div>
                   <p className="text-xs text-gray-500 max-w-md">
                     {activeVideoId 
-                      ? "Either side can switch song, pause, or resume anytime. Playback continues in chat seamlessly."
+                      ? "Even if you refresh the page or switch chats, the track continues without interruption until disconnected."
                       : "Fresh connection established. Start typing above to broadcast simultaneously on both sides."}
                   </p>
                 </div>
 
-                {/* CONTROLS */}
                 {activeVideoId && (
                   <div className="bg-[#171717] border border-[#292929] rounded-2xl p-3 flex items-center justify-between shadow">
                     <button
@@ -2027,6 +2211,107 @@ export default function App() {
                 )}
               </div>
             )}
+          </section>
+        )}
+
+        {/* VIEW 5: CODEX THEATER CINEMA LOUNGE (WATCH TOGETHER) */}
+        {viewMode === 'codex' && (
+          <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 max-w-5xl w-full mx-auto space-y-4 scrollbar-none font-sans">
+            <div className="flex items-center justify-between border-b border-[#222] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Film size={18} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-white">Codex Cinema Lounge (Watch Together)</h2>
+                  <p className="text-[11px] text-gray-400">Zero-lag movie playback with GoFile direct streaming and YouTube mode</p>
+                </div>
+              </div>
+
+              {/* ENGINE SELECTOR TABS */}
+              <div className="flex bg-[#181818] p-1 rounded-xl border border-[#2c2c2c] gap-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setCodexEngine('gofile')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-colors cursor-pointer font-medium ${
+                    codexEngine === 'gofile' ? 'bg-[#252525] text-emerald-400 shadow' : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  <Tv size={13} />
+                  <span>GoFile / MP4 Stream</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCodexEngine('youtube')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-colors cursor-pointer font-medium ${
+                    codexEngine === 'youtube' ? 'bg-[#252525] text-blue-400 shadow' : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  <Video size={13} />
+                  <span>YouTube Movie</span>
+                </button>
+              </div>
+            </div>
+
+            {/* MOVIE URL INPUT BAR */}
+            <form onSubmit={handleLoadMovie} className="flex gap-2">
+              <input 
+                type="text"
+                value={movieInputUrl}
+                onChange={(e) => setMovieInputUrl(e.target.value)}
+                placeholder={
+                  codexEngine === 'gofile'
+                    ? "Paste GoFile direct stream link (e.g. https://store1.gofile.io/.../movie.mp4)"
+                    : "Paste full YouTube movie watch URL (e.g. https://www.youtube.com/watch?v=...)"
+                }
+                className="flex-1 bg-[#171717] border border-[#2c2c2c] focus:border-[#444] rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 outline-none font-mono"
+              />
+              <button
+                type="submit"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0 shadow"
+              >
+                Broadcast Movie
+              </button>
+            </form>
+
+            {/* THEATER PLAYER CONTAINER */}
+            <div className="w-full bg-[#0a0a0a] border border-[#242424] rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center min-h-[380px]">
+              {codexEngine === 'gofile' ? (
+                activeMovieSrc ? (
+                  <video 
+                    ref={html5VideoRef}
+                    src={activeMovieSrc}
+                    controls
+                    playsInline
+                    onPlay={handleHtml5Play}
+                    onPause={handleHtml5Pause}
+                    onSeeked={handleHtml5Seeked}
+                    className="w-full max-h-[68vh] object-contain rounded-2xl"
+                  />
+                ) : (
+                  <div className="text-center p-8 space-y-2 text-gray-500">
+                    <Tv size={40} className="mx-auto opacity-30 text-emerald-400" />
+                    <p className="text-xs">No GoFile stream loaded yet.</p>
+                    <p className="text-[11px] text-gray-600">Open file on GoFile ➔ Click Download ➔ Copy Link Address ➔ Paste above</p>
+                  </div>
+                )
+              ) : (
+                activeMovieYTId ? (
+                  <iframe 
+                    src={`https://www.youtube.com/embed/${activeMovieYTId}?autoplay=1&controls=1&modestbranding=1&rel=0`}
+                    title="Codex Cinema YouTube"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="w-full h-[65vh] rounded-2xl border-none"
+                  />
+                ) : (
+                  <div className="text-center p-8 space-y-2 text-gray-500">
+                    <Film size={40} className="mx-auto opacity-30 text-blue-400" />
+                    <p className="text-xs">Paste full YouTube movie link above to stream simultaneously.</p>
+                  </div>
+                )
+              )}
+            </div>
           </section>
         )}
 
