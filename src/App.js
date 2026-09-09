@@ -9,7 +9,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video
+  Film, Tv, Video, TerminalSquare
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -99,7 +99,7 @@ export default function App() {
   const typingTimerRef = useRef(null);
 
   // Synced Lounge States
-  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'requested' | 'incoming_request' | 'connected'
+  const [syncStatus, setSyncStatus] = useState('idle');
   const [incomingInviteRole, setIncomingInviteRole] = useState('');
   const [youtubeUrlInput, setYoutubeUrlInput] = useState('');
   const [activeTrackTitle, setActiveTrackTitle] = useState('');
@@ -110,8 +110,8 @@ export default function App() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
-  // CODEX THEATER STATES (2 MODES)
-  const [codexEngine, setCodexEngine] = useState('gofile'); // 'gofile' | 'youtube'
+  // CODEX THEATER STATES (STREAM & YOUTUBE)
+  const [codexEngine, setCodexEngine] = useState('gofile'); // 'gofile' (Stream) | 'youtube' (YouTube)
   const [movieInputUrl, setMovieInputUrl] = useState('');
   const [activeMovieSrc, setActiveMovieSrc] = useState('');
   const [activeMovieYTId, setActiveMovieYTId] = useState('');
@@ -415,7 +415,6 @@ export default function App() {
     }
   };
 
-  // Ultra-Fast Instant Mark Seen
   const markMessagesAsSeen = useCallback(() => {
     const isCurrentlyStealth = viewModeRef.current === 'stealth';
     const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
@@ -434,7 +433,7 @@ export default function App() {
     }
   }, [viewMode, markMessagesAsSeen]);
 
-  // Main Socket Connection & Event Registry
+  // Main Socket Connection
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
@@ -479,7 +478,7 @@ export default function App() {
       }
     });
 
-    // 1. RELOAD / REFRESH AUTO-RESTORE ENGINE (Song keeps playing seamlessly on F5)
+    // Auto-restore audio state across page refreshes
     socketRef.current.on('sync_restore_state', (data) => {
       if (!data || !data.connected) return;
       setSyncStatus('connected');
@@ -507,13 +506,11 @@ export default function App() {
           }
           setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
         } else {
-          // If player iframe not yet loaded on DOM, keep in ref and play in onReady
           pendingRestoreRef.current = data;
         }
       }
     });
 
-    // Handshake Invitations
     socketRef.current.on('sync_receive_invite', ({ fromRole }) => {
       setSyncStatus('incoming_request');
       setIncomingInviteRole(fromRole);
@@ -537,7 +534,6 @@ export default function App() {
       }
     });
 
-    // Track Change Broadcast
     socketRef.current.on('sync_track_update', ({ videoId, title }) => {
       setActiveTrackTitle(title || "YouTube Track");
       setActiveVideoId(videoId);
@@ -561,7 +557,6 @@ export default function App() {
       }
     });
 
-    // Playback State Broadcast
     socketRef.current.on('sync_playback_update', ({ state, currentTime, timestamp }) => {
       if (!playerRef.current) return;
       isRemoteTriggerRef.current = true;
@@ -593,7 +588,7 @@ export default function App() {
       }, 1000);
     });
 
-    // 2. CODEX CINEMA RESTORE & SYNC LISTENERS
+    // Codex Cinema Restore & Sync Listeners
     socketRef.current.on('codex_restore_state', (data) => {
       if (!data) return;
       setCodexEngine(data.engine || 'gofile');
@@ -642,7 +637,6 @@ export default function App() {
       }
     });
 
-    // Scheduled Alerts
     socketRef.current.on('scheduled_jobs_update', (jobs) => {
       setScheduledJobs(jobs || []);
     });
@@ -658,7 +652,6 @@ export default function App() {
       }
     });
 
-    // 3. FAST REAL-TIME SEEN & MESSAGE RELAY
     socketRef.current.on('receive_stealth_msg', (data) => {
       setIsPeerTyping(false);
       const text = decryptText(data.encryptedText);
@@ -685,7 +678,6 @@ export default function App() {
       if (data.senderRole !== myCurrentRole) {
         playReceiveSound();
         if (shouldAutoSeen && socketRef.current) {
-          // Instantly send mark seen back to peer
           socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: myCurrentRole });
         }
 
@@ -695,7 +687,6 @@ export default function App() {
       }
     });
 
-    // Microsecond instant .. (Seen) update on screen
     socketRef.current.on('messages_marked_seen', ({ viewerRole }) => {
       setStealthMessages(prev => prev.map(m => {
         if (m.senderRole !== viewerRole) {
@@ -726,7 +717,7 @@ export default function App() {
     };
   }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification, codexEngine]);
 
-  // CODEX VIDEO CONTROLS
+  // Codex Video Controls
   const handleLoadMovie = (e) => {
     e.preventDefault();
     if (!movieInputUrl.trim()) return;
@@ -734,7 +725,7 @@ export default function App() {
     if (codexEngine === 'youtube') {
       const vid = extractYouTubeId(movieInputUrl.trim());
       if (!vid) {
-        alert("Please paste a valid YouTube movie watch link.");
+        alert("Please paste a valid YouTube watch link.");
         return;
       }
       setActiveMovieYTId(vid);
@@ -1478,7 +1469,7 @@ export default function App() {
         className="hidden" 
       />
 
-      {/* PERSISTENT AUDIO PLAYER (Keeps playing even on F5 / Page reload) */}
+      {/* PERSISTENT AUDIO PLAYER */}
       <div 
         style={{
           position: 'fixed',
@@ -1549,15 +1540,13 @@ export default function App() {
             <FolderGit2 size={15} className="text-[#9b9b9b]" /> Projects
           </div>
 
-          {/* CODEX THEATER CINEMA TAB */}
+          {/* CODEX TAB - CLEAN WITHOUT PRO BADGE */}
           <div 
             onClick={() => setViewMode('codex')}
-            className={`flex items-center justify-between py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors ${viewMode === 'codex' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
+            className={`flex items-center gap-2.5 py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors ${viewMode === 'codex' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
           >
-            <span className="flex items-center gap-2.5">
-              <Film size={15} className={viewMode === 'codex' ? 'text-emerald-400' : 'text-[#9b9b9b]'} /> Codex Cinema
-            </span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 font-mono">PRO</span>
+            <TerminalSquare size={15} className={viewMode === 'codex' ? 'text-emerald-400' : 'text-[#9b9b9b]'} />
+            <span>Codex</span>
           </div>
 
           <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors">
@@ -1630,7 +1619,7 @@ export default function App() {
                 <PanelLeft size={18} />
               </button>
             )}
-            <span className="text-xs font-semibold text-gray-200">{viewMode === 'codex' ? 'Codex Cinema Lounge' : currentRoom}</span>
+            <span className="text-xs font-semibold text-gray-200">{viewMode === 'codex' ? 'Codex' : currentRoom}</span>
 
             {role === 'parent' && (
               <button
@@ -1644,7 +1633,6 @@ export default function App() {
             )}
           </div>
 
-          {/* DYNAMIC HEADER NOTIFICATION DOT: GREEN / RED ON UNSEEN SECRET */}
           <div className="flex items-center gap-3 text-xs text-[#9b9b9b]">
             <span 
               className={`w-2 h-2 rounded-full transition-all duration-300 ${
@@ -1938,7 +1926,7 @@ export default function App() {
 
                                 {isReactionOpen && (
                                   <div 
-                                    className="absolute left-0 -top-8 z-30 bg-[#1e1e1e] border border-[#3a3a3a] px-2 py-1 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.85)] flex items-center gap-1.5 backdrop-blur-md animate-in fade-in duration-100"
+                                    className="absolute left-0 -top-8 z-30 bg-[#1e1e1e] border border-[#333] px-2 py-1 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.85)] flex items-center gap-1.5 backdrop-blur-md animate-in fade-in duration-100"
                                     onClick={(e) => e.stopPropagation()}
                                   >
                                     {HOVER_REACTIONS.map((emoji, eIdx) => (
@@ -1964,7 +1952,6 @@ export default function App() {
                                 </span>
                               )}
                               
-                              {/* SUPER FAST SEEN DOT INDICATOR (. = Sent, .. = Seen) */}
                               {showStatusReceipt && (
                                 <span 
                                   className={`text-[12px] font-mono tracking-tighter shrink-0 ml-1 font-bold transition-colors duration-100 ${
@@ -2214,21 +2201,21 @@ export default function App() {
           </section>
         )}
 
-        {/* VIEW 5: CODEX THEATER CINEMA LOUNGE (WATCH TOGETHER) */}
+        {/* VIEW 5: CODEX THEATER LOUNGE (STREAM & YOUTUBE) */}
         {viewMode === 'codex' && (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 max-w-5xl w-full mx-auto space-y-4 scrollbar-none font-sans">
             <div className="flex items-center justify-between border-b border-[#222] pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <Film size={18} />
+                  <TerminalSquare size={18} />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-white">Codex Cinema Lounge (Watch Together)</h2>
-                  <p className="text-[11px] text-gray-400">Zero-lag movie playback with GoFile direct streaming and YouTube mode</p>
+                  <h2 className="text-sm font-bold text-white">Codex</h2>
+                  <p className="text-[11px] text-gray-400">Synchronized media playback</p>
                 </div>
               </div>
 
-              {/* ENGINE SELECTOR TABS */}
+              {/* ENGINE SELECTOR TABS: Stream & YouTube */}
               <div className="flex bg-[#181818] p-1 rounded-xl border border-[#2c2c2c] gap-1 text-xs">
                 <button
                   type="button"
@@ -2238,7 +2225,7 @@ export default function App() {
                   }`}
                 >
                   <Tv size={13} />
-                  <span>GoFile / MP4 Stream</span>
+                  <span>Stream</span>
                 </button>
                 <button
                   type="button"
@@ -2248,12 +2235,12 @@ export default function App() {
                   }`}
                 >
                   <Video size={13} />
-                  <span>YouTube Movie</span>
+                  <span>YouTube</span>
                 </button>
               </div>
             </div>
 
-            {/* MOVIE URL INPUT BAR */}
+            {/* URL INPUT BAR */}
             <form onSubmit={handleLoadMovie} className="flex gap-2">
               <input 
                 type="text"
@@ -2261,8 +2248,8 @@ export default function App() {
                 onChange={(e) => setMovieInputUrl(e.target.value)}
                 placeholder={
                   codexEngine === 'gofile'
-                    ? "Paste GoFile direct stream link (e.g. https://store1.gofile.io/.../movie.mp4)"
-                    : "Paste full YouTube movie watch URL (e.g. https://www.youtube.com/watch?v=...)"
+                    ? "Paste direct stream link (MP4 / video URL)..."
+                    : "Paste YouTube URL (e.g. https://www.youtube.com/watch?v=...)"
                 }
                 className="flex-1 bg-[#171717] border border-[#2c2c2c] focus:border-[#444] rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 outline-none font-mono"
               />
@@ -2270,7 +2257,7 @@ export default function App() {
                 type="submit"
                 className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0 shadow"
               >
-                Broadcast Movie
+                Broadcast
               </button>
             </form>
 
@@ -2291,15 +2278,15 @@ export default function App() {
                 ) : (
                   <div className="text-center p-8 space-y-2 text-gray-500">
                     <Tv size={40} className="mx-auto opacity-30 text-emerald-400" />
-                    <p className="text-xs">No GoFile stream loaded yet.</p>
-                    <p className="text-[11px] text-gray-600">Open file on GoFile ➔ Click Download ➔ Copy Link Address ➔ Paste above</p>
+                    <p className="text-xs">No stream link loaded yet.</p>
+                    <p className="text-[11px] text-gray-600">Paste direct video / MP4 link above and click Broadcast</p>
                   </div>
                 )
               ) : (
                 activeMovieYTId ? (
                   <iframe 
                     src={`https://www.youtube.com/embed/${activeMovieYTId}?autoplay=1&controls=1&modestbranding=1&rel=0`}
-                    title="Codex Cinema YouTube"
+                    title="Codex YouTube"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                     className="w-full h-[65vh] rounded-2xl border-none"
@@ -2307,7 +2294,7 @@ export default function App() {
                 ) : (
                   <div className="text-center p-8 space-y-2 text-gray-500">
                     <Film size={40} className="mx-auto opacity-30 text-blue-400" />
-                    <p className="text-xs">Paste full YouTube movie link above to stream simultaneously.</p>
+                    <p className="text-xs">Paste YouTube URL above to stream simultaneously.</p>
                   </div>
                 )
               )}
