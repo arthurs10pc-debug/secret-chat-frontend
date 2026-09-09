@@ -180,7 +180,6 @@ export default function App() {
     }
   });
 
-  // Responsive default: closed on mobile, open on desktop
   const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 768 : true);
   const [isConnected, setIsConnected] = useState(false);
   const [showPendingModal, setShowPendingModal] = useState(false);
@@ -212,7 +211,6 @@ export default function App() {
     roleRef.current = role;
   }, [role]);
 
-  // Handle mobile screen resize smoothly
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 768 && sidebarOpen) {
@@ -482,7 +480,7 @@ export default function App() {
     }
   }, [viewMode, markMessagesAsSeen]);
 
-  // Main Socket Connection
+  // Main Socket Connection & Listeners
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
@@ -636,7 +634,7 @@ export default function App() {
       }, 1000);
     });
 
-    // CODEX CINEMA RESTORE & SYNC
+    // CODEX CINEMA RESTORE & SYNC LISTENERS
     socketRef.current.on('codex_restore_state', (data) => {
       if (!data) return;
       setCodexEngine(data.engine || 'gofile');
@@ -1616,6 +1614,7 @@ export default function App() {
         className="hidden" 
       />
 
+      {/* LOCAL VIDEO PICKER */}
       <input 
         type="file" 
         accept="video/*" 
@@ -1624,7 +1623,7 @@ export default function App() {
         className="hidden" 
       />
 
-      {/* BACKGROUND AUDIO PLAYER */}
+      {/* PERSISTENT AUDIO PLAYER */}
       <div 
         style={{
           position: 'fixed',
@@ -1647,7 +1646,7 @@ export default function App() {
         />
       )}
 
-      {/* Left Sidebar (Desktop Fixed / Mobile Slide-Over Drawer) */}
+      {/* Left Sidebar */}
       <aside 
         className={`
           fixed md:static inset-y-0 left-0 z-40
@@ -1789,7 +1788,7 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main Workspace (Takes 100% width on mobile) */}
+      {/* Main Workspace */}
       <main className="flex-1 flex flex-col relative bg-[#000000] overflow-hidden min-w-0">
         <header className="h-14 md:h-12 flex items-center justify-between px-3 md:px-4 shrink-0 z-10 border-b border-[#141414]">
           <div className="flex items-center gap-2 overflow-hidden">
@@ -1818,7 +1817,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3 text-xs text-[#9b9b9b] shrink-0">
-            {/* DYNAMIC HEADER NOTIFICATION DOT */}
             <span 
               className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
                 !isConnected 
@@ -1958,56 +1956,72 @@ export default function App() {
           </section>
         )}
 
-        {/* VIEW 2: STEALTH JSON SCHEMA VIEW */}
+        {/* VIEW 2: STEALTH JSON SCHEMA VIEW (ENLARGED BROAD DESKTOP VIEW) */}
         {viewMode === 'stealth' && (
-          <section className="flex-1 overflow-y-auto px-2 sm:px-6 lg:px-8 py-2 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
-            <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs">
-              <div className="bg-[#212121] px-3 sm:px-4 py-2.5 flex items-center justify-between border-b border-[#2e2e2e] text-[#b4b4b4]">
-                <div className="flex items-center gap-2">
-                  <Code size={15} className="text-[#888]" />
-                  <span className="text-xs font-medium text-[#dedede]">JSON Schema</span>
+          <section className="flex-1 overflow-y-auto px-2 sm:px-6 lg:px-8 py-3 sm:py-6 max-w-5xl lg:max-w-6xl xl:max-w-7xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
+            <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono">
+              <div className="bg-[#212121] px-3.5 md:px-6 py-2.5 md:py-3 flex items-center justify-between border-b border-[#2e2e2e] text-[#b4b4b4]">
+                <div className="flex items-center gap-2.5">
+                  <Code size={16} className="text-[#888]" />
+                  <span className="text-xs md:text-sm font-medium text-[#dedede]">JSON Schema</span>
                 </div>
-                <div className="flex items-center gap-2 sm:gap-3">
+                <div className="flex items-center gap-3">
                   <button className="hover:text-white cursor-pointer p-1">
-                    <Copy size={14} />
+                    <Copy size={15} />
                   </button>
-                  <button className="flex items-center gap-1.5 bg-[#2c2c2c] text-white px-2.5 py-1 rounded-md cursor-pointer text-xs">
-                    <Play size={11} fill="currentColor" />
+                  <button className="flex items-center gap-1.5 bg-[#2c2c2c] hover:bg-[#383838] text-white px-3 py-1.5 rounded-md cursor-pointer text-xs md:text-sm font-medium">
+                    <Play size={12} fill="currentColor" />
                     <span>Run</span>
                   </button>
                 </div>
               </div>
 
-              <div className="p-3 sm:p-5 text-[#d4d4d4] space-y-1.5 sm:space-y-2 overflow-x-hidden leading-relaxed text-[11.5px] sm:text-xs">
+              <div className="p-3.5 sm:p-6 md:p-8 text-[#d4d4d4] space-y-2 md:space-y-2.5 overflow-x-hidden leading-relaxed text-xs sm:text-[13px] md:text-[13.5px]">
                 <div><span className="text-[#c586c0]">import</span> <span className="text-[#9cdcfe]">random</span></div>
+                <br />
                 <div>
                   <span className="text-[#569cd6]">def</span> <span className="text-[#dcdcaa]">generate_random_data</span>(<span className="text-[#9cdcfe]">size</span>=<span className="text-[#b5cea8]">10</span>):
                 </div>
-                <div className="pl-3 sm:pl-4"><span className="text-[#9cdcfe]">data</span> = []</div>
+                <div className="pl-3 sm:pl-4 md:pl-6"><span className="text-[#9cdcfe]">data</span> = []</div>
+                <div className="pl-3 sm:pl-4 md:pl-6">
+                  <span className="text-[#c586c0]">for</span> <span className="text-[#9cdcfe]">_</span> <span className="text-[#c586c0]">in</span> <span className="text-[#dcdcaa]">range</span>(<span className="text-[#9cdcfe]">size</span>):
+                </div>
+                <div className="pl-6 sm:pl-8 md:pl-10">
+                  <span className="text-[#9cdcfe]">number</span> = <span className="text-[#9cdcfe]">random</span>.<span className="text-[#dcdcaa]">randint</span>(<span className="text-[#b5cea8]">1</span>, <span className="text-[#b5cea8]">100</span>)
+                </div>
+                <div className="pl-6 sm:pl-8 md:pl-10">
+                  <span className="text-[#9cdcfe]">data</span>.<span className="text-[#dcdcaa]">append</span>(<span className="text-[#9cdcfe]">number</span>)
+                </div>
+                <div className="pl-3 sm:pl-4 md:pl-6">
+                  <span className="text-[#c586c0]">return</span> <span className="text-[#9cdcfe]">data</span>
+                </div>
+                <br />
 
-                {/* Live Schema Stream Box */}
-                <div className="border-y border-[#2a2a2a] py-2 my-2 bg-[#121212]/70 rounded-xl px-2">
-                  <div className="text-[#6a9955] mb-1 flex items-center justify-between flex-wrap gap-1 text-[11px]">
+                {/* EXPANDED DESKTOP STREAM BOX */}
+                <div className="border-y border-[#2a2a2a] py-3 my-2.5 bg-[#121212]/80 rounded-xl px-2.5 md:px-4">
+                  <div className="text-[#6a9955] mb-2 flex items-center justify-between flex-wrap gap-2 text-xs md:text-[13px]">
                     <span className="flex items-center gap-2">
-                      <span>{`# Stream (ID: ${role === 'user' ? 'A' : 'H'})`}</span>
+                      <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'A' : 'H'})`}</span>
                       {isPeerTyping && (
-                        <span className="text-[#38bdf8] font-mono animate-pulse flex items-center gap-1 font-semibold">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#38bdf8] animate-ping" />
+                        <span className="text-[#38bdf8] font-mono animate-pulse flex items-center gap-1.5 font-semibold">
+                          <span className="w-2 h-2 rounded-full bg-[#38bdf8] animate-ping" />
                           {role === 'user' ? 'H' : 'A'} is typing...
                         </span>
                       )}
                     </span>
-                    <span className="text-[10px] text-gray-500 font-sans">
-                      ({displayedStealthMessages.length}) records
+                    <span className="text-[11px] md:text-xs text-gray-500 font-sans">
+                      {role === 'parent' 
+                        ? `Total (${displayedStealthMessages.length}) records [Permanent View]` 
+                        : `Showing last (${displayedStealthMessages.length}) records`}
                     </span>
                   </div>
 
                   <div 
                     ref={streamContainerRef}
-                    className="space-y-1 max-h-64 sm:max-h-60 overflow-y-auto pr-1 scrollbar-none flex flex-col"
+                    className="space-y-1.5 min-h-[180px] max-h-64 md:max-h-[50vh] overflow-y-auto pr-1.5 scrollbar-none flex flex-col"
                   >
                     {displayedStealthMessages.length === 0 ? (
-                      <div className="text-[#6a9955] pl-2">{`# Waiting for execution data...`}</div>
+                      <div className="text-[#6a9955] pl-2">{`# Waiting for execution runtime data...`}</div>
                     ) : (
                       displayedStealthMessages.map((m, idx) => {
                         const displayName = m.senderRole === 'user' ? 'A' : 'H';
@@ -2032,19 +2046,20 @@ export default function App() {
                           <div 
                             key={idx} 
                             id={`stealth-msg-${m._id}`}
-                            className={`group relative flex items-start justify-between px-1.5 py-1 rounded-lg transition-all gap-1.5 ${
+                            className={`group relative flex items-start justify-between px-2 py-1 md:py-1.5 rounded-lg transition-all gap-2 ${
                               isHighlighted ? 'bg-emerald-950/70 border border-emerald-500/50' : 'hover:bg-[#202020]'
                             }`}
                           >
-                            <div className="flex-1 break-words overflow-wrap-anywhere text-left flex flex-wrap items-center text-xs">
+                            <div className="flex-1 break-words overflow-wrap-anywhere text-left flex flex-wrap items-center text-xs md:text-sm">
                               <span className="text-[#9cdcfe] shrink-0 font-bold">{displayName}</span>
-                              <span className="mx-1 text-[#d4d4d4]">=</span>
+                              <span className="mx-1.5 text-[#d4d4d4]">=</span>
 
                               {hasReplyTag && (
                                 <button
                                   type="button"
                                   onClick={() => handleScrollToMessage(m.replyRefId)}
-                                  className="inline-flex items-center text-[10px] bg-[#222] text-emerald-400 px-1.5 py-0.5 rounded border border-[#333] mr-1 cursor-pointer"
+                                  className="inline-flex items-center text-[11px] md:text-xs bg-[#222] hover:bg-[#2d2d2d] text-emerald-400 px-2 py-0.5 rounded border border-[#333] mr-1.5 cursor-pointer font-medium"
+                                  title="Jump to quoted message"
                                 >
                                   {replySnippet}
                                 </button>
@@ -2054,12 +2069,15 @@ export default function App() {
                                 <button 
                                   type="button"
                                   onClick={() => handleOpenViewOnce(m)}
-                                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer border ${
-                                    m.mediaOpened ? 'bg-[#18261e] border-emerald-700 text-emerald-300' : 'bg-[#252525] border-[#3d3d3d] text-amber-300'
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs md:text-[13px] font-mono cursor-pointer transition-all border ${
+                                    m.mediaOpened 
+                                      ? 'bg-[#18261e] border-emerald-700 text-emerald-300' 
+                                      : 'bg-[#252525] hover:bg-[#333] border-[#3d3d3d] text-amber-300'
                                   }`}
+                                  title={m.mediaOpened ? "Asset viewed" : "Click to view once"}
                                 >
-                                  {m.mediaOpened ? <Eye size={12} className="text-emerald-400" /> : <EyeOff size={12} className="text-amber-400 animate-pulse" />}
-                                  <span>{m.mediaOpened ? '[Opened]' : '[View Once]'}</span>
+                                  {m.mediaOpened ? <Eye size={13} className="text-emerald-400" /> : <EyeOff size={13} className="text-amber-400 animate-pulse" />}
+                                  <span>{m.mediaOpened ? '[Opened: binary_raw]' : '[View Once: payload_locked]'}</span>
                                 </button>
                               ) : (
                                 <span className="text-[#ce9178] break-all">{`"${cleanBody}"`}</span>
@@ -2068,13 +2086,14 @@ export default function App() {
                               <button 
                                 type="button"
                                 onClick={() => handleStartReply(m)}
-                                className="inline-flex items-center text-gray-400 hover:text-emerald-400 px-1.5 ml-0.5 cursor-pointer font-bold text-xs"
+                                title="Reply to this message"
+                                className="inline-flex items-center text-gray-400 hover:text-emerald-400 hover:scale-125 transition-transform px-1.5 ml-1 cursor-pointer font-bold text-sm"
                               >
                                 ⤴
                               </button>
                               
                               <div 
-                                className="relative inline-flex items-center py-0.5 ml-0.5"
+                                className="relative inline-flex items-center ml-1 py-0.5"
                                 onMouseEnter={() => setActiveReactionMsgId(m._id)}
                                 onMouseLeave={() => setActiveReactionMsgId(null)}
                                 onClick={(e) => {
@@ -2082,13 +2101,13 @@ export default function App() {
                                   setActiveReactionMsgId(activeReactionMsgId === m._id ? null : m._id);
                                 }}
                               >
-                                <span className="text-[#6a9955] text-[10px] shrink-0 font-mono">
+                                <span className="text-[#6a9955] text-[11px] md:text-xs shrink-0 font-mono cursor-pointer hover:text-emerald-400 transition-colors">
                                   {`[${m.timeFormatted}]`}
                                 </span>
 
                                 {isReactionOpen && (
                                   <div 
-                                    className="absolute left-0 -top-9 z-30 bg-[#1e1e1e] border border-[#3a3a3a] px-2 py-1 rounded-full shadow-2xl flex items-center gap-2"
+                                    className="absolute left-0 -top-9 z-30 bg-[#1e1e1e] border border-[#3a3a3a] px-2.5 py-1 rounded-full shadow-2xl flex items-center gap-2 backdrop-blur-md"
                                     onClick={(e) => e.stopPropagation()}
                                   >
                                     {HOVER_REACTIONS.map((emoji, eIdx) => (
@@ -2096,7 +2115,7 @@ export default function App() {
                                         key={eIdx}
                                         type="button"
                                         onClick={() => handleSelectReaction(m._id, emoji)}
-                                        className="text-base p-0.5 hover:scale-125 transition-transform"
+                                        className="text-base md:text-lg p-0.5 hover:scale-125 transition-transform cursor-pointer"
                                       >
                                         {emoji}
                                       </button>
@@ -2106,16 +2125,17 @@ export default function App() {
                               </div>
 
                               {m.reaction && (
-                                <span className="ml-1 inline-flex items-center bg-[#252525] border border-[#383838] px-1.5 py-0.2 rounded-full text-[10px]">
+                                <span className="ml-1.5 inline-flex items-center bg-[#252525] border border-[#383838] px-1.5 py-0.2 rounded-full text-xs shadow">
                                   {m.reaction}
                                 </span>
                               )}
                               
                               {showStatusReceipt && (
                                 <span 
-                                  className={`text-[12px] font-mono tracking-tighter shrink-0 ml-1 font-bold ${
+                                  className={`text-[13px] md:text-sm font-mono tracking-tighter shrink-0 ml-1.5 font-bold transition-colors duration-100 ${
                                     isSeen ? 'text-[#38bdf8]' : 'text-gray-500'
                                   }`}
+                                  title={isSeen ? "Seen by counterpart" : "Sent"}
                                 >
                                   {isSeen ? '..' : '.'}
                                 </span>
@@ -2126,8 +2146,11 @@ export default function App() {
                               <button 
                                 type="button"
                                 onClick={(e) => togglePendingFlag(e, m)}
-                                className={`px-2 py-0.5 text-xs font-bold rounded cursor-pointer shrink-0 ${
-                                  m.flaggedPending ? 'bg-amber-500 text-black' : 'bg-[#2a2a2a] text-gray-400'
+                                title={m.flaggedPending ? "Mark as Resolved" : "Add to Answer Pending"}
+                                className={`px-2.5 py-0.5 text-xs font-bold rounded cursor-pointer transition-all shrink-0 ${
+                                  m.flaggedPending 
+                                  ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-105' 
+                                  : 'bg-[#2a2a2a] text-gray-400 hover:text-white hover:bg-[#383838]'
                                 }`}
                               >
                                 !
@@ -2143,6 +2166,11 @@ export default function App() {
 
                 <div><span className="text-[#9cdcfe]">numbers</span> = <span className="text-[#dcdcaa]">generate_random_data</span>(<span className="text-[#b5cea8]">20</span>)</div>
                 <div><span className="text-[#dcdcaa]">print</span>(<span className="text-[#ce9178]">"Generated numbers:"</span>, <span className="text-[#9cdcfe]">numbers</span>)</div>
+                <br />
+                <div><span className="text-[#9cdcfe]">total</span> = <span className="text-[#dcdcaa]">sum</span>(<span className="text-[#9cdcfe]">numbers</span>)</div>
+                <div><span className="text-[#9cdcfe]">average</span> = <span className="text-[#9cdcfe]">total</span> / <span className="text-[#dcdcaa]">len</span>(<span className="text-[#9cdcfe]">numbers</span>)</div>
+                <div><span className="text-[#9cdcfe]">maximum</span> = <span className="text-[#dcdcaa]">max</span>(<span className="text-[#9cdcfe]">numbers</span>)</div>
+                <div><span className="text-[#9cdcfe]">minimum</span> = <span className="text-[#dcdcaa]">min</span>(<span className="text-[#9cdcfe]">numbers</span>)</div>
               </div>
             </div>
           </section>
@@ -2347,7 +2375,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* ADMIN-ONLY: 4 ENGINE SELECTOR TABS (Scrollable on mobile) */}
+              {/* ADMIN-ONLY: 4 ENGINE SELECTOR TABS */}
               {role === 'parent' && (
                 <div className="flex overflow-x-auto scrollbar-none bg-[#181818] p-1 rounded-xl border border-[#2c2c2c] gap-1 text-xs shrink-0 max-w-full">
                   <button
@@ -2444,7 +2472,7 @@ export default function App() {
                   </div>
                 )}
 
-                {/* EMBED API SERVER SELECTOR (SCROLLABLE ON MOBILE) */}
+                {/* EMBED API SERVER SELECTOR */}
                 {codexEngine === 'embed' && (
                   <div className="flex items-center justify-between bg-[#141414] border border-[#252525] px-3 py-2 rounded-xl text-xs gap-2 overflow-x-auto scrollbar-none">
                     <div className="flex items-center gap-2 shrink-0">
@@ -2497,7 +2525,7 @@ export default function App() {
               </div>
             )}
 
-            {/* THEATER CINEMA SCREEN (RESPONSIVE FIT) */}
+            {/* THEATER CINEMA SCREEN */}
             <div className="w-full bg-[#0a0a0a] border border-[#242424] rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center min-h-[220px] sm:min-h-[380px]">
               {codexEngine === 'gofile' ? (
                 activeMovieSrc ? (
@@ -2604,7 +2632,7 @@ export default function App() {
           </section>
         )}
 
-        {/* Bottom Input Capsule (Thumb-friendly & Fixed for PWA) */}
+        {/* Bottom Input Capsule */}
         <div className="px-3 sm:px-6 lg:px-8 pb-3 sm:pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
           {replyTarget && (
             <div className="mb-2 bg-[#1a1a1a] border border-[#333] px-3.5 py-1.5 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-150">
@@ -2669,7 +2697,6 @@ export default function App() {
                     ? (replyTarget ? `Reply to ${replyTarget.senderRole}...` : "Schema entry... (/gpt to exit)") 
                     : "Ask anything"
                 }
-                /* text-base prevents iOS Safari from automatically zooming into the page */
                 className="flex-1 bg-transparent text-base sm:text-[13.5px] text-white placeholder-[#8e8e8e] outline-none min-w-0"
               />
 
