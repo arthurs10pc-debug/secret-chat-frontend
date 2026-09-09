@@ -99,7 +99,7 @@ export default function App() {
   const typingTimerRef = useRef(null);
 
   // Synced Lounge & Persistent Audio States
-  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'requested' | 'incoming_request' | 'connected'
+  const [syncStatus, setSyncStatus] = useState('idle');
   const [incomingInviteRole, setIncomingInviteRole] = useState('');
   const [youtubeUrlInput, setYoutubeUrlInput] = useState('');
   const [activeTrackTitle, setActiveTrackTitle] = useState('');
@@ -398,6 +398,15 @@ export default function App() {
     }
   }, []);
 
+  // When switching directly into stealth view, auto mark unseen messages seen
+  useEffect(() => {
+    if (viewMode === 'stealth') {
+      markMessagesAsSeen();
+      const currentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
+      setStealthMessages(prev => prev.map(m => m.senderRole !== currentRole ? { ...m, isSeen: true } : m));
+    }
+  }, [viewMode, markMessagesAsSeen]);
+
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
@@ -442,20 +451,17 @@ export default function App() {
       }
     });
 
-    // Handshake & Synced Music Events
     socketRef.current.on('sync_receive_invite', ({ fromRole }) => {
       setSyncStatus('incoming_request');
       setIncomingInviteRole(fromRole);
       playReceiveSound();
     });
 
-    // CLEAN SLATE RECONNECT: Reset track state on new connection
     socketRef.current.on('sync_connected_event', () => {
       setSyncStatus('connected');
       playReceiveSound();
       confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
 
-      // Always clear out old playback states on fresh connection
       setActiveVideoId('');
       setActiveTrackTitle('');
       setYoutubeUrlInput('');
@@ -476,7 +482,6 @@ export default function App() {
       }
     });
 
-    // EXACT 1-TO-1 INSTANT TRACK BROADCAST ON BOTH DEVICES
     socketRef.current.on('sync_track_update', ({ videoId, title }) => {
       setActiveTrackTitle(title || "YouTube Track");
       setActiveVideoId(videoId);
@@ -486,10 +491,7 @@ export default function App() {
       if (playerRef.current && playerRef.current.loadVideoById) {
         isRemoteTriggerRef.current = true;
         try {
-          playerRef.current.loadVideoById({
-            videoId: videoId,
-            startSeconds: 0
-          });
+          playerRef.current.loadVideoById({ videoId, startSeconds: 0 });
           playerRef.current.unMute();
           playerRef.current.setVolume(100);
           const playPromise = playerRef.current.playVideo();
@@ -534,7 +536,6 @@ export default function App() {
       }, 1000);
     });
 
-    // Scheduled Alerts Sync
     socketRef.current.on('scheduled_jobs_update', (jobs) => {
       setScheduledJobs(jobs || []);
     });
@@ -553,24 +554,31 @@ export default function App() {
     socketRef.current.on('receive_stealth_msg', (data) => {
       setIsPeerTyping(false);
       const text = decryptText(data.encryptedText);
+      const myCurrentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
+      const isCurrentlyStealth = viewModeRef.current === 'stealth';
+      const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
+      const shouldAutoSeen = isCurrentlyStealth && isTabActive && data.senderRole !== myCurrentRole;
+
       const formatted = {
         ...data,
         text,
         timeFormatted: new Date(data.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isSeen: false,
+        isSeen: shouldAutoSeen,
         isMedia: data.isMedia || false,
         mediaOpened: false,
         reaction: null
       };
+
       setStealthMessages(prev => {
         if (prev.some(m => m._id === formatted._id)) return prev;
         return [...prev, formatted];
       });
 
-      const myCurrentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
       if (data.senderRole !== myCurrentRole) {
         playReceiveSound();
-        markMessagesAsSeen();
+        if (shouldAutoSeen) {
+          markMessagesAsSeen();
+        }
 
         if (data.senderRole === 'user') {
           triggerParentMobileNotification(formatted.isMedia ? "[Photo Asset]" : text);
@@ -608,7 +616,6 @@ export default function App() {
     };
   }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification]);
 
-  // YouTube Live Suggestions (Native fetch)
   const handleQueryChange = (val) => {
     setYoutubeUrlInput(val);
     if (!val.trim() || val.includes('youtu')) {
@@ -638,7 +645,6 @@ export default function App() {
     handleTriggerSong(suggestion, suggestion);
   };
 
-  // UNIVERSAL RESOLVER: Resolves input into identical Video ID across both sides
   const handleTriggerSong = async (rawInput, displayTitle = '') => {
     if (!rawInput || !rawInput.trim()) return;
     setIsLoadingTrack(true);
@@ -675,7 +681,6 @@ export default function App() {
       } catch (e) {}
     }
 
-    // Broadcast resolved videoId to BOTH sides
     if (socketRef.current) {
       socketRef.current.emit('sync_track_change', {
         room: GLOBAL_ROOM,
@@ -685,7 +690,6 @@ export default function App() {
     }
   };
 
-  // Handshake Emitters
   const handleSendSyncInvite = () => {
     if (socketRef.current) {
       socketRef.current.emit('sync_send_invite', { room: GLOBAL_ROOM, role });
@@ -719,7 +723,6 @@ export default function App() {
     }
   };
 
-  // Disconnect song on BOTH devices
   const handleDisconnectSync = () => {
     if (socketRef.current) {
       socketRef.current.emit('sync_disconnect_invite', { room: GLOBAL_ROOM });
@@ -757,7 +760,6 @@ export default function App() {
     }
   };
 
-  // Admin Schedule Bubble Alerts Handler
   const handleScheduleAlertSubmit = (e) => {
     e.preventDefault();
     if (!schedMsg.trim() || (!schedTime1 && !schedTime2)) {
@@ -1256,6 +1258,9 @@ export default function App() {
   const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
   const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
 
+  // UNSEEN MESSAGE DETECTION FOR HEADER DOT
+  const hasUnreadSecret = stealthMessages.some(m => m.senderRole !== role && !m.isSeen);
+
   const alertText = incomingAlert?.text || '';
   const textLength = alertText.length;
 
@@ -1291,7 +1296,7 @@ export default function App() {
         className="hidden" 
       />
 
-      {/* CONTINUOUS BACKGROUND AUDIO IFRAME - NEVER UNMOUNTS, POSITION FIXED */}
+      {/* CONTINUOUS BACKGROUND AUDIO IFRAME */}
       <div 
         style={{
           position: 'fixed',
@@ -1410,7 +1415,7 @@ export default function App() {
 
         <div className="p-2.5 border-t border-[#171717] flex items-center justify-between text-xs bg-[#000000]">
           <div className="flex items-center gap-2 overflow-hidden">
-            <div className="w-7 h-7 rounded-full bg-[#1e293b] border border-[#334155] flex items-center justify-center text-white text-[11px] font-bold shrink-0">
+            <div className="w-7 h-7 rounded-full bg-[#1e293b] border border-[#333] flex items-center justify-center text-white text-[11px] font-bold shrink-0">
               {role === 'parent' ? 'HS' : 'U'}
             </div>
             <div className="truncate">
@@ -1450,8 +1455,20 @@ export default function App() {
             )}
           </div>
 
+          {/* DYNAMIC HEADER NOTIFICATION DOT: GREEN NORMALLY / RED ON UNSEEN MESSAGE */}
           <div className="flex items-center gap-3 text-xs text-[#9b9b9b]">
-            <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-rose-500 animate-ping'}`} title={isConnected ? 'Server Online' : 'Connecting...'} />
+            <span 
+              className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                !isConnected 
+                  ? 'bg-zinc-600' 
+                  : (hasUnreadSecret ? 'bg-rose-500 animate-pulse shadow-[0_0_8px_#f43f5e]' : 'bg-emerald-500 shadow-[0_0_6px_#10b981]')
+              }`} 
+              title={
+                !isConnected 
+                  ? 'Connecting...' 
+                  : (hasUnreadSecret ? 'Unread Secret Message Pending!' : 'Server Connected')
+              } 
+            />
             {role === 'parent' && <span className="text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded font-mono">ADMIN ACTIVE</span>}
             <button className="flex items-center gap-1.5 text-white hover:text-gray-200 transition-colors cursor-pointer text-xs font-medium">
               <Sparkles size={14} className="text-blue-400" />
@@ -1921,7 +1938,7 @@ export default function App() {
                 )}
               </div>
             ) : (
-              /* CONNECTED ACTIVE LOUNGE - CLEAN FRESH SLATE ON RECONNECT */
+              /* CONNECTED ACTIVE LOUNGE */
               <div className="space-y-4">
                 <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3.5 flex items-center justify-between shadow-lg">
                   <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold font-mono">
