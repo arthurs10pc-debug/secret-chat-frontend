@@ -1956,60 +1956,60 @@ export default function App() {
           </section>
         )}
 
-        {/* VIEW 2: STEALTH JSON SCHEMA VIEW (ENLARGED BROAD DESKTOP VIEW) */}
+        {/* VIEW 2: STEALTH JSON SCHEMA VIEW (MEDIUM & BALANCED SCREEN SIZE) */}
         {viewMode === 'stealth' && (
-          <section className="flex-1 overflow-y-auto px-2 sm:px-6 lg:px-8 py-3 sm:py-6 max-w-5xl lg:max-w-6xl xl:max-w-7xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
-            <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono">
-              <div className="bg-[#212121] px-3.5 md:px-6 py-2.5 md:py-3 flex items-center justify-between border-b border-[#2e2e2e] text-[#b4b4b4]">
-                <div className="flex items-center gap-2.5">
-                  <Code size={16} className="text-[#888]" />
-                  <span className="text-xs md:text-sm font-medium text-[#dedede]">JSON Schema</span>
+          <section className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
+            <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs md:text-[12.5px]">
+              <div className="bg-[#212121] px-4 md:px-5 py-2.5 md:py-3 flex items-center justify-between border-b border-[#2e2e2e] text-[#b4b4b4]">
+                <div className="flex items-center gap-2">
+                  <Code size={15} className="text-[#888]" />
+                  <span className="text-xs md:text-[13px] font-medium text-[#dedede]">JSON Schema</span>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5">
                   <button className="hover:text-white cursor-pointer p-1">
-                    <Copy size={15} />
+                    <Copy size={14} />
                   </button>
-                  <button className="flex items-center gap-1.5 bg-[#2c2c2c] hover:bg-[#383838] text-white px-3 py-1.5 rounded-md cursor-pointer text-xs md:text-sm font-medium">
-                    <Play size={12} fill="currentColor" />
+                  <button className="flex items-center gap-1.5 bg-[#2c2c2c] hover:bg-[#383838] text-white px-2.5 py-1 rounded-md cursor-pointer text-xs font-medium">
+                    <Play size={11} fill="currentColor" />
                     <span>Run</span>
                   </button>
                 </div>
               </div>
 
-              <div className="p-3.5 sm:p-6 md:p-8 text-[#d4d4d4] space-y-2 md:space-y-2.5 overflow-x-hidden leading-relaxed text-xs sm:text-[13px] md:text-[13.5px]">
+              <div className="p-4 sm:p-6 text-[#d4d4d4] space-y-2 overflow-x-hidden leading-relaxed text-[12px] md:text-[12.5px]">
                 <div><span className="text-[#c586c0]">import</span> <span className="text-[#9cdcfe]">random</span></div>
                 <br />
                 <div>
                   <span className="text-[#569cd6]">def</span> <span className="text-[#dcdcaa]">generate_random_data</span>(<span className="text-[#9cdcfe]">size</span>=<span className="text-[#b5cea8]">10</span>):
                 </div>
-                <div className="pl-3 sm:pl-4 md:pl-6"><span className="text-[#9cdcfe]">data</span> = []</div>
-                <div className="pl-3 sm:pl-4 md:pl-6">
+                <div className="pl-3 sm:pl-4"><span className="text-[#9cdcfe]">data</span> = []</div>
+                <div className="pl-3 sm:pl-4">
                   <span className="text-[#c586c0]">for</span> <span className="text-[#9cdcfe]">_</span> <span className="text-[#c586c0]">in</span> <span className="text-[#dcdcaa]">range</span>(<span className="text-[#9cdcfe]">size</span>):
                 </div>
-                <div className="pl-6 sm:pl-8 md:pl-10">
+                <div className="pl-6 sm:pl-8">
                   <span className="text-[#9cdcfe]">number</span> = <span className="text-[#9cdcfe]">random</span>.<span className="text-[#dcdcaa]">randint</span>(<span className="text-[#b5cea8]">1</span>, <span className="text-[#b5cea8]">100</span>)
                 </div>
-                <div className="pl-6 sm:pl-8 md:pl-10">
+                <div className="pl-6 sm:pl-8">
                   <span className="text-[#9cdcfe]">data</span>.<span className="text-[#dcdcaa]">append</span>(<span className="text-[#9cdcfe]">number</span>)
                 </div>
-                <div className="pl-3 sm:pl-4 md:pl-6">
+                <div className="pl-3 sm:pl-4">
                   <span className="text-[#c586c0]">return</span> <span className="text-[#9cdcfe]">data</span>
                 </div>
                 <br />
 
-                {/* EXPANDED DESKTOP STREAM BOX */}
-                <div className="border-y border-[#2a2a2a] py-3 my-2.5 bg-[#121212]/80 rounded-xl px-2.5 md:px-4">
-                  <div className="text-[#6a9955] mb-2 flex items-center justify-between flex-wrap gap-2 text-xs md:text-[13px]">
+                {/* BALANCED MEDIUM STREAM BOX */}
+                <div className="border-y border-[#2a2a2a] py-2.5 my-2 bg-[#121212]/80 rounded-xl px-2.5 md:px-3.5">
+                  <div className="text-[#6a9955] mb-1.5 flex items-center justify-between flex-wrap gap-2 text-xs">
                     <span className="flex items-center gap-2">
                       <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'A' : 'H'})`}</span>
                       {isPeerTyping && (
                         <span className="text-[#38bdf8] font-mono animate-pulse flex items-center gap-1.5 font-semibold">
-                          <span className="w-2 h-2 rounded-full bg-[#38bdf8] animate-ping" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#38bdf8] animate-ping" />
                           {role === 'user' ? 'H' : 'A'} is typing...
                         </span>
                       )}
                     </span>
-                    <span className="text-[11px] md:text-xs text-gray-500 font-sans">
+                    <span className="text-[11px] text-gray-500 font-sans">
                       {role === 'parent' 
                         ? `Total (${displayedStealthMessages.length}) records [Permanent View]` 
                         : `Showing last (${displayedStealthMessages.length}) records`}
@@ -2018,7 +2018,7 @@ export default function App() {
 
                   <div 
                     ref={streamContainerRef}
-                    className="space-y-1.5 min-h-[180px] max-h-64 md:max-h-[50vh] overflow-y-auto pr-1.5 scrollbar-none flex flex-col"
+                    className="space-y-1 max-h-60 sm:max-h-64 overflow-y-auto pr-1 scrollbar-none flex flex-col"
                   >
                     {displayedStealthMessages.length === 0 ? (
                       <div className="text-[#6a9955] pl-2">{`# Waiting for execution runtime data...`}</div>
@@ -2046,19 +2046,19 @@ export default function App() {
                           <div 
                             key={idx} 
                             id={`stealth-msg-${m._id}`}
-                            className={`group relative flex items-start justify-between px-2 py-1 md:py-1.5 rounded-lg transition-all gap-2 ${
+                            className={`group relative flex items-start justify-between px-2 py-1 rounded-lg transition-all gap-2 ${
                               isHighlighted ? 'bg-emerald-950/70 border border-emerald-500/50' : 'hover:bg-[#202020]'
                             }`}
                           >
-                            <div className="flex-1 break-words overflow-wrap-anywhere text-left flex flex-wrap items-center text-xs md:text-sm">
+                            <div className="flex-1 break-words overflow-wrap-anywhere text-left flex flex-wrap items-center text-xs">
                               <span className="text-[#9cdcfe] shrink-0 font-bold">{displayName}</span>
-                              <span className="mx-1.5 text-[#d4d4d4]">=</span>
+                              <span className="mx-1 text-[#d4d4d4]">=</span>
 
                               {hasReplyTag && (
                                 <button
                                   type="button"
                                   onClick={() => handleScrollToMessage(m.replyRefId)}
-                                  className="inline-flex items-center text-[11px] md:text-xs bg-[#222] hover:bg-[#2d2d2d] text-emerald-400 px-2 py-0.5 rounded border border-[#333] mr-1.5 cursor-pointer font-medium"
+                                  className="inline-flex items-center text-[10px] bg-[#222] hover:bg-[#2d2d2d] text-emerald-400 px-1.5 py-0.5 rounded border border-[#333] mr-1.5 cursor-pointer font-medium"
                                   title="Jump to quoted message"
                                 >
                                   {replySnippet}
@@ -2069,14 +2069,14 @@ export default function App() {
                                 <button 
                                   type="button"
                                   onClick={() => handleOpenViewOnce(m)}
-                                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs md:text-[13px] font-mono cursor-pointer transition-all border ${
+                                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer transition-all border ${
                                     m.mediaOpened 
                                       ? 'bg-[#18261e] border-emerald-700 text-emerald-300' 
                                       : 'bg-[#252525] hover:bg-[#333] border-[#3d3d3d] text-amber-300'
                                   }`}
                                   title={m.mediaOpened ? "Asset viewed" : "Click to view once"}
                                 >
-                                  {m.mediaOpened ? <Eye size={13} className="text-emerald-400" /> : <EyeOff size={13} className="text-amber-400 animate-pulse" />}
+                                  {m.mediaOpened ? <Eye size={12} className="text-emerald-400" /> : <EyeOff size={12} className="text-amber-400 animate-pulse" />}
                                   <span>{m.mediaOpened ? '[Opened: binary_raw]' : '[View Once: payload_locked]'}</span>
                                 </button>
                               ) : (
@@ -2087,7 +2087,7 @@ export default function App() {
                                 type="button"
                                 onClick={() => handleStartReply(m)}
                                 title="Reply to this message"
-                                className="inline-flex items-center text-gray-400 hover:text-emerald-400 hover:scale-125 transition-transform px-1.5 ml-1 cursor-pointer font-bold text-sm"
+                                className="inline-flex items-center text-gray-400 hover:text-emerald-400 hover:scale-125 transition-transform px-1 ml-1 cursor-pointer font-bold text-xs"
                               >
                                 ⤴
                               </button>
@@ -2101,13 +2101,13 @@ export default function App() {
                                   setActiveReactionMsgId(activeReactionMsgId === m._id ? null : m._id);
                                 }}
                               >
-                                <span className="text-[#6a9955] text-[11px] md:text-xs shrink-0 font-mono cursor-pointer hover:text-emerald-400 transition-colors">
+                                <span className="text-[#6a9955] text-[10px] shrink-0 font-mono cursor-pointer hover:text-emerald-400 transition-colors">
                                   {`[${m.timeFormatted}]`}
                                 </span>
 
                                 {isReactionOpen && (
                                   <div 
-                                    className="absolute left-0 -top-9 z-30 bg-[#1e1e1e] border border-[#3a3a3a] px-2.5 py-1 rounded-full shadow-2xl flex items-center gap-2 backdrop-blur-md"
+                                    className="absolute left-0 -top-8 z-30 bg-[#1e1e1e] border border-[#3a3a3a] px-2 py-1 rounded-full shadow-2xl flex items-center gap-1.5 backdrop-blur-md"
                                     onClick={(e) => e.stopPropagation()}
                                   >
                                     {HOVER_REACTIONS.map((emoji, eIdx) => (
@@ -2115,7 +2115,7 @@ export default function App() {
                                         key={eIdx}
                                         type="button"
                                         onClick={() => handleSelectReaction(m._id, emoji)}
-                                        className="text-base md:text-lg p-0.5 hover:scale-125 transition-transform cursor-pointer"
+                                        className="text-sm p-0.5 hover:scale-125 transition-transform cursor-pointer"
                                       >
                                         {emoji}
                                       </button>
@@ -2125,14 +2125,14 @@ export default function App() {
                               </div>
 
                               {m.reaction && (
-                                <span className="ml-1.5 inline-flex items-center bg-[#252525] border border-[#383838] px-1.5 py-0.2 rounded-full text-xs shadow">
+                                <span className="ml-1 inline-flex items-center bg-[#252525] border border-[#383838] px-1.5 py-0.2 rounded-full text-[10px] shadow">
                                   {m.reaction}
                                 </span>
                               )}
                               
                               {showStatusReceipt && (
                                 <span 
-                                  className={`text-[13px] md:text-sm font-mono tracking-tighter shrink-0 ml-1.5 font-bold transition-colors duration-100 ${
+                                  className={`text-[12px] font-mono tracking-tighter shrink-0 ml-1 font-bold transition-colors duration-100 ${
                                     isSeen ? 'text-[#38bdf8]' : 'text-gray-500'
                                   }`}
                                   title={isSeen ? "Seen by counterpart" : "Sent"}
@@ -2147,7 +2147,7 @@ export default function App() {
                                 type="button"
                                 onClick={(e) => togglePendingFlag(e, m)}
                                 title={m.flaggedPending ? "Mark as Resolved" : "Add to Answer Pending"}
-                                className={`px-2.5 py-0.5 text-xs font-bold rounded cursor-pointer transition-all shrink-0 ${
+                                className={`px-2 py-0.5 text-xs font-bold rounded cursor-pointer transition-all shrink-0 ${
                                   m.flaggedPending 
                                   ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-105' 
                                   : 'bg-[#2a2a2a] text-gray-400 hover:text-white hover:bg-[#383838]'
@@ -2361,7 +2361,7 @@ export default function App() {
           </section>
         )}
 
-        {/* VIEW 5: CODEX THEATER LOUNGE (STREAM, YOUTUBE, EMBED API, LOCAL FILE) */}
+        {/* VIEW 5: CODEX THEATER LOUNGE */}
         {viewMode === 'codex' && (
           <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-3 sm:space-y-4 scrollbar-none font-sans">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#222] pb-2.5 gap-2">
