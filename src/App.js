@@ -9,7 +9,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video, TerminalSquare
+  Film, Tv, Video, TerminalSquare, AlertTriangle
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -116,6 +116,7 @@ export default function App() {
   const [activeMovieSrc, setActiveMovieSrc] = useState('');
   const [activeMovieYTId, setActiveMovieYTId] = useState('');
   const [isMoviePlaying, setIsMoviePlaying] = useState(false);
+  const [movieError, setMovieError] = useState('');
   const html5VideoRef = useRef(null);
   const isMovieRemoteTriggerRef = useRef(false);
 
@@ -179,7 +180,6 @@ export default function App() {
     roleRef.current = role;
   }, [role]);
 
-  // Load YouTube API
   useEffect(() => {
     if (!window.YT) {
       const tag = document.createElement('script');
@@ -478,7 +478,7 @@ export default function App() {
       }
     });
 
-    // Auto-restore audio state across page refreshes
+    // Auto-restore music state on refresh
     socketRef.current.on('sync_restore_state', (data) => {
       if (!data || !data.connected) return;
       setSyncStatus('connected');
@@ -592,6 +592,7 @@ export default function App() {
     socketRef.current.on('codex_restore_state', (data) => {
       if (!data) return;
       setCodexEngine(data.engine || 'gofile');
+      setMovieError('');
       if (data.engine === 'youtube') {
         setActiveMovieYTId(data.ytId || '');
         setActiveMovieSrc('');
@@ -603,6 +604,7 @@ export default function App() {
 
     socketRef.current.on('codex_movie_load_broadcast', ({ engine, url, ytId }) => {
       setCodexEngine(engine);
+      setMovieError('');
       if (engine === 'gofile') {
         setActiveMovieSrc(url);
         setActiveMovieYTId('');
@@ -721,6 +723,7 @@ export default function App() {
   const handleLoadMovie = (e) => {
     e.preventDefault();
     if (!movieInputUrl.trim()) return;
+    setMovieError('');
 
     if (codexEngine === 'youtube') {
       const vid = extractYouTubeId(movieInputUrl.trim());
@@ -739,14 +742,19 @@ export default function App() {
         });
       }
     } else {
-      setActiveMovieSrc(movieInputUrl.trim());
+      const trimmed = movieInputUrl.trim();
+      if (trimmed.toLowerCase().includes('.mkv')) {
+        setMovieError("Note: .MKV format is not supported by browsers (Chrome/Safari). Video may stay black or lack sound. Please use .MP4 format!");
+      }
+
+      setActiveMovieSrc(trimmed);
       setActiveMovieYTId('');
       setIsMoviePlaying(false);
       if (socketRef.current) {
         socketRef.current.emit('codex_movie_load', {
           room: GLOBAL_ROOM,
           engine: 'gofile',
-          url: movieInputUrl.trim()
+          url: trimmed
         });
       }
     }
@@ -791,7 +799,6 @@ export default function App() {
     }
   };
 
-  // YouTube Autocomplete Suggestions
   const handleQueryChange = (val) => {
     setYoutubeUrlInput(val);
     if (!val.trim() || val.includes('youtu')) {
@@ -1633,6 +1640,7 @@ export default function App() {
             )}
           </div>
 
+          {/* DYNAMIC HEADER NOTIFICATION DOT */}
           <div className="flex items-center gap-3 text-xs text-[#9b9b9b]">
             <span 
               className={`w-2 h-2 rounded-full transition-all duration-300 ${
@@ -2201,7 +2209,7 @@ export default function App() {
           </section>
         )}
 
-        {/* VIEW 5: CODEX THEATER LOUNGE (STREAM & YOUTUBE) */}
+        {/* VIEW 5: CODEX THEATER LOUNGE (ROLE BASED: ADMIN GETS CONTROLS, USER GETS SCREEN ONLY) */}
         {viewMode === 'codex' && (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 max-w-5xl w-full mx-auto space-y-4 scrollbar-none font-sans">
             <div className="flex items-center justify-between border-b border-[#222] pb-3">
@@ -2215,53 +2223,65 @@ export default function App() {
                 </div>
               </div>
 
-              {/* ENGINE SELECTOR TABS: Stream & YouTube */}
-              <div className="flex bg-[#181818] p-1 rounded-xl border border-[#2c2c2c] gap-1 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setCodexEngine('gofile')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-colors cursor-pointer font-medium ${
-                    codexEngine === 'gofile' ? 'bg-[#252525] text-emerald-400 shadow' : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  <Tv size={13} />
-                  <span>Stream</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCodexEngine('youtube')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-colors cursor-pointer font-medium ${
-                    codexEngine === 'youtube' ? 'bg-[#252525] text-blue-400 shadow' : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  <Video size={13} />
-                  <span>YouTube</span>
-                </button>
-              </div>
+              {/* ADMIN-ONLY: ENGINE SELECTOR TABS (Stream & YouTube) */}
+              {role === 'parent' && (
+                <div className="flex bg-[#181818] p-1 rounded-xl border border-[#2c2c2c] gap-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => { setCodexEngine('gofile'); setMovieError(''); }}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-colors cursor-pointer font-medium ${
+                      codexEngine === 'gofile' ? 'bg-[#252525] text-emerald-400 shadow' : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    <Tv size={13} />
+                    <span>Stream</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setCodexEngine('youtube'); setMovieError(''); }}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-colors cursor-pointer font-medium ${
+                      codexEngine === 'youtube' ? 'bg-[#252525] text-blue-400 shadow' : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    <Video size={13} />
+                    <span>YouTube</span>
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* URL INPUT BAR */}
-            <form onSubmit={handleLoadMovie} className="flex gap-2">
-              <input 
-                type="text"
-                value={movieInputUrl}
-                onChange={(e) => setMovieInputUrl(e.target.value)}
-                placeholder={
-                  codexEngine === 'gofile'
-                    ? "Paste direct stream link (MP4 / video URL)..."
-                    : "Paste YouTube URL (e.g. https://www.youtube.com/watch?v=...)"
-                }
-                className="flex-1 bg-[#171717] border border-[#2c2c2c] focus:border-[#444] rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 outline-none font-mono"
-              />
-              <button
-                type="submit"
-                className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0 shadow"
-              >
-                Broadcast
-              </button>
-            </form>
+            {/* ADMIN-ONLY: BROADCAST INPUT BAR */}
+            {role === 'parent' && (
+              <form onSubmit={handleLoadMovie} className="flex gap-2">
+                <input 
+                  type="text"
+                  value={movieInputUrl}
+                  onChange={(e) => setMovieInputUrl(e.target.value)}
+                  placeholder={
+                    codexEngine === 'gofile'
+                      ? "Paste direct stream link (MP4 recommended)..."
+                      : "Paste YouTube watch URL (e.g. https://www.youtube.com/watch?v=...)"
+                  }
+                  className="flex-1 bg-[#171717] border border-[#2c2c2c] focus:border-[#444] rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 outline-none font-mono"
+                />
+                <button
+                  type="submit"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0 shadow"
+                >
+                  Broadcast
+                </button>
+              </form>
+            )}
 
-            {/* THEATER PLAYER CONTAINER */}
+            {/* ERROR / FORMAT WARNING BANNER */}
+            {movieError && (
+              <div className="bg-amber-950/40 border border-amber-600/40 text-amber-300 p-2.5 rounded-xl text-xs flex items-center gap-2">
+                <AlertTriangle size={16} className="shrink-0 text-amber-400" />
+                <span>{movieError}</span>
+              </div>
+            )}
+
+            {/* THEATER PLAYER SCREEN (BOTH USER & ADMIN CAN WATCH WITH NATIVE PLAY/PAUSE/SEEK/VOLUME) */}
             <div className="w-full bg-[#0a0a0a] border border-[#242424] rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center min-h-[380px]">
               {codexEngine === 'gofile' ? (
                 activeMovieSrc ? (
@@ -2270,16 +2290,24 @@ export default function App() {
                     src={activeMovieSrc}
                     controls
                     playsInline
+                    referrerPolicy="no-referrer"
+                    crossOrigin="anonymous"
                     onPlay={handleHtml5Play}
                     onPause={handleHtml5Pause}
                     onSeeked={handleHtml5Seeked}
-                    className="w-full max-h-[68vh] object-contain rounded-2xl"
+                    onError={() => {
+                      setMovieError("Cannot decode video file. Web browsers (Chrome/Edge/Safari) do NOT support .MKV files. Please use standard .MP4 (H.264/AAC) format.");
+                    }}
+                    className="w-full max-h-[72vh] object-contain rounded-2xl bg-black"
                   />
                 ) : (
                   <div className="text-center p-8 space-y-2 text-gray-500">
                     <Tv size={40} className="mx-auto opacity-30 text-emerald-400" />
-                    <p className="text-xs">No stream link loaded yet.</p>
-                    <p className="text-[11px] text-gray-600">Paste direct video / MP4 link above and click Broadcast</p>
+                    <p className="text-xs">
+                      {role === 'parent' 
+                        ? "Paste direct MP4 link above and click Broadcast" 
+                        : "Waiting for Admin to broadcast stream..."}
+                    </p>
                   </div>
                 )
               ) : (
@@ -2294,7 +2322,11 @@ export default function App() {
                 ) : (
                   <div className="text-center p-8 space-y-2 text-gray-500">
                     <Film size={40} className="mx-auto opacity-30 text-blue-400" />
-                    <p className="text-xs">Paste YouTube URL above to stream simultaneously.</p>
+                    <p className="text-xs">
+                      {role === 'parent' 
+                        ? "Paste YouTube watch link above to stream simultaneously." 
+                        : "Waiting for Admin to broadcast YouTube video..."}
+                    </p>
                   </div>
                 )
               )}
