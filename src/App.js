@@ -9,7 +9,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video, TerminalSquare, AlertTriangle
+  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -68,7 +68,7 @@ export default function App() {
     }
   });
 
-  const [viewMode, setViewMode] = useState('real_gpt'); // 'real_gpt' | 'stealth' | 'images_archive' | 'scheduled' | 'codex'
+  const [viewMode, setViewMode] = useState('real_gpt');
 
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem('stealth_conversations');
@@ -110,14 +110,20 @@ export default function App() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
-  // CODEX THEATER STATES (STREAM & YOUTUBE)
-  const [codexEngine, setCodexEngine] = useState('gofile'); // 'gofile' (Stream) | 'youtube' (YouTube)
+  // CODEX 4-ENGINE THEATER STATES
+  // Engines: 'gofile' (Stream) | 'youtube' | 'embed' (Free API) | 'local' (Local Sync)
+  const [codexEngine, setCodexEngine] = useState('gofile');
   const [movieInputUrl, setMovieInputUrl] = useState('');
   const [activeMovieSrc, setActiveMovieSrc] = useState('');
   const [activeMovieYTId, setActiveMovieYTId] = useState('');
+  const [activeEmbedUrl, setActiveEmbedUrl] = useState('');
+  const [localVideoSrc, setLocalVideoSrc] = useState('');
+  const [localFileName, setLocalFileName] = useState('');
   const [isMoviePlaying, setIsMoviePlaying] = useState(false);
   const [movieError, setMovieError] = useState('');
+  
   const html5VideoRef = useRef(null);
+  const localVideoInputRef = useRef(null);
   const isMovieRemoteTriggerRef = useRef(false);
 
   const playerRef = useRef(null);
@@ -433,7 +439,7 @@ export default function App() {
     }
   }, [viewMode, markMessagesAsSeen]);
 
-  // Main Socket Connection
+  // Main Socket Connection & Listeners
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
@@ -478,7 +484,6 @@ export default function App() {
       }
     });
 
-    // Auto-restore music state on refresh
     socketRef.current.on('sync_restore_state', (data) => {
       if (!data || !data.connected) return;
       setSyncStatus('connected');
@@ -588,7 +593,7 @@ export default function App() {
       }, 1000);
     });
 
-    // Codex Cinema Restore & Sync Listeners
+    // CODEX CINEMA RESTORE & SYNC LISTENERS
     socketRef.current.on('codex_restore_state', (data) => {
       if (!data) return;
       setCodexEngine(data.engine || 'gofile');
@@ -596,29 +601,46 @@ export default function App() {
       if (data.engine === 'youtube') {
         setActiveMovieYTId(data.ytId || '');
         setActiveMovieSrc('');
+        setActiveEmbedUrl('');
+      } else if (data.engine === 'embed') {
+        setActiveEmbedUrl(data.embedUrl || '');
+        setActiveMovieSrc('');
+        setActiveMovieYTId('');
       } else {
         setActiveMovieSrc(data.url || '');
         setActiveMovieYTId('');
+        setActiveEmbedUrl('');
       }
     });
 
-    socketRef.current.on('codex_movie_load_broadcast', ({ engine, url, ytId }) => {
+    socketRef.current.on('codex_movie_load_broadcast', ({ engine, url, ytId, embedUrl }) => {
       setCodexEngine(engine);
       setMovieError('');
       if (engine === 'gofile') {
         setActiveMovieSrc(url);
         setActiveMovieYTId('');
+        setActiveEmbedUrl('');
         setIsMoviePlaying(false);
-      } else {
+      } else if (engine === 'youtube') {
         setActiveMovieYTId(ytId);
         setActiveMovieSrc('');
+        setActiveEmbedUrl('');
         setIsMoviePlaying(true);
+      } else if (engine === 'embed') {
+        setActiveEmbedUrl(embedUrl);
+        setActiveMovieSrc('');
+        setActiveMovieYTId('');
+      } else if (engine === 'local') {
+        // Local mode trigger: keep ready for local file input
+        setActiveMovieSrc('');
+        setActiveMovieYTId('');
+        setActiveEmbedUrl('');
       }
       playReceiveSound();
     });
 
     socketRef.current.on('codex_movie_sync_broadcast', ({ state, currentTime, timestamp }) => {
-      if (codexEngine === 'gofile' && html5VideoRef.current) {
+      if ((codexEngine === 'gofile' || codexEngine === 'local') && html5VideoRef.current) {
         isMovieRemoteTriggerRef.current = true;
         const latency = Math.max(0, (Date.now() - timestamp) / 1000);
         const target = currentTime + (state === 'PLAY' ? latency : 0);
@@ -719,10 +741,9 @@ export default function App() {
     };
   }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification, codexEngine]);
 
-  // Codex Video Controls
+  // CODEX VIDEO CONTROLS (4 MODES)
   const handleLoadMovie = (e) => {
     e.preventDefault();
-    if (!movieInputUrl.trim()) return;
     setMovieError('');
 
     if (codexEngine === 'youtube') {
@@ -733,6 +754,7 @@ export default function App() {
       }
       setActiveMovieYTId(vid);
       setActiveMovieSrc('');
+      setActiveEmbedUrl('');
       setIsMoviePlaying(true);
       if (socketRef.current) {
         socketRef.current.emit('codex_movie_load', {
@@ -741,14 +763,39 @@ export default function App() {
           ytId: vid
         });
       }
+    } else if (codexEngine === 'embed') {
+      let finalEmbed = movieInputUrl.trim();
+      // If user passed pure IMDb ID (e.g. tt0499549)
+      if (finalEmbed.startsWith('tt')) {
+        finalEmbed = `https://vidsrc.to/embed/movie/${finalEmbed}`;
+      }
+      setActiveEmbedUrl(finalEmbed);
+      setActiveMovieSrc('');
+      setActiveMovieYTId('');
+      if (socketRef.current) {
+        socketRef.current.emit('codex_movie_load', {
+          room: GLOBAL_ROOM,
+          engine: 'embed',
+          embedUrl: finalEmbed
+        });
+      }
+    } else if (codexEngine === 'local') {
+      // Local sync broadcast
+      if (socketRef.current) {
+        socketRef.current.emit('codex_movie_load', {
+          room: GLOBAL_ROOM,
+          engine: 'local'
+        });
+      }
     } else {
+      // Direct stream / GoFile URL
       const trimmed = movieInputUrl.trim();
       if (trimmed.toLowerCase().includes('.mkv')) {
-        setMovieError("Note: .MKV format is not supported by browsers (Chrome/Safari). Video may stay black or lack sound. Please use .MP4 format!");
+        setMovieError("Note: .MKV container is not supported by web browsers. Video may lack audio. Please use .MP4 format!");
       }
-
       setActiveMovieSrc(trimmed);
       setActiveMovieYTId('');
+      setActiveEmbedUrl('');
       setIsMoviePlaying(false);
       if (socketRef.current) {
         socketRef.current.emit('codex_movie_load', {
@@ -759,6 +806,21 @@ export default function App() {
       }
     }
     setMovieInputUrl('');
+  };
+
+  const handleSelectLocalFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setMovieError('');
+
+    if (file.name.toLowerCase().endsWith('.mkv')) {
+      setMovieError("Warning: .MKV file selected. Native web players cannot decode AC3/MKV audio. If no sound plays, use an .MP4 file.");
+    }
+
+    const objUrl = URL.createObjectURL(file);
+    setLocalVideoSrc(objUrl);
+    setLocalFileName(file.name);
+    setIsMoviePlaying(false);
   };
 
   const handleHtml5Play = () => {
@@ -1476,6 +1538,15 @@ export default function App() {
         className="hidden" 
       />
 
+      {/* HIDDEN LOCAL VIDEO FILE PICKER */}
+      <input 
+        type="file" 
+        accept="video/*" 
+        ref={localVideoInputRef} 
+        onChange={handleSelectLocalFile}
+        className="hidden" 
+      />
+
       {/* PERSISTENT AUDIO PLAYER */}
       <div 
         style={{
@@ -1547,7 +1618,7 @@ export default function App() {
             <FolderGit2 size={15} className="text-[#9b9b9b]" /> Projects
           </div>
 
-          {/* CODEX TAB - CLEAN WITHOUT PRO BADGE */}
+          {/* CODEX TAB */}
           <div 
             onClick={() => setViewMode('codex')}
             className={`flex items-center gap-2.5 py-1.5 px-2.5 rounded-lg cursor-pointer transition-colors ${viewMode === 'codex' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
@@ -2209,7 +2280,7 @@ export default function App() {
           </section>
         )}
 
-        {/* VIEW 5: CODEX THEATER LOUNGE (ROLE BASED: ADMIN GETS CONTROLS, USER GETS SCREEN ONLY) */}
+        {/* VIEW 5: CODEX THEATER LOUNGE (4 ENGINES: STREAM, YOUTUBE, EMBED API, LOCAL FILE) */}
         {viewMode === 'codex' && (
           <section className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 max-w-5xl w-full mx-auto space-y-4 scrollbar-none font-sans">
             <div className="flex items-center justify-between border-b border-[#222] pb-3">
@@ -2219,61 +2290,110 @@ export default function App() {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-white">Codex</h2>
-                  <p className="text-[11px] text-gray-400">Synchronized media playback</p>
+                  <p className="text-[11px] text-gray-400">Watch Together (Dual Cloud & Local Engine)</p>
                 </div>
               </div>
 
-              {/* ADMIN-ONLY: ENGINE SELECTOR TABS (Stream & YouTube) */}
+              {/* ADMIN-ONLY: 4 ENGINE SELECTOR TABS */}
               {role === 'parent' && (
                 <div className="flex bg-[#181818] p-1 rounded-xl border border-[#2c2c2c] gap-1 text-xs">
                   <button
                     type="button"
                     onClick={() => { setCodexEngine('gofile'); setMovieError(''); }}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-colors cursor-pointer font-medium ${
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-colors cursor-pointer font-medium ${
                       codexEngine === 'gofile' ? 'bg-[#252525] text-emerald-400 shadow' : 'text-gray-400 hover:text-white'
                     }`}
                   >
-                    <Tv size={13} />
+                    <Tv size={12} />
                     <span>Stream</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => { setCodexEngine('youtube'); setMovieError(''); }}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-colors cursor-pointer font-medium ${
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-colors cursor-pointer font-medium ${
                       codexEngine === 'youtube' ? 'bg-[#252525] text-blue-400 shadow' : 'text-gray-400 hover:text-white'
                     }`}
                   >
-                    <Video size={13} />
+                    <Video size={12} />
                     <span>YouTube</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setCodexEngine('embed'); setMovieError(''); }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-colors cursor-pointer font-medium ${
+                      codexEngine === 'embed' ? 'bg-[#252525] text-purple-400 shadow' : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    <Globe size={12} />
+                    <span>Embed API</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setCodexEngine('local'); setMovieError(''); }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-colors cursor-pointer font-medium ${
+                      codexEngine === 'local' ? 'bg-[#252525] text-amber-400 shadow' : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    <HardDrive size={12} />
+                    <span>Local File</span>
                   </button>
                 </div>
               )}
             </div>
 
-            {/* ADMIN-ONLY: BROADCAST INPUT BAR */}
+            {/* ADMIN-ONLY BROADCAST CONTROLS */}
             {role === 'parent' && (
-              <form onSubmit={handleLoadMovie} className="flex gap-2">
-                <input 
-                  type="text"
-                  value={movieInputUrl}
-                  onChange={(e) => setMovieInputUrl(e.target.value)}
-                  placeholder={
-                    codexEngine === 'gofile'
-                      ? "Paste direct stream link (MP4 recommended)..."
-                      : "Paste YouTube watch URL (e.g. https://www.youtube.com/watch?v=...)"
-                  }
-                  className="flex-1 bg-[#171717] border border-[#2c2c2c] focus:border-[#444] rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 outline-none font-mono"
-                />
-                <button
-                  type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0 shadow"
-                >
-                  Broadcast
-                </button>
-              </form>
+              <div className="space-y-2">
+                {codexEngine !== 'local' ? (
+                  <form onSubmit={handleLoadMovie} className="flex gap-2">
+                    <input 
+                      type="text"
+                      value={movieInputUrl}
+                      onChange={(e) => setMovieInputUrl(e.target.value)}
+                      placeholder={
+                        codexEngine === 'gofile'
+                          ? "Paste direct stream link (GoFile / Pixeldrain / HubCloud MP4)..."
+                          : codexEngine === 'youtube'
+                          ? "Paste YouTube movie link (e.g. https://www.youtube.com/watch?v=...)"
+                          : "Enter IMDb ID (e.g. tt0499549) or Free Stream Embed URL..."
+                      }
+                      className="flex-1 bg-[#171717] border border-[#2c2c2c] focus:border-[#444] rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 outline-none font-mono"
+                    />
+                    <button
+                      type="submit"
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0 shadow"
+                    >
+                      Broadcast
+                    </button>
+                  </form>
+                ) : (
+                  <div className="bg-[#141414] border border-[#2c2c2c] p-3.5 rounded-2xl flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-amber-400 block">Local File Zero-Data Mode Active</span>
+                      <span className="text-[11px] text-gray-400">Select your local movie file. Both sides will be millisecond play/pause synchronized!</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => localVideoInputRef.current && localVideoInputRef.current.click()}
+                        className="bg-[#242424] hover:bg-[#333] border border-[#3d3d3d] text-white px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer"
+                      >
+                        {localFileName ? `Change: ${localFileName.substring(0, 15)}...` : "📁 Pick Local Movie"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLoadMovie}
+                        className="bg-amber-600 hover:bg-amber-500 text-black px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
+                      >
+                        Broadcast Mode
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
-            {/* ERROR / FORMAT WARNING BANNER */}
+            {/* FORMAT / CODEC WARNING BANNER */}
             {movieError && (
               <div className="bg-amber-950/40 border border-amber-600/40 text-amber-300 p-2.5 rounded-xl text-xs flex items-center gap-2">
                 <AlertTriangle size={16} className="shrink-0 text-amber-400" />
@@ -2281,7 +2401,7 @@ export default function App() {
               </div>
             )}
 
-            {/* THEATER PLAYER SCREEN (BOTH USER & ADMIN CAN WATCH WITH NATIVE PLAY/PAUSE/SEEK/VOLUME) */}
+            {/* THEATER PLAYER CONTAINER */}
             <div className="w-full bg-[#0a0a0a] border border-[#242424] rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center min-h-[380px]">
               {codexEngine === 'gofile' ? (
                 activeMovieSrc ? (
@@ -2296,7 +2416,7 @@ export default function App() {
                     onPause={handleHtml5Pause}
                     onSeeked={handleHtml5Seeked}
                     onError={() => {
-                      setMovieError("Cannot decode video file. Web browsers (Chrome/Edge/Safari) do NOT support .MKV files. Please use standard .MP4 (H.264/AAC) format.");
+                      setMovieError("Cannot decode video file. Web browsers (Chrome/Safari) do NOT support .MKV files. Please use standard .MP4 (H.264/AAC) format.");
                     }}
                     className="w-full max-h-[72vh] object-contain rounded-2xl bg-black"
                   />
@@ -2310,7 +2430,7 @@ export default function App() {
                     </p>
                   </div>
                 )
-              ) : (
+              ) : codexEngine === 'youtube' ? (
                 activeMovieYTId ? (
                   <iframe 
                     src={`https://www.youtube.com/embed/${activeMovieYTId}?autoplay=1&controls=1&modestbranding=1&rel=0`}
@@ -2327,6 +2447,66 @@ export default function App() {
                         ? "Paste YouTube watch link above to stream simultaneously." 
                         : "Waiting for Admin to broadcast YouTube video..."}
                     </p>
+                  </div>
+                )
+              ) : codexEngine === 'embed' ? (
+                activeEmbedUrl ? (
+                  <iframe 
+                    src={activeEmbedUrl}
+                    title="Codex Free Movie API Embed"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="w-full h-[68vh] rounded-2xl border-none"
+                  />
+                ) : (
+                  <div className="text-center p-8 space-y-2 text-gray-500">
+                    <Globe size={40} className="mx-auto opacity-30 text-purple-400" />
+                    <p className="text-xs">
+                      {role === 'parent' 
+                        ? "Enter IMDb ID (e.g. tt0499549) or free embed link to stream instant web movies." 
+                        : "Waiting for Admin to load Movie Embed API..."}
+                    </p>
+                  </div>
+                )
+              ) : (
+                /* LOCAL FILE SYNC ENGINE */
+                localVideoSrc ? (
+                  <div className="w-full relative flex flex-col items-center">
+                    <video 
+                      ref={html5VideoRef}
+                      src={localVideoSrc}
+                      controls
+                      playsInline
+                      onPlay={handleHtml5Play}
+                      onPause={handleHtml5Pause}
+                      onSeeked={handleHtml5Seeked}
+                      className="w-full max-h-[70vh] object-contain rounded-2xl bg-black"
+                    />
+                    <div className="w-full bg-[#111] p-2 flex items-center justify-between text-[11px] text-gray-400 px-4 font-mono">
+                      <span>📁 Local Active: {localFileName}</span>
+                      <button 
+                        onClick={() => localVideoInputRef.current && localVideoInputRef.current.click()}
+                        className="text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                      >
+                        Choose another file
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center p-8 space-y-3 text-gray-400">
+                    <HardDrive size={40} className="mx-auto opacity-40 text-amber-400" />
+                    <p className="text-xs font-semibold text-white">Local File Sync (Zero Internet Traffic)</p>
+                    <p className="text-[11px] text-gray-400 max-w-sm mx-auto">
+                      Select the movie file stored on your phone or PC. Play, pause and timestamps will be synced with your counterpart!
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => localVideoInputRef.current && localVideoInputRef.current.click()}
+                      className="bg-[#242424] hover:bg-[#333] border border-[#3d3d3d] text-white px-5 py-2.5 rounded-xl text-xs font-semibold cursor-pointer shadow inline-flex items-center gap-2"
+                    >
+                      <HardDrive size={14} className="text-amber-400" />
+                      <span>Select Movie From Device</span>
+                    </button>
                   </div>
                 )
               )}
