@@ -9,7 +9,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe
+  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -52,6 +52,23 @@ const extractYouTubeId = (url) => {
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=[&?]?|v=)([^#&?]*).*/;
   const match = url.match(regExp);
   return (match && match[2].length === 11) ? match[2] : null;
+};
+
+// Helper: Resolve multi-server embed endpoints from IMDb ID
+const getEmbedUrl = (server, imdbId) => {
+  const cleanId = imdbId.trim();
+  switch (server) {
+    case 'vidlink':
+      return `https://vidlink.pro/movie/${cleanId}`;
+    case 'autoembed':
+      return `https://player.autoembed.cc/embed/movie/${cleanId}`;
+    case 'vidsrc_xyz':
+      return `https://vidsrc.xyz/embed/movie/${cleanId}`;
+    case 'smashy':
+      return `https://embed.smashystream.com/playere.php?imdb=${cleanId}`;
+    default:
+      return `https://vidlink.pro/movie/${cleanId}`;
+  }
 };
 
 export default function App() {
@@ -111,12 +128,17 @@ export default function App() {
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
   // CODEX 4-ENGINE THEATER STATES
-  // Engines: 'gofile' (Stream) | 'youtube' | 'embed' (Free API) | 'local' (Local Sync)
   const [codexEngine, setCodexEngine] = useState('gofile');
   const [movieInputUrl, setMovieInputUrl] = useState('');
   const [activeMovieSrc, setActiveMovieSrc] = useState('');
   const [activeMovieYTId, setActiveMovieYTId] = useState('');
+  
+  // Embed API States
+  const [embedServer, setEmbedServer] = useState('vidlink');
+  const [currentImdbId, setCurrentImdbId] = useState('');
   const [activeEmbedUrl, setActiveEmbedUrl] = useState('');
+  
+  // Local File States
   const [localVideoSrc, setLocalVideoSrc] = useState('');
   const [localFileName, setLocalFileName] = useState('');
   const [isMoviePlaying, setIsMoviePlaying] = useState(false);
@@ -593,7 +615,7 @@ export default function App() {
       }, 1000);
     });
 
-    // CODEX CINEMA RESTORE & SYNC LISTENERS
+    // CODEX CINEMA RESTORE & SYNC
     socketRef.current.on('codex_restore_state', (data) => {
       if (!data) return;
       setCodexEngine(data.engine || 'gofile');
@@ -604,6 +626,7 @@ export default function App() {
         setActiveEmbedUrl('');
       } else if (data.engine === 'embed') {
         setActiveEmbedUrl(data.embedUrl || '');
+        setCurrentImdbId(data.imdbId || '');
         setActiveMovieSrc('');
         setActiveMovieYTId('');
       } else {
@@ -613,7 +636,7 @@ export default function App() {
       }
     });
 
-    socketRef.current.on('codex_movie_load_broadcast', ({ engine, url, ytId, embedUrl }) => {
+    socketRef.current.on('codex_movie_load_broadcast', ({ engine, url, ytId, embedUrl, imdbId }) => {
       setCodexEngine(engine);
       setMovieError('');
       if (engine === 'gofile') {
@@ -628,10 +651,10 @@ export default function App() {
         setIsMoviePlaying(true);
       } else if (engine === 'embed') {
         setActiveEmbedUrl(embedUrl);
+        setCurrentImdbId(imdbId || '');
         setActiveMovieSrc('');
         setActiveMovieYTId('');
       } else if (engine === 'local') {
-        // Local mode trigger: keep ready for local file input
         setActiveMovieSrc('');
         setActiveMovieYTId('');
         setActiveEmbedUrl('');
@@ -764,23 +787,33 @@ export default function App() {
         });
       }
     } else if (codexEngine === 'embed') {
-      let finalEmbed = movieInputUrl.trim();
-      // If user passed pure IMDb ID (e.g. tt0499549)
-      if (finalEmbed.startsWith('tt')) {
-        finalEmbed = `https://vidsrc.to/embed/movie/${finalEmbed}`;
+      const input = movieInputUrl.trim();
+      let imdbId = input;
+      let finalEmbed = input;
+
+      // Extract IMDb ID if full link was pasted (e.g. https://imdb.com/title/tt0499549/)
+      const match = input.match(/tt\d{6,9}/);
+      if (match) {
+        imdbId = match[0];
+        finalEmbed = getEmbedUrl(embedServer, imdbId);
+      } else if (!input.startsWith('http')) {
+        finalEmbed = getEmbedUrl(embedServer, input);
       }
+
+      setCurrentImdbId(imdbId);
       setActiveEmbedUrl(finalEmbed);
       setActiveMovieSrc('');
       setActiveMovieYTId('');
+
       if (socketRef.current) {
         socketRef.current.emit('codex_movie_load', {
           room: GLOBAL_ROOM,
           engine: 'embed',
-          embedUrl: finalEmbed
+          embedUrl: finalEmbed,
+          imdbId
         });
       }
     } else if (codexEngine === 'local') {
-      // Local sync broadcast
       if (socketRef.current) {
         socketRef.current.emit('codex_movie_load', {
           room: GLOBAL_ROOM,
@@ -788,7 +821,6 @@ export default function App() {
         });
       }
     } else {
-      // Direct stream / GoFile URL
       const trimmed = movieInputUrl.trim();
       if (trimmed.toLowerCase().includes('.mkv')) {
         setMovieError("Note: .MKV container is not supported by web browsers. Video may lack audio. Please use .MP4 format!");
@@ -806,6 +838,24 @@ export default function App() {
       }
     }
     setMovieInputUrl('');
+  };
+
+  // Instant switch between Embed API mirrors if one gets blocked
+  const handleSwitchEmbedServer = (newServer) => {
+    setEmbedServer(newServer);
+    if (!currentImdbId) return;
+
+    const newUrl = getEmbedUrl(newServer, currentImdbId);
+    setActiveEmbedUrl(newUrl);
+
+    if (socketRef.current) {
+      socketRef.current.emit('codex_movie_load', {
+        room: GLOBAL_ROOM,
+        engine: 'embed',
+        embedUrl: newUrl,
+        imdbId: currentImdbId
+      });
+    }
   };
 
   const handleSelectLocalFile = (e) => {
@@ -1711,7 +1761,6 @@ export default function App() {
             )}
           </div>
 
-          {/* DYNAMIC HEADER NOTIFICATION DOT */}
           <div className="flex items-center gap-3 text-xs text-[#9b9b9b]">
             <span 
               className={`w-2 h-2 rounded-full transition-all duration-300 ${
@@ -2005,7 +2054,7 @@ export default function App() {
 
                                 {isReactionOpen && (
                                   <div 
-                                    className="absolute left-0 -top-8 z-30 bg-[#1e1e1e] border border-[#333] px-2 py-1 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.85)] flex items-center gap-1.5 backdrop-blur-md animate-in fade-in duration-100"
+                                    className="absolute left-0 -top-8 z-30 bg-[#1e1e1e] border border-[#3a3a3a] px-2 py-1 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.85)] flex items-center gap-1.5 backdrop-blur-md animate-in fade-in duration-100"
                                     onClick={(e) => e.stopPropagation()}
                                   >
                                     {HOVER_REACTIONS.map((emoji, eIdx) => (
@@ -2355,7 +2404,7 @@ export default function App() {
                           ? "Paste direct stream link (GoFile / Pixeldrain / HubCloud MP4)..."
                           : codexEngine === 'youtube'
                           ? "Paste YouTube movie link (e.g. https://www.youtube.com/watch?v=...)"
-                          : "Enter IMDb ID (e.g. tt0499549) or Free Stream Embed URL..."
+                          : "Enter IMDb ID (e.g. tt0499549) or paste IMDb URL..."
                       }
                       className="flex-1 bg-[#171717] border border-[#2c2c2c] focus:border-[#444] rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 outline-none font-mono"
                     />
@@ -2388,6 +2437,57 @@ export default function App() {
                         Broadcast Mode
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {/* EMBED API MULTI-SERVER SWITCHER (Bypasses Indian ISP / Cloudflare blocks) */}
+                {codexEngine === 'embed' && (
+                  <div className="flex items-center justify-between bg-[#141414] border border-[#252525] px-3 py-2 rounded-xl text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400 text-[11px] font-semibold">Switch Embed Mirror:</span>
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleSwitchEmbedServer('vidlink')}
+                          className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${embedServer === 'vidlink' ? 'bg-purple-600 text-white' : 'bg-[#222] text-gray-400 hover:text-white'}`}
+                        >
+                          Server 1 (VidLink)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSwitchEmbedServer('autoembed')}
+                          className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${embedServer === 'autoembed' ? 'bg-purple-600 text-white' : 'bg-[#222] text-gray-400 hover:text-white'}`}
+                        >
+                          Server 2 (AutoEmbed)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSwitchEmbedServer('vidsrc_xyz')}
+                          className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${embedServer === 'vidsrc_xyz' ? 'bg-purple-600 text-white' : 'bg-[#222] text-gray-400 hover:text-white'}`}
+                        >
+                          Server 3 (VidSrc)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSwitchEmbedServer('smashy')}
+                          className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${embedServer === 'smashy' ? 'bg-purple-600 text-white' : 'bg-[#222] text-gray-400 hover:text-white'}`}
+                        >
+                          Server 4 (Smashy)
+                        </button>
+                      </div>
+                    </div>
+
+                    {activeEmbedUrl && (
+                      <a 
+                        href={activeEmbedUrl} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="text-purple-400 hover:text-purple-300 text-[11px] flex items-center gap-1 font-medium underline"
+                      >
+                        <ExternalLink size={12} />
+                        <span>Open Direct</span>
+                      </a>
+                    )}
                   </div>
                 )}
               </div>
@@ -2452,18 +2552,20 @@ export default function App() {
               ) : codexEngine === 'embed' ? (
                 activeEmbedUrl ? (
                   <iframe 
+                    key={activeEmbedUrl}
                     src={activeEmbedUrl}
                     title="Codex Free Movie API Embed"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                     allowFullScreen
-                    className="w-full h-[68vh] rounded-2xl border-none"
+                    referrerPolicy="origin"
+                    className="w-full h-[68vh] rounded-2xl border-none bg-black"
                   />
                 ) : (
                   <div className="text-center p-8 space-y-2 text-gray-500">
                     <Globe size={40} className="mx-auto opacity-30 text-purple-400" />
                     <p className="text-xs">
                       {role === 'parent' 
-                        ? "Enter IMDb ID (e.g. tt0499549) or free embed link to stream instant web movies." 
+                        ? "Enter IMDb ID (e.g. tt0499549) to stream instant web movies." 
                         : "Waiting for Admin to load Movie Embed API..."}
                     </p>
                   </div>
