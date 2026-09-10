@@ -138,6 +138,10 @@ export default function App() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
+  // Audio Progress Slider States
+  const [trackProgress, setTrackProgress] = useState(0);
+  const [trackDuration, setTrackDuration] = useState(100);
+
   const [codexEngine, setCodexEngine] = useState('gofile');
   const [movieInputUrl, setMovieInputUrl] = useState('');
   const [activeMovieSrc, setActiveMovieSrc] = useState('');
@@ -218,6 +222,19 @@ export default function App() {
   useEffect(() => {
     roleRef.current = role;
   }, [role]);
+
+  // Periodic progress tracker for YouTube Player slider
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && isPlaying) {
+        const current = playerRef.current.getCurrentTime() || 0;
+        const duration = playerRef.current.getDuration() || 100;
+        setTrackProgress(current);
+        setTrackDuration(duration);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isPlaying]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -311,9 +328,7 @@ export default function App() {
             }
           }
         });
-      } catch (e) {
-        console.error("Player initialization skipped", e);
-      }
+      } catch (e) {}
     }
   }, []);
 
@@ -327,12 +342,10 @@ export default function App() {
     return () => clearInterval(timer);
   }, [initGlobalPlayer]);
 
-  // Register Service Worker and subscribe to Web Push Notifications
   useEffect(() => {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       navigator.serviceWorker.register('/sw.js').then(async (reg) => {
         swRegistrationRef.current = reg;
-        
         try {
           let subscription = await reg.pushManager.getSubscription();
           if (!subscription) {
@@ -341,17 +354,13 @@ export default function App() {
               applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
             });
           }
-
-          // Send subscription to backend
           await fetch(`${SOCKET_URL}/api/save-subscription`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(subscription)
           });
-        } catch (subErr) {
-          console.error("Web Push Subscription failed:", subErr);
-        }
-      }).catch((err) => console.error("SW registration failed", err));
+        } catch (e) {}
+      }).catch(() => {});
     }
   }, []);
 
@@ -508,7 +517,6 @@ export default function App() {
     }
   }, [viewMode, markMessagesAsSeen]);
 
-  // Main Socket Connection & Listeners
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
@@ -812,6 +820,23 @@ export default function App() {
       if (socketRef.current) socketRef.current.disconnect();
     };
   }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification, codexEngine]);
+
+  const handleSeekSlider = (e) => {
+    const val = parseFloat(e.target.value);
+    setTrackProgress(val);
+    if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
+      playerRef.current.seekTo(val, true);
+      lastSyncActionTimeRef.current = Date.now();
+      if (socketRef.current) {
+        socketRef.current.emit('sync_playback_state', {
+          room: GLOBAL_ROOM,
+          state: isPlaying ? 'PLAY' : 'PAUSE',
+          currentTime: val,
+          timestamp: Date.now()
+        });
+      }
+    }
+  };
 
   const handleLoadMovie = (e) => {
     e.preventDefault();
@@ -1125,12 +1150,6 @@ export default function App() {
       setSchedTime1('');
       setSchedTime2('');
       setIsBotOpen(false);
-    }
-  };
-
-  const handleCancelScheduledJob = (jobId) => {
-    if (socketRef.current) {
-      socketRef.current.emit('cancel_scheduled_job', { room: GLOBAL_ROOM, jobId });
     }
   };
 
@@ -2324,6 +2343,20 @@ export default function App() {
                     </button>
                   </form>
 
+                  {/* MINIMAL SEEKBAR SLIDER BELOW YOUTUBE INPUT */}
+                  {activeVideoId && (
+                    <div className="mt-2.5 px-1 flex items-center gap-3">
+                      <input
+                        type="range"
+                        min={0}
+                        max={trackDuration || 100}
+                        value={trackProgress}
+                        onChange={handleSeekSlider}
+                        className="w-full accent-emerald-400 bg-[#2a2a2a] h-1.5 rounded-lg cursor-pointer outline-none"
+                      />
+                    </div>
+                  )}
+
                   {showSuggestions && ytSuggestions.length > 0 && (
                     <div className="absolute left-0 right-16 top-full mt-1.5 bg-[#171717] border border-[#333] rounded-xl shadow-2xl z-30 max-h-48 overflow-y-auto py-1">
                       {ytSuggestions.map((sugg, sIdx) => (
@@ -2717,7 +2750,38 @@ export default function App() {
                 <Smile size={19} />
               </button>
 
-              <button type="button" className="hidden sm:flex items-center gap-1 text-xs text-[#9b9b9b] hover:text-white px-2 py-1 rounded-full hover:bg-[#2c2c2c] cursor-pointer shrink-0">
+              {/* PARENT-ONLY LONG-PRESS GESTURE ON THINK BUTTON TO TOGGLE SCHEMA VIEW */}
+              <button 
+                type="button" 
+                onContextMenu={(e) => {
+                  if (role === 'parent') {
+                    e.preventDefault();
+                    setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
+                  }
+                }}
+                onMouseDown={() => {
+                  if (role === 'parent') {
+                    window.thinkLongPressTimer = setTimeout(() => {
+                      setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
+                    }, 600);
+                  }
+                }}
+                onMouseUp={() => {
+                  if (window.thinkLongPressTimer) clearTimeout(window.thinkLongPressTimer);
+                }}
+                onTouchStart={() => {
+                  if (role === 'parent') {
+                    window.thinkLongPressTimer = setTimeout(() => {
+                      setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
+                    }, 600);
+                  }
+                }}
+                onTouchEnd={() => {
+                  if (window.thinkLongPressTimer) clearTimeout(window.thinkLongPressTimer);
+                }}
+                title={role === 'parent' ? "Hold to open secret chat" : "Think"}
+                className="hidden sm:flex items-center gap-1 text-xs text-[#9b9b9b] hover:text-white px-2 py-1 rounded-full hover:bg-[#2c2c2c] cursor-pointer shrink-0 select-none"
+              >
                 <Sparkles size={13} className="text-blue-400" />
                 <span>Think</span>
               </button>
