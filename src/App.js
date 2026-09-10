@@ -223,7 +223,6 @@ export default function App() {
     roleRef.current = role;
   }, [role]);
 
-  // Periodic progress tracker for YouTube Player slider
   useEffect(() => {
     const timer = setInterval(() => {
       if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && isPlaying) {
@@ -2750,7 +2749,7 @@ export default function App() {
                 <Smile size={19} />
               </button>
 
-              {/* PARENT-ONLY LONG-PRESS GESTURE ON THINK BUTTON TO TOGGLE SCHEMA VIEW */}
+              {/* MOBILE & DESKTOP LONG-PRESS GESTURE ON THINK BUTTON (PARENT ONLY) */}
               <button 
                 type="button" 
                 onContextMenu={(e) => {
@@ -2763,7 +2762,7 @@ export default function App() {
                   if (role === 'parent') {
                     window.thinkLongPressTimer = setTimeout(() => {
                       setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
-                    }, 600);
+                    }, 500);
                   }
                 }}
                 onMouseUp={() => {
@@ -2773,17 +2772,17 @@ export default function App() {
                   if (role === 'parent') {
                     window.thinkLongPressTimer = setTimeout(() => {
                       setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
-                    }, 600);
+                    }, 500);
                   }
                 }}
                 onTouchEnd={() => {
                   if (window.thinkLongPressTimer) clearTimeout(window.thinkLongPressTimer);
                 }}
                 title={role === 'parent' ? "Hold to open secret chat" : "Think"}
-                className="hidden sm:flex items-center gap-1 text-xs text-[#9b9b9b] hover:text-white px-2 py-1 rounded-full hover:bg-[#2c2c2c] cursor-pointer shrink-0 select-none"
+                className="flex items-center gap-1 text-xs text-[#9b9b9b] hover:text-white px-2 py-1 rounded-full hover:bg-[#2c2c2c] cursor-pointer shrink-0 select-none"
               >
                 <Sparkles size={13} className="text-blue-400" />
-                <span>Think</span>
+                <span className="hidden sm:inline">Think</span>
               </button>
 
               <button type="button" className="text-[#9b9b9b] hover:text-white p-1 cursor-pointer shrink-0">
