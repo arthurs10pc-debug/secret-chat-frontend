@@ -16,6 +16,8 @@ const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
 const SECRET_KEY = "StealthMasterKey99";
 const GLOBAL_ROOM = "stealth_master_room";
 
+const PUBLIC_VAPID_KEY = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-8vMeAtA5cHmDkJ0d8Q9cW4vG0mJ5M3Q5lK0P8vWq6X5LwG0J7j6W0Yg';
+
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "🙏", "👌", "💯", "🤫", "✨"];
 const HOVER_REACTIONS = ["👍", "❤️", "🥰", "😆", "😮", "😢", "😡"];
 
@@ -70,6 +72,17 @@ const getEmbedUrl = (server, imdbId) => {
   }
 };
 
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
 export default function App() {
   const [role, setRole] = useState(() => localStorage.getItem('stealth_role') || 'user');
   const [currentRoom, setCurrentRoom] = useState("GMB Review Reply");
@@ -114,7 +127,6 @@ export default function App() {
   const [isPeerTyping, setIsPeerTyping] = useState(false);
   const typingTimerRef = useRef(null);
 
-  // Synced Lounge States
   const [syncStatus, setSyncStatus] = useState('idle');
   const [incomingInviteRole, setIncomingInviteRole] = useState('');
   const [youtubeUrlInput, setYoutubeUrlInput] = useState('');
@@ -126,18 +138,15 @@ export default function App() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
-  // CODEX 4-ENGINE THEATER STATES
   const [codexEngine, setCodexEngine] = useState('gofile');
   const [movieInputUrl, setMovieInputUrl] = useState('');
   const [activeMovieSrc, setActiveMovieSrc] = useState('');
   const [activeMovieYTId, setActiveMovieYTId] = useState('');
   
-  // Embed API States
   const [embedServer, setEmbedServer] = useState('vidlink');
   const [currentImdbId, setCurrentImdbId] = useState('');
   const [activeEmbedUrl, setActiveEmbedUrl] = useState('');
   
-  // Local File States
   const [localVideoSrc, setLocalVideoSrc] = useState('');
   const [localFileName, setLocalFileName] = useState('');
   const [isMoviePlaying, setIsMoviePlaying] = useState(false);
@@ -153,7 +162,6 @@ export default function App() {
   const lastSyncActionTimeRef = useRef(0);
   const pendingRestoreRef = useRef(null);
 
-  // Bot Scheduled Message States
   const [isBotOpen, setIsBotOpen] = useState(false);
   const [botTab, setBotTab] = useState('instant');
   const [customMsg, setCustomMsg] = useState('');
@@ -319,11 +327,31 @@ export default function App() {
     return () => clearInterval(timer);
   }, [initGlobalPlayer]);
 
+  // Register Service Worker and subscribe to Web Push Notifications
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').then((reg) => {
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      navigator.serviceWorker.register('/sw.js').then(async (reg) => {
         swRegistrationRef.current = reg;
-      }).catch(() => {});
+        
+        try {
+          let subscription = await reg.pushManager.getSubscription();
+          if (!subscription) {
+            subscription = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
+            });
+          }
+
+          // Send subscription to backend
+          await fetch(`${SOCKET_URL}/api/save-subscription`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(subscription)
+          });
+        } catch (subErr) {
+          console.error("Web Push Subscription failed:", subErr);
+        }
+      }).catch((err) => console.error("SW registration failed", err));
     }
   }, []);
 
@@ -634,7 +662,6 @@ export default function App() {
       }, 1000);
     });
 
-    // CODEX CINEMA RESTORE & SYNC LISTENERS
     socketRef.current.on('codex_restore_state', (data) => {
       if (!data) return;
       setCodexEngine(data.engine || 'gofile');
@@ -786,7 +813,6 @@ export default function App() {
     };
   }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification, codexEngine]);
 
-  // CODEX VIDEO CONTROLS
   const handleLoadMovie = (e) => {
     e.preventDefault();
     setMovieError('');
@@ -1614,7 +1640,6 @@ export default function App() {
         className="hidden" 
       />
 
-      {/* LOCAL VIDEO PICKER */}
       <input 
         type="file" 
         accept="video/*" 
@@ -1623,7 +1648,6 @@ export default function App() {
         className="hidden" 
       />
 
-      {/* PERSISTENT AUDIO PLAYER */}
       <div 
         style={{
           position: 'fixed',
@@ -1638,7 +1662,6 @@ export default function App() {
         <div id="persistent-sync-iframe"></div>
       </div>
 
-      {/* MOBILE BACKDROP OVERLAY */}
       {sidebarOpen && (
         <div 
           className="md:hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-30 transition-opacity"
@@ -1646,7 +1669,6 @@ export default function App() {
         />
       )}
 
-      {/* Left Sidebar */}
       <aside 
         className={`
           fixed md:static inset-y-0 left-0 z-40
@@ -1717,7 +1739,6 @@ export default function App() {
             <FolderGit2 size={17} className="text-[#9b9b9b]" /> Projects
           </div>
 
-          {/* CODEX TAB */}
           <div 
             onClick={() => { setViewMode('codex'); closeSidebarOnMobile(); }}
             className={`flex items-center gap-3 md:gap-2.5 py-2.5 md:py-1.5 px-3 md:px-2.5 rounded-xl md:rounded-lg cursor-pointer transition-colors ${viewMode === 'codex' ? 'bg-[#212121] text-white font-medium' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
@@ -1788,7 +1809,6 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main Workspace */}
       <main className="flex-1 flex flex-col relative bg-[#000000] overflow-hidden min-w-0">
         <header className="h-14 md:h-12 flex items-center justify-between px-3 md:px-4 shrink-0 z-10 border-b border-[#141414]">
           <div className="flex items-center gap-2 overflow-hidden">
@@ -1858,7 +1878,6 @@ export default function App() {
           </div>
         )}
 
-        {/* PERSISTENT FLOATING AUDIO BAR IN CHAT */}
         {syncStatus === 'connected' && activeVideoId && viewMode !== 'scheduled' && viewMode !== 'codex' && (
           <div className="bg-[#141414]/95 border-b border-[#2a2a2a] px-3 sm:px-4 py-2 flex items-center justify-between z-20 text-xs backdrop-blur-md shadow-lg shrink-0">
             <div className="flex items-center gap-2 overflow-hidden flex-1 mr-2">
@@ -1895,7 +1914,6 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW 1: NORMAL CHATGPT STREAM */}
         {viewMode === 'real_gpt' && (
           <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-4 sm:space-y-6 scrollbar-none">
             {conversations.map((msg) => (
@@ -1956,7 +1974,6 @@ export default function App() {
           </section>
         )}
 
-        {/* VIEW 2: STEALTH JSON SCHEMA VIEW (MEDIUM & BALANCED SCREEN SIZE) */}
         {viewMode === 'stealth' && (
           <section className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
             <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs md:text-[12.5px]">
@@ -1997,7 +2014,6 @@ export default function App() {
                 </div>
                 <br />
 
-                {/* BALANCED MEDIUM STREAM BOX */}
                 <div className="border-y border-[#2a2a2a] py-2.5 my-2 bg-[#121212]/80 rounded-xl px-2.5 md:px-3.5">
                   <div className="text-[#6a9955] mb-1.5 flex items-center justify-between flex-wrap gap-2 text-xs">
                     <span className="flex items-center gap-2">
@@ -2176,7 +2192,6 @@ export default function App() {
           </section>
         )}
 
-        {/* VIEW 3: ARCHIVED IMAGES VAULT */}
         {viewMode === 'images_archive' && (
           <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-3 scrollbar-none font-sans">
             <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
@@ -2212,7 +2227,6 @@ export default function App() {
           </section>
         )}
 
-        {/* VIEW 4: SCHEDULED / SYNCHRONIZED TWO-WAY MUSIC LOUNGE */}
         {viewMode === 'scheduled' && (
           <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-4 scrollbar-none font-sans">
             <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
@@ -2361,7 +2375,6 @@ export default function App() {
           </section>
         )}
 
-        {/* VIEW 5: CODEX THEATER LOUNGE */}
         {viewMode === 'codex' && (
           <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-3 sm:space-y-4 scrollbar-none font-sans">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#222] pb-2.5 gap-2">
@@ -2375,7 +2388,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* ADMIN-ONLY: 4 ENGINE SELECTOR TABS */}
               {role === 'parent' && (
                 <div className="flex overflow-x-auto scrollbar-none bg-[#181818] p-1 rounded-xl border border-[#2c2c2c] gap-1 text-xs shrink-0 max-w-full">
                   <button
@@ -2422,7 +2434,6 @@ export default function App() {
               )}
             </div>
 
-            {/* ADMIN BROADCAST INPUTS */}
             {role === 'parent' && (
               <div className="space-y-2">
                 {codexEngine !== 'local' ? (
@@ -2472,7 +2483,6 @@ export default function App() {
                   </div>
                 )}
 
-                {/* EMBED API SERVER SELECTOR */}
                 {codexEngine === 'embed' && (
                   <div className="flex items-center justify-between bg-[#141414] border border-[#252525] px-3 py-2 rounded-xl text-xs gap-2 overflow-x-auto scrollbar-none">
                     <div className="flex items-center gap-2 shrink-0">
@@ -2525,7 +2535,6 @@ export default function App() {
               </div>
             )}
 
-            {/* THEATER CINEMA SCREEN */}
             <div className="w-full bg-[#0a0a0a] border border-[#242424] rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center min-h-[220px] sm:min-h-[380px]">
               {codexEngine === 'gofile' ? (
                 activeMovieSrc ? (
@@ -2632,7 +2641,6 @@ export default function App() {
           </section>
         )}
 
-        {/* Bottom Input Capsule */}
         <div className="px-3 sm:px-6 lg:px-8 pb-3 sm:pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
           {replyTarget && (
             <div className="mb-2 bg-[#1a1a1a] border border-[#333] px-3.5 py-1.5 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-150">
@@ -2728,7 +2736,6 @@ export default function App() {
           </form>
         </div>
 
-        {/* View Once Fullscreen Modal */}
         {activeViewImage && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4">
             <div className="bg-[#141414] border border-[#2e2e2e] rounded-2xl max-w-xl w-full p-4 flex flex-col items-center space-y-4 shadow-2xl">
@@ -2758,7 +2765,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Answer Pending Modal */}
         {showPendingModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-[#171717] border border-[#2e2e2e] rounded-2xl w-full max-w-lg p-5 shadow-2xl space-y-4 font-sans">
@@ -2813,7 +2819,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Glass Bubble Alert */}
         {incomingAlert && (
           <div 
             onClick={handleBubbleDismiss}
@@ -2831,7 +2836,6 @@ export default function App() {
           </div>
         )}
 
-        {/* ADMIN BOT DRAWER */}
         {role === 'parent' && (
           <div className="absolute bottom-16 right-4 sm:bottom-6 sm:right-6 z-40">
             <button 
