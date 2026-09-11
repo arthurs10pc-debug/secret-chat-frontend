@@ -9,7 +9,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink
+  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -20,6 +20,17 @@ const PUBLIC_VAPID_KEY = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-8vMeAtA5cHmDkJ0d8Q9cW4
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "🙏", "👌", "💯", "🤫", "✨"];
 const HOVER_REACTIONS = ["👍", "❤️", "🥰", "😆", "😮", "😢", "😡"];
+
+const ARCADE_GAMES = [
+  { id: 'tictactoe', name: 'Tic Tac Toe (Ultimate Edition)', desc: 'Classic 3x3 grid tactical challenge' },
+  { id: 'pong', name: 'Pong (Retro Arcade)', desc: 'Retro paddle and ball rally duel' },
+  { id: 'airhockey', name: 'Air Hockey (Mini)', desc: 'Fast reflex puck-sliding showdown' },
+  { id: 'drawguess', name: 'Draw & Guess Mini', desc: 'Quick sketch and prompt guessing' },
+  { id: 'battleship', name: 'Battleship (Mini Grid)', desc: 'Target and sink enemy fleet' },
+  { id: 'ludo', name: 'Ludo (Quick Sprint)', desc: 'Fast token race to home plate' },
+  { id: 'pool', name: 'Pool / 8-Ball (Mini Cue)', desc: 'Pocket cue shots precision duel' },
+  { id: 'snakeladder', name: 'Snake & Ladder (Speed Sprint)', desc: 'Dice roll race to the top' }
+];
 
 const DEFAULT_RECENT_CHATS = [
   "GMB Review Reply",
@@ -98,6 +109,10 @@ export default function App() {
   });
 
   const [viewMode, setViewMode] = useState('real_gpt');
+
+  // Plugins / Arcade Multiplayer Sidebar States (Admin Controlled)
+  const [showArcadePlugins, setShowArcadePlugins] = useState(false);
+  const [activeGameModal, setActiveGameModal] = useState(null);
 
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem('stealth_conversations');
@@ -560,6 +575,11 @@ export default function App() {
       }
     });
 
+    // Listen to Admin Arcade Plugin Toggle Broadcast
+    socketRef.current.on('toggle_arcade_plugins', (status) => {
+      setShowArcadePlugins(status);
+    });
+
     socketRef.current.on('sync_restore_state', (data) => {
       if (!data || !data.connected) return;
       setSyncStatus('connected');
@@ -819,6 +839,13 @@ export default function App() {
       if (socketRef.current) socketRef.current.disconnect();
     };
   }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification, codexEngine]);
+
+  const handleAdminToggleArcade = (enable) => {
+    setShowArcadePlugins(enable);
+    if (socketRef.current) {
+      socketRef.current.emit('admin_toggle_arcade', enable);
+    }
+  };
 
   const handleSeekSlider = (e) => {
     const val = parseFloat(e.target.value);
@@ -1770,6 +1797,34 @@ export default function App() {
           </div>
         </div>
 
+        {/* ADMIN SIDEBAR ARCADE CONTROL PANEL (Visible only to Admin/Parent) */}
+        {role === 'parent' && (
+          <div className="px-3 py-2 border-t border-[#1a1a1a] bg-[#0a0a0a]">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
+                <Gamepad2 size={13} /> Arcade Control
+              </span>
+              <span className={`px-1.5 py-0.5 text-[9px] font-mono rounded font-bold ${showArcadePlugins ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-400'}`}>
+                {showArcadePlugins ? 'ACTIVE' : 'OFF'}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                onClick={() => handleAdminToggleArcade(true)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold py-1.5 rounded-lg cursor-pointer transition-all"
+              >
+                Send Games
+              </button>
+              <button
+                onClick={() => handleAdminToggleArcade(false)}
+                className="bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 text-[11px] font-bold py-1.5 rounded-lg cursor-pointer transition-all"
+              >
+                Disconnect
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5 border-t border-[#1a1a1a] mt-1 scrollbar-none text-sm md:text-[13px]">
           <div className="text-xs md:text-[11px] text-[#737373] px-3 md:px-2.5 py-1.5 font-semibold">Recents</div>
           {roomList.map((roomName, idx) => (
@@ -1827,7 +1882,37 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col relative bg-[#000000] overflow-hidden min-w-0">
+      {/* Main Layout Grid when Arcade Plugins / Sidebar is active for User */}
+      <div className={`flex-1 flex overflow-hidden ${showArcadePlugins ? 'grid md:grid-cols-[260px_1fr]' : 'flex-col'}`}>
+        
+        {/* LEFT PLUGIN / ARCADE 8-GAMES PANEL FOR USERS */}
+        {showArcadePlugins && (
+          <aside className="hidden md:flex flex-col bg-[#080808] border-r border-[#1e1e1e] p-3 overflow-y-auto shrink-0 select-none">
+            <div className="flex items-center gap-2 pb-2 mb-2 border-b border-[#222]">
+              <Gamepad2 size={16} className="text-emerald-400" />
+              <h3 className="text-xs font-bold text-white uppercase tracking-wider">Arcade Plugins (8)</h3>
+            </div>
+            <p className="text-[10px] text-gray-400 mb-2">Live multiplayer mini-games for A & H session.</p>
+
+            <div className="space-y-1.5">
+              {ARCADE_GAMES.map((game) => (
+                <button
+                  key={game.id}
+                  onClick={() => setActiveGameModal(game)}
+                  className="w-full text-left bg-[#121212] hover:bg-[#1a1a1a] border border-[#222] hover:border-emerald-500/50 p-2 rounded-xl transition-all cursor-pointer group flex items-center justify-between"
+                >
+                  <div>
+                    <h4 className="text-[11px] font-bold text-white group-hover:text-emerald-400 transition-colors">{game.name}</h4>
+                    <p className="text-[9px] text-gray-400 line-clamp-1">{game.desc}</p>
+                  </div>
+                  <Play size={12} className="text-gray-500 group-hover:text-emerald-400 shrink-0 ml-1" />
+                </button>
+              ))}
+            </div>
+          </aside>
+        )}
+
+        <main className="flex-1 flex flex-col relative bg-[#000000] overflow-hidden min-w-0">
         <header className="h-14 md:h-12 flex items-center justify-between px-3 md:px-4 shrink-0 z-10 border-b border-[#141414]">
           <div className="flex items-center gap-2 overflow-hidden">
             <button 
@@ -2183,8 +2268,8 @@ export default function App() {
                                 title={m.flaggedPending ? "Mark as Resolved" : "Add to Answer Pending"}
                                 className={`px-2 py-0.5 text-xs font-bold rounded cursor-pointer transition-all shrink-0 ${
                                   m.flaggedPending 
-                                  ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-105' 
-                                  : 'bg-[#2a2a2a] text-gray-400 hover:text-white hover:bg-[#383838]'
+                                    ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-105' 
+                                    : 'bg-[#2a2a2a] text-gray-400 hover:text-white hover:bg-[#383838]'
                                 }`}
                               >
                                 !
@@ -2995,6 +3080,40 @@ export default function App() {
           </div>
         )}
       </main>
+
+      </div>
+
+      {/* ARCADE GAME PLAY MODAL FOR USERS */}
+      {activeGameModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-[#141414] border border-[#2e2e2e] rounded-3xl p-5 w-full max-w-md text-center shadow-2xl relative space-y-4">
+            <div className="flex items-center justify-between border-b border-[#222] pb-3">
+              <div className="flex items-center gap-2">
+                <Gamepad2 size={18} className="text-emerald-400" />
+                <h3 className="text-sm font-bold text-white">{activeGameModal.name}</h3>
+              </div>
+              <button onClick={() => setActiveGameModal(null)} className="text-gray-400 hover:text-white p-1"><X size={16} /></button>
+            </div>
+
+            <div className="bg-[#0e0e0e] border border-[#222] rounded-2xl p-6 space-y-3">
+              <Trophy size={36} className="mx-auto text-amber-400 animate-pulse" />
+              <p className="text-xs font-bold text-white">Live Multiplayer Session (A & H)</p>
+              <p className="text-[11px] text-gray-400">{activeGameModal.desc}</p>
+            </div>
+
+            <button
+              onClick={() => {
+                confetti({ particleCount: 60, spread: 80, origin: { y: 0.6 } });
+                setActiveGameModal(null);
+              }}
+              className="w-full bg-[#1c3a6b] hover:bg-[#254d8f] text-white text-xs py-3 rounded-xl font-bold cursor-pointer transition-all"
+            >
+              Start Session & Play
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
