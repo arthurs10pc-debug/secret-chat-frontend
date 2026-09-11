@@ -110,41 +110,41 @@ export default function App() {
 
   const [viewMode, setViewMode] = useState('real_gpt');
 
-  // Plugins & Arcade States inside menu
+  // Plugins & Arcade States
   const [showArcadePlugins, setShowArcadePlugins] = useState(false);
   const [incomingGameRequest, setIncomingGameRequest] = useState(false);
   const [activeGame, setActiveGame] = useState(null);
 
-  // Live Fully Working Colorful Game States & Scores
-  const [scores, setScores] = useState({ admin: 0, user: 0 });
+  // Live Scores & Game States (H vs A)
+  const [scores, setScores] = useState({ H: 0, A: 0 });
   const [winnerMessage, setWinnerMessage] = useState('');
 
-  // 1. Tic Tac Toe State
+  // Game 1: Tic Tac Toe State
   const [tictactoeBoard, setTictactoeBoard] = useState(Array(9).fill(null));
-  const [isXNext, setIsXNext] = useState(true);
+  const [isHNext, setIsHNext] = useState(true);
 
-  // 2. Ludo State
-  const [ludoPos, setLudoPos] = useState({ p1: 0, p2: 0 });
-  const [ludoTurn, setLudoTurn] = useState('p1');
+  // Game 2: Ludo State
+  const [ludoPos, setLudoPos] = useState({ H: 0, A: 0 });
+  const [ludoTurn, setLudoTurn] = useState('H');
   const [diceVal, setDiceVal] = useState(1);
 
-  // 3. Pong State
-  const [pongScore, setPongScore] = useState({ p1: 0, p2: 0 });
+  // Game 3: Pong State
+  const [pongScore, setPongScore] = useState({ H: 0, A: 0 });
 
-  // 4. Air Hockey State
-  const [hockeyScore, setHockeyScore] = useState({ p1: 0, p2: 0 });
+  // Game 4: Air Hockey State
+  const [hockeyScore, setHockeyScore] = useState({ H: 0, A: 0 });
 
-  // 5. Battleship State
-  const [battleshipHits, setBattleshipHits] = useState({ p1: 0, p2: 0 });
+  // Game 5: Battleship State
+  const [battleshipHits, setBattleshipHits] = useState({ H: 0, A: 0 });
 
-  // 6. Pool 8-Ball State
-  const [poolBalls, setPoolBalls] = useState({ p1: 0, p2: 0 });
+  // Game 6: Pool State
+  const [poolBalls, setPoolBalls] = useState({ H: 0, A: 0 });
 
-  // 7. Snake & Ladder State
-  const [snakePos, setSnakePos] = useState({ p1: 1, p2: 1 });
+  // Game 7: Snake & Ladder State
+  const [snakePos, setSnakePos] = useState({ H: 1, A: 1 });
 
-  // 8. Draw & Guess State
-  const [drawWord, setDrawWord] = useState('Apple');
+  // Game 8: Draw & Guess State
+  const [drawGuessWord] = useState('Rocket Ship');
 
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem('stealth_conversations');
@@ -256,6 +256,8 @@ export default function App() {
 
   const viewModeRef = useRef(viewMode);
   const roleRef = useRef(role);
+
+  const isCurrentAdmin = role === 'parent';
 
   useEffect(() => {
     viewModeRef.current = viewMode;
@@ -630,7 +632,7 @@ export default function App() {
     socketRef.current.on('arcade_game_action_broadcast', (moveData) => {
       if (moveData.gameId === 'tictactoe') {
         setTictactoeBoard(moveData.board);
-        setIsXNext(moveData.isXNext);
+        setIsHNext(moveData.isHNext);
         setWinnerMessage(moveData.winner || '');
         if (moveData.scores) setScores(moveData.scores);
       } else if (moveData.gameId === 'ludo') {
@@ -641,14 +643,24 @@ export default function App() {
         if (moveData.scores) setScores(moveData.scores);
       } else if (moveData.gameId === 'pong') {
         setPongScore(moveData.score);
+        if (moveData.winner) setWinnerMessage(moveData.winner);
+        if (moveData.scores) setScores(moveData.scores);
       } else if (moveData.gameId === 'airhockey') {
         setHockeyScore(moveData.score);
+        if (moveData.winner) setWinnerMessage(moveData.winner);
+        if (moveData.scores) setScores(moveData.scores);
       } else if (moveData.gameId === 'battleship') {
         setBattleshipHits(moveData.hits);
+        if (moveData.winner) setWinnerMessage(moveData.winner);
+        if (moveData.scores) setScores(moveData.scores);
       } else if (moveData.gameId === 'pool') {
         setPoolBalls(moveData.balls);
+        if (moveData.winner) setWinnerMessage(moveData.winner);
+        if (moveData.scores) setScores(moveData.scores);
       } else if (moveData.gameId === 'snakeladder') {
         setSnakePos(moveData.pos);
+        if (moveData.winner) setWinnerMessage(moveData.winner);
+        if (moveData.scores) setScores(moveData.scores);
       }
     });
 
@@ -915,7 +927,7 @@ export default function App() {
   const handleAdminSendRequest = () => {
     if (socketRef.current) {
       socketRef.current.emit('admin_send_arcade_request');
-      alert("Arcade game request dispatched to User!");
+      alert("Arcade game request dispatched to User (A)!");
     }
   };
 
@@ -945,7 +957,7 @@ export default function App() {
     }
   };
 
-  // Tic Tac Toe Winner Logic
+  // 1. TIC TAC TOE LOGIC (H vs A)
   const checkTicTacToeWinner = (board) => {
     const lines = [
       [0,1,2], [3,4,5], [6,7,8],
@@ -963,31 +975,31 @@ export default function App() {
   };
 
   const handleTicTacToeClick = (idx) => {
-    const myTurn = (role === 'parent' && isXNext) || (role !== 'parent' && !isXNext);
+    const myTurn = (isCurrentAdmin && isHNext) || (!isCurrentAdmin && !isHNext);
     if (!myTurn || tictactoeBoard[idx] || winnerMessage || activeGame?.id !== 'tictactoe') return;
 
     const newBoard = [...tictactoeBoard];
-    newBoard[idx] = isXNext ? 'X' : 'O';
-    const nextState = !isXNext;
+    newBoard[idx] = isHNext ? 'H' : 'A';
+    const nextState = !isHNext;
     
     const win = checkTicTacToeWinner(newBoard);
     let newScores = { ...scores };
     let winText = '';
 
-    if (win === 'X') {
-      winText = 'Player X (Admin) Wins! 🎉';
-      newScores.admin += 1;
+    if (win === 'H') {
+      winText = 'Player H (Admin) Wins! 🎉';
+      newScores.H += 1;
       confetti({ particleCount: 90, spread: 100 });
-    } else if (win === 'O') {
-      winText = 'Player O (User) Wins! 🎉';
-      newScores.user += 1;
+    } else if (win === 'A') {
+      winText = 'Player A (User) Wins! 🎉';
+      newScores.A += 1;
       confetti({ particleCount: 90, spread: 100 });
     } else if (win === 'Draw') {
       winText = "It's a Draw! 🤝";
     }
 
     setTictactoeBoard(newBoard);
-    setIsXNext(nextState);
+    setIsHNext(nextState);
     setWinnerMessage(winText);
     setScores(newScores);
 
@@ -995,15 +1007,16 @@ export default function App() {
       socketRef.current.emit('arcade_game_action', {
         gameId: 'tictactoe',
         board: newBoard,
-        isXNext: nextState,
+        isHNext: nextState,
         winner: winText,
         scores: newScores
       });
     }
   };
 
+  // 2. LUDO SPRINT LOGIC
   const handleLudoRoll = () => {
-    const myTurn = (role === 'parent' && ludoTurn === 'p1') || (role !== 'parent' && ludoTurn === 'p2');
+    const myTurn = (isCurrentAdmin && ludoTurn === 'H') || (!isCurrentAdmin && ludoTurn === 'A');
     if (!myTurn || winnerMessage) return;
 
     const roll = Math.floor(Math.random() * 6) + 1;
@@ -1012,23 +1025,23 @@ export default function App() {
     let winText = '';
     let newScores = { ...scores };
 
-    if (ludoTurn === 'p1') {
-      newPos.p1 = Math.min(30, newPos.p1 + roll);
-      if (newPos.p1 >= 30) {
-        winText = 'Player 1 (Admin) Won the Ludo Sprint! 🏆';
-        newScores.admin += 1;
+    if (ludoTurn === 'H') {
+      newPos.H = Math.min(30, newPos.H + roll);
+      if (newPos.H >= 30) {
+        winText = 'Player H (Admin) Won Ludo Sprint! 🏆';
+        newScores.H += 1;
         confetti({ particleCount: 90, spread: 100 });
       }
     } else {
-      newPos.p2 = Math.min(30, newPos.p2 + roll);
-      if (newPos.p2 >= 30) {
-        winText = 'Player 2 (User) Won the Ludo Sprint! 🏆';
-        newScores.user += 1;
+      newPos.A = Math.min(30, newPos.A + roll);
+      if (newPos.A >= 30) {
+        winText = 'Player A (User) Won Ludo Sprint! 🏆';
+        newScores.A += 1;
         confetti({ particleCount: 90, spread: 100 });
       }
     }
 
-    const nextTurn = ludoTurn === 'p1' ? 'p2' : 'p1';
+    const nextTurn = ludoTurn === 'H' ? 'A' : 'H';
     setLudoPos(newPos);
     setLudoTurn(nextTurn);
     if (winText) {
@@ -1048,21 +1061,25 @@ export default function App() {
     }
   };
 
+  // 3-8 GENERAL GAME SCORING LOGIC
   const handleGenericGameScore = (gameKey) => {
-    const winText = `${role === 'parent' ? 'Admin' : 'User'} Scored! 🎯`;
+    if (winnerMessage) return;
+    const scorer = isCurrentAdmin ? 'H' : 'A';
+    const winText = `Player ${scorer} (${isCurrentAdmin ? 'Admin' : 'User'}) Scored! 🎯`;
     const newScores = {
       ...scores,
-      [role === 'parent' ? 'admin' : 'user']: scores[role === 'parent' ? 'admin' : 'user'] + 1
+      [scorer]: scores[scorer] + 1
     };
     setScores(newScores);
     setWinnerMessage(winText);
-    confetti({ particleCount: 60, spread: 70 });
+    confetti({ particleCount: 70, spread: 80 });
 
     if (socketRef.current) {
       socketRef.current.emit('arcade_game_action', {
         gameId: gameKey,
         winner: winText,
-        scores: newScores
+        scores: newScores,
+        score: newScores
       });
     }
   };
@@ -1997,7 +2014,7 @@ export default function App() {
             )}
           </div>
 
-          {/* PLUGINS MENU ITEM WITH GLOWING MUSIC-STYLE NOTIFICATION */}
+          {/* PLUGINS MENU WITH GLOWING MUSIC-STYLE ANIMATION FOR USER */}
           <div 
             onClick={() => {
               if (role === 'parent' || showArcadePlugins) {
@@ -2019,11 +2036,11 @@ export default function App() {
             </span>
           </div>
 
-          {/* ADMIN (PARENT) CONTROLS INSIDE PLUGINS MENU */}
+          {/* ADMIN (H) CONTROLS INSIDE PLUGINS MENU */}
           {showArcadePlugins && role === 'parent' && (
             <div className="pl-3 pr-2 py-2 space-y-2 bg-[#0c0c0c] rounded-xl border border-[#222] my-1">
               <div className="flex items-center justify-between text-[11px] font-bold text-amber-400">
-                <span className="flex items-center gap-1"><Gamepad2 size={13} /> Arcade Master</span>
+                <span className="flex items-center gap-1"><Gamepad2 size={13} /> Arcade Master (H)</span>
               </div>
               <div className="grid grid-cols-2 gap-1.5">
                 <button
@@ -2042,11 +2059,11 @@ export default function App() {
             </div>
           )}
 
-          {/* USER (DORA) ACCEPT HANDSHAKE BANNER INSIDE PLUGINS MENU */}
+          {/* USER (A) ACCEPT HANDSHAKE BANNER INSIDE PLUGINS MENU */}
           {incomingGameRequest && role !== 'parent' && (
             <div className="bg-amber-950/60 border border-amber-500/50 p-3 rounded-xl my-1 space-y-2 text-left animate-in fade-in duration-200">
               <p className="text-[11px] text-amber-300 font-bold flex items-center gap-1.5">
-                <Radio size={14} className="animate-pulse" /> Admin sent arcade games request!
+                <Radio size={14} className="animate-pulse" /> Admin (H) sent arcade games request!
               </p>
               <button
                 onClick={handleUserAcceptRequest}
@@ -2135,11 +2152,11 @@ export default function App() {
         <div className="p-3 md:p-2.5 border-t border-[#171717] flex items-center justify-between text-xs bg-[#000000]">
           <div className="flex items-center gap-2.5 overflow-hidden">
             <div className="w-8 h-8 md:w-7 md:h-7 rounded-full bg-[#1e293b] border border-[#333] flex items-center justify-center text-white text-xs font-bold shrink-0">
-              {role === 'parent' ? 'HS' : 'U'}
+              {role === 'parent' ? 'H' : 'A'}
             </div>
             <div className="truncate">
               <p className="text-white text-xs font-medium truncate">
-                {role === 'parent' ? 'hetkumar satap...' : 'User'}
+                {role === 'parent' ? 'Admin (H)' : 'User (A)'}
               </p>
               <p className="text-[10px] text-gray-400">Free</p>
             </div>
@@ -2190,7 +2207,7 @@ export default function App() {
                   : (hasUnreadSecret ? 'Unread Secret Message Pending!' : 'Server Connected')
               } 
             />
-            {role === 'parent' && <span className="text-[9px] sm:text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-1.5 py-0.5 rounded font-mono">ADMIN</span>}
+            {role === 'parent' && <span className="text-[9px] sm:text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-1.5 py-0.5 rounded font-mono">ADMIN (H)</span>}
             
             <button className="hidden sm:flex items-center gap-1.5 text-white hover:text-gray-200 cursor-pointer text-xs font-medium">
               <Sparkles size={14} className="text-blue-400" />
@@ -2255,7 +2272,7 @@ export default function App() {
           </div>
         )}
 
-        {/* FULLY WORKING EMBEDDED PLUGIN GAME VIEW */}
+        {/* FULLY FUNCTIONAL EMBEDDED PLUGIN GAME VIEW (H vs A) */}
         {activeGame ? (
           <section className="flex-1 overflow-y-auto px-4 py-6 max-w-3xl w-full mx-auto space-y-4 scrollbar-none font-sans flex flex-col items-center justify-center">
             <div className="w-full bg-[#121212] border-2 border-emerald-500/40 rounded-3xl p-6 shadow-2xl relative space-y-5 text-center">
@@ -2274,9 +2291,9 @@ export default function App() {
 
               {/* LIVE SCOREBOARD */}
               <div className="flex items-center justify-between bg-[#0a0a0a] border border-[#222] px-4 py-2.5 rounded-2xl text-xs font-mono">
-                <span className="text-blue-400 font-bold">Admin (X / P1): {scores.admin}</span>
+                <span className="text-blue-400 font-bold">Admin (H): {scores.H}</span>
                 <span className="text-emerald-400 animate-pulse font-bold">LIVE SCOREBOARD</span>
-                <span className="text-rose-400 font-bold">User (O / P2): {scores.user}</span>
+                <span className="text-rose-400 font-bold">User (A): {scores.A}</span>
               </div>
 
               {winnerMessage && (
@@ -2285,11 +2302,11 @@ export default function App() {
                 </div>
               )}
 
-              {/* GAME 1: TIC TAC TOE */}
+              {/* 1. TIC TAC TOE */}
               {activeGame.id === 'tictactoe' && (
                 <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto shadow-inner">
                   <div className="text-xs font-bold text-gray-200">
-                    Turn: <span className={`px-2.5 py-1 rounded-lg text-white font-mono ${isXNext ? 'bg-blue-600' : 'bg-rose-600'}`}>{isXNext ? 'Player X (Admin)' : 'Player O (User)'}</span>
+                    Turn: <span className={`px-2.5 py-1 rounded-lg text-white font-mono ${isHNext ? 'bg-blue-600' : 'bg-rose-600'}`}>{isHNext ? 'Player H (Admin)' : 'Player A (User)'}</span>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     {tictactoeBoard.map((val, idx) => (
@@ -2297,7 +2314,7 @@ export default function App() {
                         key={idx}
                         onClick={() => handleTicTacToeClick(idx)}
                         className={`h-24 rounded-2xl text-3xl font-black flex items-center justify-center transition-all cursor-pointer shadow-xl transform active:scale-95 ${
-                          val === 'X' ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-blue-500/30' : val === 'O' ? 'bg-gradient-to-br from-rose-600 to-pink-600 text-white shadow-rose-500/30' : 'bg-[#1a1a1a] hover:bg-[#252525] text-gray-600 border border-[#333]'
+                          val === 'H' ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-blue-500/30' : val === 'A' ? 'bg-gradient-to-br from-rose-600 to-pink-600 text-white shadow-rose-500/30' : 'bg-[#1a1a1a] hover:bg-[#252525] text-gray-600 border border-[#333]'
                         }`}
                       >
                         {val}
@@ -2307,9 +2324,9 @@ export default function App() {
                   <button
                     onClick={() => {
                       setTictactoeBoard(Array(9).fill(null));
-                      setIsXNext(true);
+                      setIsHNext(true);
                       setWinnerMessage('');
-                      if (socketRef.current) socketRef.current.emit('arcade_game_action', { gameId: 'tictactoe', board: Array(9).fill(null), isXNext: true, winner: '' });
+                      if (socketRef.current) socketRef.current.emit('arcade_game_action', { gameId: 'tictactoe', board: Array(9).fill(null), isHNext: true, winner: '' });
                     }}
                     className="text-xs text-amber-400 hover:underline flex items-center gap-1 mx-auto pt-2 cursor-pointer"
                   >
@@ -2318,15 +2335,15 @@ export default function App() {
                 </div>
               )}
 
-              {/* GAME 2: LUDO QUICK SPRINT */}
+              {/* 2. LUDO QUICK SPRINT */}
               {activeGame.id === 'ludo' && (
                 <div className="space-y-5 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-md mx-auto">
                   <div className="flex justify-around items-center text-xs font-bold text-gray-300">
-                    <div className={`p-3 rounded-xl border ${ludoTurn === 'p1' ? 'bg-blue-600/30 border-blue-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333]'}`}>
-                      Admin: {ludoPos.p1} / 30
+                    <div className={`p-3 rounded-xl border ${ludoTurn === 'H' ? 'bg-blue-600/30 border-blue-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333]'}`}>
+                      Player H (Admin): {ludoPos.H} / 30
                     </div>
-                    <div className={`p-3 rounded-xl border ${ludoTurn === 'p2' ? 'bg-rose-600/30 border-rose-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333]'}`}>
-                      User: {ludoPos.p2} / 30
+                    <div className={`p-3 rounded-xl border ${ludoTurn === 'A' ? 'bg-rose-600/30 border-rose-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333]'}`}>
+                      Player A (User): {ludoPos.A} / 30
                     </div>
                   </div>
 
@@ -2339,13 +2356,13 @@ export default function App() {
                       onClick={handleLudoRoll}
                       className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-lg cursor-pointer active:scale-95"
                     >
-                      Roll ({ludoTurn === 'p1' ? 'Admin Turn' : 'User Turn'})
+                      Roll ({ludoTurn === 'H' ? 'Admin (H) Turn' : 'User (A) Turn'})
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* GAMES 3-8: FULLY FUNCTIONAL COLORFUL INTERACTIVE ARENAS */}
+              {/* GAMES 3-8: FULLY WORKING INTERACTIVE ARENAS */}
               {activeGame.id !== 'tictactoe' && activeGame.id !== 'ludo' && (
                 <div className="bg-[#0a0a0a] border border-[#222] p-8 rounded-2xl space-y-4 max-w-md mx-auto">
                   <Trophy size={48} className="mx-auto text-amber-400 animate-bounce" />
