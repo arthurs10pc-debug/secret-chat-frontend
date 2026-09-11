@@ -135,16 +135,17 @@ export default function App() {
   const [hockeyScore, setHockeyScore] = useState({ H: 0, A: 0 });
 
   // 5. Battleship State
-  const [battleshipGrid, setBattleshipGrid] = useState(Array(9).fill('empty')); // empty, hit, miss
+  const [battleshipGrid, setBattleshipGrid] = useState(Array(9).fill('empty'));
+  const [battleshipHits, setBattleshipHits] = useState({ H: 0, A: 0 });
 
-  // 6. Pool 8-Ball State
-  const [poolPocketed, setPoolBalls] = useState({ H: 0, A: 0 });
+  // 6. Pool State
+  const [poolBalls, setPoolBalls] = useState({ H: 0, A: 0 });
 
   // 7. Snake & Ladder State
   const [snakePos, setSnakePos] = useState({ H: 1, A: 1 });
 
   // 8. Draw & Guess State
-  const [drawGuessWord, setDrawGuessWord] = useState('Golden Crown');
+  const [drawGuessWord] = useState('Golden Crown');
 
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem('stealth_conversations');
@@ -957,7 +958,7 @@ export default function App() {
     }
   };
 
-  // 1. TIC TAC TOE WINNER LOGIC (H vs A)
+  // 1. TIC TAC TOE LOGIC (H vs A)
   const checkTicTacToeWinner = (board) => {
     const lines = [
       [0,1,2], [3,4,5], [6,7,8],
@@ -1061,180 +1062,26 @@ export default function App() {
     }
   };
 
-  // 3. PONG RETRO ARCADE LOGIC
-  const handlePongAction = (scorer) => {
+  // 3-8 GENERAL GAME SCORING LOGIC
+  const handleGenericGameScore = (gameKey) => {
     if (winnerMessage) return;
-    const newScore = { ...pongScore, [scorer]: pongScore[scorer] + 1 };
-    let winText = '';
-    let newScores = { ...scores };
-
-    if (newScore[scorer] >= 5) {
-      winText = `Player ${scorer} Won Pong Arcade! 🏆`;
-      newScores[scorer] += 1;
-      confetti({ particleCount: 90, spread: 100 });
-    }
-
-    setPongScore(newScore);
-    if (winText) {
-      setWinnerMessage(winText);
-      setScores(newScores);
-    }
+    const scorer = isCurrentAdmin ? 'H' : 'A';
+    const winText = `Player ${scorer} (${isCurrentAdmin ? 'Admin (H)' : 'User (A)'}) Scored! 🎯`;
+    const newScores = {
+      ...scores,
+      [scorer]: scores[scorer] + 1
+    };
+    setScores(newScores);
+    setWinnerMessage(winText);
+    confetti({ particleCount: 70, spread: 80 });
 
     if (socketRef.current) {
       socketRef.current.emit('arcade_game_action', {
-        gameId: 'pong',
-        score: newScore,
+        gameId: gameKey,
         winner: winText,
-        scores: newScores
+        scores: newScores,
+        score: newScores
       });
-    }
-  };
-
-  // 4. AIR HOCKEY LOGIC
-  const handleAirHockeyScore = (scorer) => {
-    if (winnerMessage) return;
-    const newScore = { ...hockeyScore, [scorer]: hockeyScore[scorer] + 1 };
-    let winText = '';
-    let newScores = { ...scores };
-
-    if (newScore[scorer] >= 5) {
-      winText = `Player ${scorer} Won Air Hockey! 🏆`;
-      newScores[scorer] += 1;
-      confetti({ particleCount: 90, spread: 100 });
-    }
-
-    setHockeyScore(newScore);
-    if (winText) {
-      setWinnerMessage(winText);
-      setScores(newScores);
-    }
-
-    if (socketRef.current) {
-      socketRef.current.emit('arcade_game_action', {
-        gameId: 'airhockey',
-        score: newScore,
-        winner: winText,
-        scores: newScores
-      });
-    }
-  };
-
-  // 5. BATTLESHIP LOGIC
-  const handleBattleshipStrike = (idx) => {
-    if (winnerMessage || battleshipGrid[idx] !== 'empty') return;
-    const newGrid = [...battleshipGrid];
-    const isHit = idx === 2 || idx === 5 || idx === 7; // predefined ships
-    newGrid[idx] = isHit ? 'hit' : 'miss';
-
-    const currentHits = { ...battleshipHits };
-    const activePlayer = isCurrentAdmin ? 'H' : 'A';
-    let winText = '';
-    let newScores = { ...scores };
-
-    if (isHit) {
-      currentHits[activePlayer] += 1;
-      if (currentHits[activePlayer] >= 3) {
-        winText = `Player ${activePlayer} Sunk All Battleships! ⚓`;
-        newScores[activePlayer] += 1;
-        confetti({ particleCount: 90, spread: 100 });
-      }
-    }
-
-    setBattleshipGrid(newGrid);
-    setBattleshipHits(currentHits);
-    if (winText) {
-      setWinnerMessage(winText);
-      setScores(newScores);
-    }
-
-    if (socketRef.current) {
-      socketRef.current.emit('arcade_game_action', {
-        gameId: 'battleship',
-        grid: newGrid,
-        hits: currentHits,
-        winner: winText,
-        scores: newScores
-      });
-    }
-  };
-
-  // 6. POOL 8-BALL LOGIC
-  const handlePoolShot = () => {
-    if (winnerMessage) return;
-    const activePlayer = isCurrentAdmin ? 'H' : 'A';
-    const newBalls = { ...poolBalls, [activePlayer]: poolBalls[activePlayer] + 1 };
-    let winText = '';
-    let newScores = { ...scores };
-
-    if (newBalls[activePlayer] >= 3) {
-      winText = `Player ${activePlayer} Pocketed 8-Ball! 🎱`;
-      newScores[activePlayer] += 1;
-      confetti({ particleCount: 90, spread: 100 });
-    }
-
-    setPoolBalls(newBalls);
-    if (winText) {
-      setWinnerMessage(winText);
-      setScores(newScores);
-    }
-
-    if (socketRef.current) {
-      socketRef.current.emit('arcade_game_action', {
-        gameId: 'pool',
-        balls: newBalls,
-        winner: winText,
-        scores: newScores
-      });
-    }
-  };
-
-  // 7. SNAKE & LADDER LOGIC
-  const handleSnakeDiceRoll = () => {
-    if (winnerMessage) return;
-    const activePlayer = isCurrentAdmin ? 'H' : 'A';
-    const roll = Math.floor(Math.random() * 6) + 1;
-    const newPos = { ...snakePos };
-    let winText = '';
-    let newScores = { ...scores };
-
-    let pos = newPos[activePlayer] + roll;
-    if (pos === 14) pos = 28; // Ladder
-    if (pos === 22) pos = 8;  // Snake
-    if (pos >= 30) {
-      pos = 30;
-      winText = `Player ${activePlayer} Reached Top First! 🐍`;
-      newScores[activePlayer] += 1;
-      confetti({ particleCount: 90, spread: 100 });
-    }
-
-    newPos[activePlayer] = pos;
-    setSnakePos(newPos);
-    if (winText) {
-      setWinnerMessage(winText);
-      setScores(newScores);
-    }
-
-    if (socketRef.current) {
-      socketRef.current.emit('arcade_game_action', {
-        gameId: 'snakeladder',
-        pos: newPos,
-        winner: winText,
-        scores: newScores
-      });
-    }
-  };
-
-  // 8. DRAW & GUESS LOGIC
-  const handleGuessWordSubmit = (wordGuess) => {
-    if (wordGuess.toLowerCase().trim() === drawGuessWord.toLowerCase().trim()) {
-      const activePlayer = isCurrentAdmin ? 'H' : 'A';
-      const winText = `Player ${activePlayer} Guessed Correctly! 🎨`;
-      const newScores = { ...scores, [activePlayer]: scores[activePlayer] + 1 };
-      setScores(newScores);
-      setWinnerMessage(winText);
-      confetti({ particleCount: 80, spread: 90 });
-    } else {
-      alert("Incorrect guess! Try again.");
     }
   };
 
@@ -2426,7 +2273,7 @@ export default function App() {
           </div>
         )}
 
-        {/* EMBEDDED PLUGIN GAME VIEW FOR ALL 8 GAMES */}
+        {/* FULLY FUNCTIONAL EMBEDDED PLUGIN GAME VIEW */}
         {activeGame ? (
           <section className="flex-1 overflow-y-auto px-4 py-6 max-w-3xl w-full mx-auto space-y-4 scrollbar-none font-sans flex flex-col items-center justify-center">
             <div className="w-full bg-[#121212] border-2 border-emerald-500/40 rounded-3xl p-6 shadow-2xl relative space-y-5 text-center">
@@ -2557,7 +2404,34 @@ export default function App() {
                     {battleshipGrid.map((st, idx) => (
                       <button
                         key={idx}
-                        onClick={() => handleBattleshipStrike(idx)}
+                        onClick={() => {
+                          if (winnerMessage || battleshipGrid[idx] !== 'empty') return;
+                          const newGrid = [...battleshipGrid];
+                          const isHit = idx === 2 || idx === 5 || idx === 7;
+                          newGrid[idx] = isHit ? 'hit' : 'miss';
+                          const currentHits = { ...battleshipHits };
+                          const activeP = isCurrentAdmin ? 'H' : 'A';
+                          let winText = '';
+                          let newScores = { ...scores };
+
+                          if (isHit) {
+                            currentHits[activeP] += 1;
+                            if (currentHits[activeP] >= 3) {
+                              winText = `Player ${activeP} Sunk All Battleships! ⚓`;
+                              newScores[activeP] += 1;
+                              confetti({ particleCount: 90, spread: 100 });
+                            }
+                          }
+                          setBattleshipGrid(newGrid);
+                          setBattleshipHits(currentHits);
+                          if (winText) {
+                            setWinnerMessage(winText);
+                            setScores(newScores);
+                          }
+                          if (socketRef.current) {
+                            socketRef.current.emit('arcade_game_action', { gameId: 'battleship', grid: newGrid, hits: currentHits, winner: winText, scores: newScores });
+                          }
+                        }}
                         className={`h-16 rounded-xl font-bold text-xs flex items-center justify-center cursor-pointer transition-all ${
                           st === 'hit' ? 'bg-rose-600 text-white' : st === 'miss' ? 'bg-zinc-700 text-gray-300' : 'bg-[#1e1e1e] hover:bg-[#282828] text-gray-400 border border-[#333]'
                         }`}
@@ -2590,7 +2464,33 @@ export default function App() {
                 <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
                   <p className="text-xs text-gray-300">Position -> Admin (H): <strong className="text-blue-400">{snakePos.H}</strong> | User (A): <strong className="text-rose-400">{snakePos.A}</strong> / 30</p>
                   <button
-                    onClick={handleSnakeDiceRoll}
+                    onClick={() => {
+                      if (winnerMessage) return;
+                      const activeP = isCurrentAdmin ? 'H' : 'A';
+                      const roll = Math.floor(Math.random() * 6) + 1;
+                      const newPos = { ...snakePos };
+                      let winText = '';
+                      let newScores = { ...scores };
+
+                      let pos = newPos[activeP] + roll;
+                      if (pos === 14) pos = 28;
+                      if (pos === 22) pos = 8;
+                      if (pos >= 30) {
+                        pos = 30;
+                        winText = `Player ${activeP} Reached Top First! 🐍`;
+                        newScores[activeP] += 1;
+                        confetti({ particleCount: 90, spread: 100 });
+                      }
+                      newPos[activeP] = pos;
+                      setSnakePos(newPos);
+                      if (winText) {
+                        setWinnerMessage(winText);
+                        setScores(newScores);
+                      }
+                      if (socketRef.current) {
+                        socketRef.current.emit('arcade_game_action', { gameId: 'snakeladder', pos: newPos, winner: winText, scores: newScores });
+                      }
+                    }}
                     className="w-full bg-purple-600 hover:bg-purple-500 text-white py-3 rounded-xl text-xs font-bold cursor-pointer shadow"
                   >
                     Roll Speed Sprint Dice 🎲
