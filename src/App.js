@@ -119,32 +119,32 @@ export default function App() {
   const [scores, setScores] = useState({ H: 0, A: 0 });
   const [winnerMessage, setWinnerMessage] = useState('');
 
-  // Game 1: Tic Tac Toe State
+  // 1. Tic Tac Toe State
   const [tictactoeBoard, setTictactoeBoard] = useState(Array(9).fill(null));
   const [isHNext, setIsHNext] = useState(true);
 
-  // Game 2: Ludo State
+  // 2. Ludo State
   const [ludoPos, setLudoPos] = useState({ H: 0, A: 0 });
   const [ludoTurn, setLudoTurn] = useState('H');
   const [diceVal, setDiceVal] = useState(1);
 
-  // Game 3: Pong State
+  // 3. Pong State
   const [pongScore, setPongScore] = useState({ H: 0, A: 0 });
 
-  // Game 4: Air Hockey State
+  // 4. Air Hockey State
   const [hockeyScore, setHockeyScore] = useState({ H: 0, A: 0 });
 
-  // Game 5: Battleship State
-  const [battleshipHits, setBattleshipHits] = useState({ H: 0, A: 0 });
+  // 5. Battleship State
+  const [battleshipGrid, setBattleshipGrid] = useState(Array(9).fill('empty')); // empty, hit, miss
 
-  // Game 6: Pool State
-  const [poolBalls, setPoolBalls] = useState({ H: 0, A: 0 });
+  // 6. Pool 8-Ball State
+  const [poolPocketed, setPoolBalls] = useState({ H: 0, A: 0 });
 
-  // Game 7: Snake & Ladder State
+  // 7. Snake & Ladder State
   const [snakePos, setSnakePos] = useState({ H: 1, A: 1 });
 
-  // Game 8: Draw & Guess State
-  const [drawGuessWord] = useState('Rocket Ship');
+  // 8. Draw & Guess State
+  const [drawGuessWord, setDrawGuessWord] = useState('Golden Crown');
 
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem('stealth_conversations');
@@ -256,7 +256,6 @@ export default function App() {
 
   const viewModeRef = useRef(viewMode);
   const roleRef = useRef(role);
-
   const isCurrentAdmin = role === 'parent';
 
   useEffect(() => {
@@ -650,6 +649,7 @@ export default function App() {
         if (moveData.winner) setWinnerMessage(moveData.winner);
         if (moveData.scores) setScores(moveData.scores);
       } else if (moveData.gameId === 'battleship') {
+        setBattleshipGrid(moveData.grid);
         setBattleshipHits(moveData.hits);
         if (moveData.winner) setWinnerMessage(moveData.winner);
         if (moveData.scores) setScores(moveData.scores);
@@ -957,7 +957,7 @@ export default function App() {
     }
   };
 
-  // 1. TIC TAC TOE LOGIC (H vs A)
+  // 1. TIC TAC TOE WINNER LOGIC (H vs A)
   const checkTicTacToeWinner = (board) => {
     const lines = [
       [0,1,2], [3,4,5], [6,7,8],
@@ -1014,7 +1014,7 @@ export default function App() {
     }
   };
 
-  // 2. LUDO SPRINT LOGIC
+  // 2. LUDO QUICK SPRINT LOGIC
   const handleLudoRoll = () => {
     const myTurn = (isCurrentAdmin && ludoTurn === 'H') || (!isCurrentAdmin && ludoTurn === 'A');
     if (!myTurn || winnerMessage) return;
@@ -1061,26 +1061,180 @@ export default function App() {
     }
   };
 
-  // 3-8 GENERAL GAME SCORING LOGIC
-  const handleGenericGameScore = (gameKey) => {
+  // 3. PONG RETRO ARCADE LOGIC
+  const handlePongAction = (scorer) => {
     if (winnerMessage) return;
-    const scorer = isCurrentAdmin ? 'H' : 'A';
-    const winText = `Player ${scorer} (${isCurrentAdmin ? 'Admin' : 'User'}) Scored! 🎯`;
-    const newScores = {
-      ...scores,
-      [scorer]: scores[scorer] + 1
-    };
-    setScores(newScores);
-    setWinnerMessage(winText);
-    confetti({ particleCount: 70, spread: 80 });
+    const newScore = { ...pongScore, [scorer]: pongScore[scorer] + 1 };
+    let winText = '';
+    let newScores = { ...scores };
+
+    if (newScore[scorer] >= 5) {
+      winText = `Player ${scorer} Won Pong Arcade! 🏆`;
+      newScores[scorer] += 1;
+      confetti({ particleCount: 90, spread: 100 });
+    }
+
+    setPongScore(newScore);
+    if (winText) {
+      setWinnerMessage(winText);
+      setScores(newScores);
+    }
 
     if (socketRef.current) {
       socketRef.current.emit('arcade_game_action', {
-        gameId: gameKey,
+        gameId: 'pong',
+        score: newScore,
         winner: winText,
-        scores: newScores,
-        score: newScores
+        scores: newScores
       });
+    }
+  };
+
+  // 4. AIR HOCKEY LOGIC
+  const handleAirHockeyScore = (scorer) => {
+    if (winnerMessage) return;
+    const newScore = { ...hockeyScore, [scorer]: hockeyScore[scorer] + 1 };
+    let winText = '';
+    let newScores = { ...scores };
+
+    if (newScore[scorer] >= 5) {
+      winText = `Player ${scorer} Won Air Hockey! 🏆`;
+      newScores[scorer] += 1;
+      confetti({ particleCount: 90, spread: 100 });
+    }
+
+    setHockeyScore(newScore);
+    if (winText) {
+      setWinnerMessage(winText);
+      setScores(newScores);
+    }
+
+    if (socketRef.current) {
+      socketRef.current.emit('arcade_game_action', {
+        gameId: 'airhockey',
+        score: newScore,
+        winner: winText,
+        scores: newScores
+      });
+    }
+  };
+
+  // 5. BATTLESHIP LOGIC
+  const handleBattleshipStrike = (idx) => {
+    if (winnerMessage || battleshipGrid[idx] !== 'empty') return;
+    const newGrid = [...battleshipGrid];
+    const isHit = idx === 2 || idx === 5 || idx === 7; // predefined ships
+    newGrid[idx] = isHit ? 'hit' : 'miss';
+
+    const currentHits = { ...battleshipHits };
+    const activePlayer = isCurrentAdmin ? 'H' : 'A';
+    let winText = '';
+    let newScores = { ...scores };
+
+    if (isHit) {
+      currentHits[activePlayer] += 1;
+      if (currentHits[activePlayer] >= 3) {
+        winText = `Player ${activePlayer} Sunk All Battleships! ⚓`;
+        newScores[activePlayer] += 1;
+        confetti({ particleCount: 90, spread: 100 });
+      }
+    }
+
+    setBattleshipGrid(newGrid);
+    setBattleshipHits(currentHits);
+    if (winText) {
+      setWinnerMessage(winText);
+      setScores(newScores);
+    }
+
+    if (socketRef.current) {
+      socketRef.current.emit('arcade_game_action', {
+        gameId: 'battleship',
+        grid: newGrid,
+        hits: currentHits,
+        winner: winText,
+        scores: newScores
+      });
+    }
+  };
+
+  // 6. POOL 8-BALL LOGIC
+  const handlePoolShot = () => {
+    if (winnerMessage) return;
+    const activePlayer = isCurrentAdmin ? 'H' : 'A';
+    const newBalls = { ...poolBalls, [activePlayer]: poolBalls[activePlayer] + 1 };
+    let winText = '';
+    let newScores = { ...scores };
+
+    if (newBalls[activePlayer] >= 3) {
+      winText = `Player ${activePlayer} Pocketed 8-Ball! 🎱`;
+      newScores[activePlayer] += 1;
+      confetti({ particleCount: 90, spread: 100 });
+    }
+
+    setPoolBalls(newBalls);
+    if (winText) {
+      setWinnerMessage(winText);
+      setScores(newScores);
+    }
+
+    if (socketRef.current) {
+      socketRef.current.emit('arcade_game_action', {
+        gameId: 'pool',
+        balls: newBalls,
+        winner: winText,
+        scores: newScores
+      });
+    }
+  };
+
+  // 7. SNAKE & LADDER LOGIC
+  const handleSnakeDiceRoll = () => {
+    if (winnerMessage) return;
+    const activePlayer = isCurrentAdmin ? 'H' : 'A';
+    const roll = Math.floor(Math.random() * 6) + 1;
+    const newPos = { ...snakePos };
+    let winText = '';
+    let newScores = { ...scores };
+
+    let pos = newPos[activePlayer] + roll;
+    if (pos === 14) pos = 28; // Ladder
+    if (pos === 22) pos = 8;  // Snake
+    if (pos >= 30) {
+      pos = 30;
+      winText = `Player ${activePlayer} Reached Top First! 🐍`;
+      newScores[activePlayer] += 1;
+      confetti({ particleCount: 90, spread: 100 });
+    }
+
+    newPos[activePlayer] = pos;
+    setSnakePos(newPos);
+    if (winText) {
+      setWinnerMessage(winText);
+      setScores(newScores);
+    }
+
+    if (socketRef.current) {
+      socketRef.current.emit('arcade_game_action', {
+        gameId: 'snakeladder',
+        pos: newPos,
+        winner: winText,
+        scores: newScores
+      });
+    }
+  };
+
+  // 8. DRAW & GUESS LOGIC
+  const handleGuessWordSubmit = (wordGuess) => {
+    if (wordGuess.toLowerCase().trim() === drawGuessWord.toLowerCase().trim()) {
+      const activePlayer = isCurrentAdmin ? 'H' : 'A';
+      const winText = `Player ${activePlayer} Guessed Correctly! 🎨`;
+      const newScores = { ...scores, [activePlayer]: scores[activePlayer] + 1 };
+      setScores(newScores);
+      setWinnerMessage(winText);
+      confetti({ particleCount: 80, spread: 90 });
+    } else {
+      alert("Incorrect guess! Try again.");
     }
   };
 
@@ -2272,7 +2426,7 @@ export default function App() {
           </div>
         )}
 
-        {/* FULLY FUNCTIONAL EMBEDDED PLUGIN GAME VIEW (H vs A) */}
+        {/* EMBEDDED PLUGIN GAME VIEW FOR ALL 8 GAMES */}
         {activeGame ? (
           <section className="flex-1 overflow-y-auto px-4 py-6 max-w-3xl w-full mx-auto space-y-4 scrollbar-none font-sans flex flex-col items-center justify-center">
             <div className="w-full bg-[#121212] border-2 border-emerald-500/40 rounded-3xl p-6 shadow-2xl relative space-y-5 text-center">
@@ -2356,23 +2510,106 @@ export default function App() {
                       onClick={handleLudoRoll}
                       className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-lg cursor-pointer active:scale-95"
                     >
-                      Roll ({ludoTurn === 'H' ? 'Admin (H) Turn' : 'User (A) Turn'})
+                      Roll ({ludoTurn === 'H' ? 'Admin Turn' : 'User Turn'})
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* GAMES 3-8: FULLY WORKING INTERACTIVE ARENAS */}
-              {activeGame.id !== 'tictactoe' && activeGame.id !== 'ludo' && (
-                <div className="bg-[#0a0a0a] border border-[#222] p-8 rounded-2xl space-y-4 max-w-md mx-auto">
-                  <Trophy size={48} className="mx-auto text-amber-400 animate-bounce" />
-                  <h3 className="text-base font-bold text-white">{activeGame.name} Arena</h3>
-                  <p className="text-xs text-gray-400">{activeGame.desc}</p>
+              {/* 3. PONG RETRO ARCADE */}
+              {activeGame.id === 'pong' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-gray-300">Pong Rally Score: <strong className="text-blue-400">H: {pongScore.H}</strong> | <strong className="text-rose-400">A: {pongScore.A}</strong></p>
+                  <div className="h-32 bg-black border border-[#333] rounded-xl flex items-center justify-center relative overflow-hidden">
+                    <div className="absolute w-3 h-3 bg-emerald-400 rounded-full animate-ping" />
+                    <span className="text-[11px] text-gray-500 font-mono">Ball in live rally...</span>
+                  </div>
                   <button
-                    onClick={() => handleGenericGameScore(activeGame.id)}
-                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs py-3 rounded-xl font-bold shadow cursor-pointer active:scale-95"
+                    onClick={() => handleGenericGameScore('pong')}
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
                   >
-                    Score Point & Confetti 🎉
+                    Hit Ball / Score Point 🏓
+                  </button>
+                </div>
+              )}
+
+              {/* 4. AIR HOCKEY */}
+              {activeGame.id === 'airhockey' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-gray-300">Goals: <strong className="text-blue-400">H: {hockeyScore.H}</strong> | <strong className="text-rose-400">A: {hockeyScore.A}</strong></p>
+                  <div className="h-32 bg-gradient-to-b from-indigo-950 to-blue-950 border border-blue-500/40 rounded-xl flex items-center justify-center">
+                    <span className="text-xs text-cyan-300 font-bold">Neon Ice Arena Active</span>
+                  </div>
+                  <button
+                    onClick={() => handleGenericGameScore('airhockey')}
+                    className="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Shoot Puck & Goal! ⚡
+                  </button>
+                </div>
+              )}
+
+              {/* 5. BATTLESHIP */}
+              {activeGame.id === 'battleship' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-gray-300">Hits: <strong className="text-blue-400">H: {battleshipHits.H}</strong> | <strong className="text-rose-400">A: {battleshipHits.A}</strong> (Target 3)</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {battleshipGrid.map((st, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleBattleshipStrike(idx)}
+                        className={`h-16 rounded-xl font-bold text-xs flex items-center justify-center cursor-pointer transition-all ${
+                          st === 'hit' ? 'bg-rose-600 text-white' : st === 'miss' ? 'bg-zinc-700 text-gray-300' : 'bg-[#1e1e1e] hover:bg-[#282828] text-gray-400 border border-[#333]'
+                        }`}
+                      >
+                        {st === 'empty' ? `Grid #${idx+1}` : st.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 6. POOL 8-BALL */}
+              {activeGame.id === 'pool' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-gray-300">Pocketed Balls: <strong className="text-blue-400">H: {poolBalls.H}</strong> | <strong className="text-rose-400">A: {poolBalls.A}</strong></p>
+                  <div className="h-28 bg-[#064e3b] border-4 border-[#1e293b] rounded-xl flex items-center justify-center">
+                    <span className="text-xs text-emerald-300 font-bold">🎱 Billiards Table Ready</span>
+                  </div>
+                  <button
+                    onClick={() => handleGenericGameScore('pool')}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Take Cue Shot & Pocket Ball 🎱
+                  </button>
+                </div>
+              )}
+
+              {/* 7. SNAKE & LADDER */}
+              {activeGame.id === 'snakeladder' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-gray-300">Position -> Admin (H): <strong className="text-blue-400">{snakePos.H}</strong> | User (A): <strong className="text-rose-400">{snakePos.A}</strong> / 30</p>
+                  <button
+                    onClick={handleSnakeDiceRoll}
+                    className="w-full bg-purple-600 hover:bg-purple-500 text-white py-3 rounded-xl text-xs font-bold cursor-pointer shadow"
+                  >
+                    Roll Speed Sprint Dice 🎲
+                  </button>
+                </div>
+              )}
+
+              {/* 8. DRAW & GUESS */}
+              {activeGame.id === 'drawguess' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-amber-400 font-mono">Secret Prompt: <strong>{drawGuessWord}</strong></p>
+                  <div className="h-32 bg-white rounded-xl flex items-center justify-center text-black font-bold text-sm shadow-inner">
+                    🎨 Sketch Canvas Active
+                  </div>
+                  <button
+                    onClick={() => handleGenericGameScore('drawguess')}
+                    className="w-full bg-pink-600 hover:bg-pink-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Guess Correct & Score Point! ✨
                   </button>
                 </div>
               )}
