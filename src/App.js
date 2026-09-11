@@ -115,12 +115,19 @@ export default function App() {
   const [incomingGameRequest, setIncomingGameRequest] = useState(false);
   const [activeGame, setActiveGame] = useState(null);
 
-  // Live Colorful Game States
+  // Live Colorful Game States & Scores
   const [tictactoeBoard, setTictactoeBoard] = useState(Array(9).fill(null));
   const [isXNext, setIsXNext] = useState(true);
+  const [winnerMessage, setWinnerMessage] = useState('');
+  const [scores, setScores] = useState({ admin: 0, user: 0 });
+
+  // Ludo State
   const [ludoPos, setLudoPos] = useState({ p1: 0, p2: 0 });
   const [ludoTurn, setLudoTurn] = useState('p1');
   const [diceVal, setDiceVal] = useState(1);
+
+  // Pong State
+  const [pongScore, setPongScore] = useState({ p1: 0, p2: 0 });
 
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem('stealth_conversations');
@@ -582,6 +589,7 @@ export default function App() {
       }
     });
 
+    // Music-style glowing animation & request notification for User
     socketRef.current.on('arcade_request_received', () => {
       if (role !== 'parent') {
         setIncomingGameRequest(true);
@@ -593,6 +601,7 @@ export default function App() {
       setShowArcadePlugins(status);
       if (!status) {
         setActiveGame(null);
+        setIncomingGameRequest(false);
       }
     });
 
@@ -605,10 +614,15 @@ export default function App() {
       if (moveData.gameId === 'tictactoe') {
         setTictactoeBoard(moveData.board);
         setIsXNext(moveData.isXNext);
+        setWinnerMessage(moveData.winner || '');
+        if (moveData.scores) setScores(moveData.scores);
       } else if (moveData.gameId === 'ludo') {
         setLudoPos(moveData.pos);
         setLudoTurn(moveData.turn);
         setDiceVal(moveData.dice);
+        if (moveData.winner) setWinnerMessage(moveData.winner);
+      } else if (moveData.gameId === 'pong') {
+        setPongScore(moveData.score);
       }
     });
 
@@ -875,7 +889,7 @@ export default function App() {
   const handleAdminSendRequest = () => {
     if (socketRef.current) {
       socketRef.current.emit('admin_send_arcade_request');
-      alert("Arcade game request sent to User (A) successfully!");
+      alert("Arcade game request dispatched to User!");
     }
   };
 
@@ -885,12 +899,13 @@ export default function App() {
     if (socketRef.current) {
       socketRef.current.emit('user_accept_arcade_request');
     }
-    confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+    confetti({ particleCount: 75, spread: 80, origin: { y: 0.6 } });
   };
 
   const handleAdminDisconnectArcade = () => {
     setShowArcadePlugins(false);
     setActiveGame(null);
+    setIncomingGameRequest(false);
     if (socketRef.current) {
       socketRef.current.emit('admin_toggle_arcade', false);
     }
@@ -898,52 +913,104 @@ export default function App() {
 
   const handleLaunchGame = (game) => {
     setActiveGame(game);
+    setWinnerMessage('');
     if (socketRef.current) {
       socketRef.current.emit('launch_multiplayer_game', game);
     }
   };
 
+  // Check Winner for Tic Tac Toe
+  const checkTicTacToeWinner = (board) => {
+    const lines = [
+      [0,1,2], [3,4,5], [6,7,8],
+      [0,3,6], [1,4,7], [2,5,8],
+      [0,4,8], [2,4,6]
+    ];
+    for (let i = 0; i < lines.length; i++) {
+      const [a, b, c] = lines[i];
+      if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+        return board[a];
+      }
+    }
+    if (board.every(cell => cell !== null)) return 'Draw';
+    return null;
+  };
+
   const handleTicTacToeClick = (idx) => {
     const myTurn = (role === 'parent' && isXNext) || (role !== 'parent' && !isXNext);
-    if (!myTurn || tictactoeBoard[idx] || activeGame?.id !== 'tictactoe') return;
+    if (!myTurn || tictactoeBoard[idx] || winnerMessage || activeGame?.id !== 'tictactoe') return;
 
     const newBoard = [...tictactoeBoard];
     newBoard[idx] = isXNext ? 'X' : 'O';
     const nextState = !isXNext;
+    
+    const win = checkTicTacToeWinner(newBoard);
+    let newScores = { ...scores };
+    let winText = '';
+
+    if (win === 'X') {
+      winText = 'Player X (Admin) Wins! 🎉';
+      newScores.admin += 1;
+      confetti({ particleCount: 80, spread: 90 });
+    } else if (win === 'O') {
+      winText = 'Player O (User) Wins! 🎉';
+      newScores.user += 1;
+      confetti({ particleCount: 80, spread: 90 });
+    } else if (win === 'Draw') {
+      winText = "It's a Draw! 🤝";
+    }
+
     setTictactoeBoard(newBoard);
     setIsXNext(nextState);
+    setWinnerMessage(winText);
+    setScores(newScores);
 
     if (socketRef.current) {
       socketRef.current.emit('arcade_game_action', {
         gameId: 'tictactoe',
         board: newBoard,
-        isXNext: nextState
+        isXNext: nextState,
+        winner: winText,
+        scores: newScores
       });
     }
   };
 
   const handleLudoRoll = () => {
     const myTurn = (role === 'parent' && ludoTurn === 'p1') || (role !== 'parent' && ludoTurn === 'p2');
-    if (!myTurn) return;
+    if (!myTurn || winnerMessage) return;
 
     const roll = Math.floor(Math.random() * 6) + 1;
     setDiceVal(roll);
     const newPos = { ...ludoPos };
+    let winText = '';
+
     if (ludoTurn === 'p1') {
       newPos.p1 = Math.min(30, newPos.p1 + roll);
+      if (newPos.p1 >= 30) {
+        winText = 'Player 1 (Admin) Won the Ludo Sprint! 🏆';
+        confetti({ particleCount: 90, spread: 100 });
+      }
     } else {
       newPos.p2 = Math.min(30, newPos.p2 + roll);
+      if (newPos.p2 >= 30) {
+        winText = 'Player 2 (User) Won the Ludo Sprint! 🏆';
+        confetti({ particleCount: 90, spread: 100 });
+      }
     }
+
     const nextTurn = ludoTurn === 'p1' ? 'p2' : 'p1';
     setLudoPos(newPos);
     setLudoTurn(nextTurn);
+    if (winText) setWinnerMessage(winText);
 
     if (socketRef.current) {
       socketRef.current.emit('arcade_game_action', {
         gameId: 'ludo',
         pos: newPos,
         turn: nextTurn,
-        dice: roll
+        dice: roll,
+        winner: winText
       });
     }
   };
@@ -1878,24 +1945,29 @@ export default function App() {
             )}
           </div>
 
-          {/* PLUGINS MENU ITEM */}
+          {/* PLUGINS MENU ITEM WITH GLOWING MUSIC-STYLE ANIMATION FOR USER */}
           <div 
             onClick={() => {
               if (role === 'parent' || showArcadePlugins) {
                 setShowArcadePlugins(!showArcadePlugins);
               }
             }}
-            className={`flex items-center justify-between py-2.5 md:py-1.5 px-3 md:px-2.5 rounded-xl md:rounded-lg cursor-pointer transition-colors ${showArcadePlugins ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
+            className={`flex items-center justify-between py-2.5 md:py-1.5 px-3 md:px-2.5 rounded-xl md:rounded-lg cursor-pointer transition-colors ${
+              incomingGameRequest ? 'bg-amber-500/20 border border-amber-500/50 animate-pulse' : (showArcadePlugins ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]')
+            }`}
           >
             <span className="flex items-center gap-3 md:gap-2.5">
-              <ToyBrick size={17} className={showArcadePlugins ? 'text-emerald-400' : 'text-[#9b9b9b]'} /> Plugins
+              <ToyBrick size={17} className={incomingGameRequest ? 'text-amber-400 animate-spin' : (showArcadePlugins ? 'text-emerald-400' : 'text-[#9b9b9b]')} /> 
+              <span>Plugins</span>
             </span>
-            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${showArcadePlugins ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-400'}`}>
-              {showArcadePlugins ? 'ACTIVE' : 'LOCKED'}
+            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
+              incomingGameRequest ? 'bg-amber-500 text-black animate-bounce' : (showArcadePlugins ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-400')
+            }`}>
+              {incomingGameRequest ? 'NEW REQ' : (showArcadePlugins ? 'ACTIVE' : 'LOCKED')}
             </span>
           </div>
 
-          {/* INSIDE PLUGINS MENU: ADMIN SEND REQUEST & DISCONNECT */}
+          {/* ADMIN (PARENT) CONTROLS INSIDE PLUGINS MENU */}
           {showArcadePlugins && role === 'parent' && (
             <div className="pl-3 pr-2 py-2 space-y-2 bg-[#0c0c0c] rounded-xl border border-[#222] my-1">
               <div className="flex items-center justify-between text-[11px] font-bold text-amber-400">
@@ -1918,20 +1990,22 @@ export default function App() {
             </div>
           )}
 
-          {/* INSIDE PLUGINS MENU: USER ACCEPT BANNER */}
-          {showArcadePlugins && role !== 'parent' && incomingGameRequest && (
-            <div className="bg-emerald-950/60 border border-emerald-500/50 p-2.5 rounded-xl my-1 space-y-2 text-left">
-              <p className="text-[11px] text-emerald-300 font-medium">Admin invited you to play Multiplayer Arcade Games!</p>
+          {/* USER (DORA) ACCEPT HANDSHAKE BANNER INSIDE PLUGINS MENU */}
+          {incomingGameRequest && role !== 'parent' && (
+            <div className="bg-amber-950/60 border border-amber-500/50 p-3 rounded-xl my-1 space-y-2 text-left animate-in fade-in duration-200">
+              <p className="text-[11px] text-amber-300 font-bold flex items-center gap-1.5">
+                <Radio size={14} className="animate-pulse" /> Admin sent arcade games request!
+              </p>
               <button
                 onClick={handleUserAcceptRequest}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 rounded-lg cursor-pointer flex items-center justify-center gap-1 shadow"
+                className="w-full bg-amber-500 hover:bg-amber-400 text-black text-xs font-black py-2 rounded-lg cursor-pointer flex items-center justify-center gap-1 shadow-lg active:scale-95 transition-all"
               >
-                <Check size={14} /> Accept & Unlock Games
+                <Check size={14} /> Accept & Unlock 8 Games
               </button>
             </div>
           )}
 
-          {/* INSIDE PLUGINS MENU: 8 GAMES LIST */}
+          {/* 8 GAMES LIST INSIDE PLUGINS MENU */}
           {showArcadePlugins && (role === 'parent' || !incomingGameRequest) && (
             <div className="pl-2 pr-1 py-1.5 space-y-1 bg-[#0c0c0c] rounded-xl border border-emerald-500/30 my-1">
               <div className="text-[10px] font-bold text-emerald-400 px-2 py-0.5">ARCADE GAMES (8 ACTIVE)</div>
@@ -2129,7 +2203,7 @@ export default function App() {
           </div>
         )}
 
-        {/* EMBEDDED PLUGIN GAME VIEW INSIDE CHAT AREA */}
+        {/* EMBEDDED PLUGIN GAME VIEW WITH FULL WORKING LOGIC & SCORE TRACKING */}
         {activeGame ? (
           <section className="flex-1 overflow-y-auto px-4 py-6 max-w-3xl w-full mx-auto space-y-4 scrollbar-none font-sans flex flex-col items-center justify-center">
             <div className="w-full bg-[#121212] border-2 border-emerald-500/40 rounded-3xl p-6 shadow-2xl relative space-y-5 text-center">
@@ -2146,14 +2220,23 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="flex items-center justify-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 py-1.5 px-4 rounded-full mx-auto">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-                <span>Multiplayer Live Session Active (Role: <strong className="text-white uppercase">{role === 'parent' ? 'Admin (H)' : 'User (A)'}</strong>)</span>
+              {/* SCORE BOARD */}
+              <div className="flex items-center justify-between bg-[#0a0a0a] border border-[#222] px-4 py-2.5 rounded-2xl text-xs font-mono">
+                <span className="text-blue-400 font-bold">Admin (X / P1): {scores.admin}</span>
+                <span className="text-emerald-400 animate-pulse font-bold">LIVE SCOREBOARD</span>
+                <span className="text-rose-400 font-bold">User (O / P2): {scores.user}</span>
               </div>
 
+              {winnerMessage && (
+                <div className="bg-amber-500/20 border border-amber-500 text-amber-300 py-2.5 px-4 rounded-xl text-xs font-bold animate-bounce">
+                  {winnerMessage}
+                </div>
+              )}
+
+              {/* GAME 1: TIC TAC TOE (FULLY WORKING) */}
               {activeGame.id === 'tictactoe' && (
                 <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto shadow-inner">
-                  <div className="text-sm font-bold text-gray-200">
+                  <div className="text-xs font-bold text-gray-200">
                     Turn: <span className={`px-2.5 py-1 rounded-lg text-white font-mono ${isXNext ? 'bg-blue-600' : 'bg-rose-600'}`}>{isXNext ? 'Player X (Admin)' : 'Player O (User)'}</span>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
@@ -2173,7 +2256,8 @@ export default function App() {
                     onClick={() => {
                       setTictactoeBoard(Array(9).fill(null));
                       setIsXNext(true);
-                      if (socketRef.current) socketRef.current.emit('arcade_game_action', { gameId: 'tictactoe', board: Array(9).fill(null), isXNext: true });
+                      setWinnerMessage('');
+                      if (socketRef.current) socketRef.current.emit('arcade_game_action', { gameId: 'tictactoe', board: Array(9).fill(null), isXNext: true, winner: '' });
                     }}
                     className="text-xs text-amber-400 hover:underline flex items-center gap-1 mx-auto pt-2 cursor-pointer"
                   >
@@ -2182,42 +2266,47 @@ export default function App() {
                 </div>
               )}
 
+              {/* GAME 2: LUDO SPRINT (FULLY WORKING) */}
               {activeGame.id === 'ludo' && (
                 <div className="space-y-5 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-md mx-auto">
                   <div className="flex justify-around items-center text-xs font-bold text-gray-300">
                     <div className={`p-3 rounded-xl border ${ludoTurn === 'p1' ? 'bg-blue-600/30 border-blue-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333]'}`}>
-                      Player 1 (Admin): Position {ludoPos.p1} / 30
+                      Admin: {ludoPos.p1} / 30
                     </div>
                     <div className={`p-3 rounded-xl border ${ludoTurn === 'p2' ? 'bg-rose-600/30 border-rose-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333]'}`}>
-                      Player 2 (User): Position {ludoPos.p2} / 30
+                      User: {ludoPos.p2} / 30
                     </div>
                   </div>
 
                   <div className="bg-[#141414] border border-[#262626] p-4 rounded-2xl flex items-center justify-between">
                     <div className="text-sm font-extrabold text-amber-400 flex items-center gap-2">
-                      <span>Dice Roll:</span>
+                      <span>Dice:</span>
                       <span className="w-10 h-10 rounded-xl bg-amber-500 text-black font-black text-xl flex items-center justify-center shadow">{diceVal}</span>
                     </div>
                     <button
                       onClick={handleLudoRoll}
                       className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-lg cursor-pointer active:scale-95"
                     >
-                      Roll Dice ({ludoTurn === 'p1' ? 'Admin Turn' : 'User Turn'})
+                      Roll ({ludoTurn === 'p1' ? 'Admin Turn' : 'User Turn'})
                     </button>
                   </div>
                 </div>
               )}
 
+              {/* DEFAULT INTERACTIVE ARENA FOR OTHER 6 GAMES */}
               {activeGame.id !== 'tictactoe' && activeGame.id !== 'ludo' && (
                 <div className="bg-[#0a0a0a] border border-[#222] p-8 rounded-2xl space-y-4 max-w-md mx-auto">
                   <Trophy size={48} className="mx-auto text-amber-400 animate-bounce" />
                   <h3 className="text-base font-bold text-white">{activeGame.name} Arena</h3>
                   <p className="text-xs text-gray-400">{activeGame.desc}</p>
                   <button
-                    onClick={() => confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } })}
+                    onClick={() => {
+                      confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } });
+                      setScores(prev => ({ ...prev, admin: prev.admin + 1 }));
+                    }}
                     className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs py-3 rounded-xl font-bold shadow cursor-pointer active:scale-95"
                   >
-                    Send Celebration Confetti 🎉
+                    Score Point & Confetti 🎉
                   </button>
                 </div>
               )}
