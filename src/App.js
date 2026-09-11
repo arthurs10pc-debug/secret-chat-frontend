@@ -113,7 +113,7 @@ export default function App() {
   // Plugins & Arcade States inside menu
   const [showArcadePlugins, setShowArcadePlugins] = useState(false);
   const [incomingGameRequest, setIncomingGameRequest] = useState(false);
-  const [activeGame, setActiveGame] = useState(null); // Embedded inside Plugin view instead of popup
+  const [activeGame, setActiveGame] = useState(null);
 
   // Live Colorful Game States
   const [tictactoeBoard, setTictactoeBoard] = useState(Array(9).fill(null));
@@ -904,7 +904,6 @@ export default function App() {
   };
 
   const handleTicTacToeClick = (idx) => {
-    // Turn logic: Admin (parent) is X (Player 1), User (user) is O (Player 2)
     const myTurn = (role === 'parent' && isXNext) || (role !== 'parent' && !isXNext);
     if (!myTurn || tictactoeBoard[idx] || activeGame?.id !== 'tictactoe') return;
 
@@ -2130,7 +2129,7 @@ export default function App() {
           </div>
         )}
 
-        {/* EMBEDDED PLUGIN GAME VIEW (NO POPUPS) */}
+        {/* EMBEDDED PLUGIN GAME VIEW INSIDE CHAT AREA */}
         {activeGame ? (
           <section className="flex-1 overflow-y-auto px-4 py-6 max-w-3xl w-full mx-auto space-y-4 scrollbar-none font-sans flex flex-col items-center justify-center">
             <div className="w-full bg-[#121212] border-2 border-emerald-500/40 rounded-3xl p-6 shadow-2xl relative space-y-5 text-center">
@@ -2152,7 +2151,6 @@ export default function App() {
                 <span>Multiplayer Live Session Active (Role: <strong className="text-white uppercase">{role === 'parent' ? 'Admin (H)' : 'User (A)'}</strong>)</span>
               </div>
 
-              {/* GAME 1: TIC TAC TOE (TURN LOCKED & COLORFUL) */}
               {activeGame.id === 'tictactoe' && (
                 <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto shadow-inner">
                   <div className="text-sm font-bold text-gray-200">
@@ -2184,7 +2182,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* GAME 2: LUDO QUICK SPRINT */}
               {activeGame.id === 'ludo' && (
                 <div className="space-y-5 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-md mx-auto">
                   <div className="flex justify-around items-center text-xs font-bold text-gray-300">
@@ -2211,7 +2208,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* DEFAULT GAME ARENA FOR OTHER 6 GAMES */}
               {activeGame.id !== 'tictactoe' && activeGame.id !== 'ludo' && (
                 <div className="bg-[#0a0a0a] border border-[#222] p-8 rounded-2xl space-y-4 max-w-md mx-auto">
                   <Trophy size={48} className="mx-auto text-amber-400 animate-bounce" />
