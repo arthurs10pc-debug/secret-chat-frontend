@@ -115,6 +115,10 @@ export default function App() {
   const [incomingGameRequest, setIncomingGameRequest] = useState(false);
   const [activeGameModal, setActiveGameModal] = useState(null);
 
+  // Live Interactive Game States
+  const [tictactoeBoard, setTictactoeBoard] = useState(Array(9).fill(null));
+  const [isXNext, setIsXNext] = useState(true);
+
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem('stealth_conversations');
     if (saved) return JSON.parse(saved);
@@ -575,7 +579,6 @@ export default function App() {
       }
     });
 
-    // Listen to incoming Arcade Game Request from Admin (H)
     socketRef.current.on('arcade_request_received', () => {
       if (role !== 'parent') {
         setIncomingGameRequest(true);
@@ -583,11 +586,23 @@ export default function App() {
       }
     });
 
-    // Listen to arcade plugins toggle broadcast
     socketRef.current.on('toggle_arcade_plugins', (status) => {
       setShowArcadePlugins(status);
       if (!status) {
         setActiveGameModal(null);
+      }
+    });
+
+    // Real-Time Synchronized Game Launch (Zero Lag)
+    socketRef.current.on('launch_game_session', (gameObj) => {
+      setActiveGameModal(gameObj);
+      playReceiveSound();
+    });
+
+    socketRef.current.on('arcade_game_action_broadcast', (moveData) => {
+      if (moveData.gameId === 'tictactoe') {
+        setTictactoeBoard(moveData.board);
+        setIsXNext(moveData.isXNext);
       }
     });
 
@@ -872,6 +887,29 @@ export default function App() {
     setActiveGameModal(null);
     if (socketRef.current) {
       socketRef.current.emit('admin_toggle_arcade', false);
+    }
+  };
+
+  const handleLaunchGame = (game) => {
+    setActiveGameModal(game);
+    if (socketRef.current) {
+      socketRef.current.emit('launch_multiplayer_game', game);
+    }
+  };
+
+  const handleTicTacToeClick = (idx) => {
+    if (tictactoeBoard[idx] || activeGameModal?.id !== 'tictactoe') return;
+    const newBoard = [...tictactoeBoard];
+    newBoard[idx] = isXNext ? 'X' : 'O';
+    setTictactoeBoard(newBoard);
+    setIsXNext(!isXNext);
+
+    if (socketRef.current) {
+      socketRef.current.emit('arcade_game_action', {
+        gameId: 'tictactoe',
+        board: newBoard,
+        isXNext: !isXNext
+      });
     }
   };
 
@@ -1805,7 +1843,7 @@ export default function App() {
             )}
           </div>
 
-          {/* PLUGINS MENU ITEM */}
+          {/* PLUGINS MENU WITH FULLY EMBEDDED CONTROLS INSIDE */}
           <div 
             onClick={() => {
               if (role === 'parent' || showArcadePlugins) {
@@ -1822,13 +1860,13 @@ export default function App() {
             </span>
           </div>
 
-          {/* IF ADMIN (PARENT) - INSIDE PLUGINS MENU: SEND REQUEST */}
-          {role === 'parent' && (
-            <div className="pl-3 pr-1 py-1.5 space-y-2 bg-[#0a0a0a] rounded-xl border border-[#222] my-1">
-              <div className="flex items-center justify-between text-[11px] font-bold text-amber-400 px-1">
+          {/* INSIDE PLUGINS MENU: ADMIN SEND REQUEST & DISCONNECT (HIDDEN FROM OUTSIDE) */}
+          {showArcadePlugins && role === 'parent' && (
+            <div className="pl-3 pr-2 py-2 space-y-2 bg-[#0c0c0c] rounded-xl border border-[#222] my-1">
+              <div className="flex items-center justify-between text-[11px] font-bold text-amber-400">
                 <span className="flex items-center gap-1"><Gamepad2 size={13} /> Arcade Master</span>
               </div>
-              <div className="grid grid-cols-2 gap-1.5 pr-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 <button
                   onClick={handleAdminSendRequest}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold py-1.5 rounded-lg cursor-pointer transition-all"
@@ -1845,8 +1883,8 @@ export default function App() {
             </div>
           )}
 
-          {/* IF USER (DORA) - INCOMING REQUEST BANNER INSIDE PLUGINS */}
-          {role !== 'parent' && incomingGameRequest && !showArcadePlugins && (
+          {/* INSIDE PLUGINS MENU: USER ACCEPT BANNER */}
+          {showArcadePlugins && role !== 'parent' && incomingGameRequest && (
             <div className="bg-emerald-950/60 border border-emerald-500/50 p-2.5 rounded-xl my-1 space-y-2 text-left">
               <p className="text-[11px] text-emerald-300 font-medium">Admin invited you to play Multiplayer Arcade Games!</p>
               <button
@@ -1858,15 +1896,15 @@ export default function App() {
             </div>
           )}
 
-          {/* IF ARCADE PLUGINS IS ACTIVE: SHOW 8 GAMES INSIDE PLUGINS MENU */}
-          {showArcadePlugins && (
-            <div className="pl-2 pr-1 py-1.5 space-y-1 bg-[#0a0a0a] rounded-xl border border-emerald-500/30 my-1">
+          {/* INSIDE PLUGINS MENU: 8 GAMES LIST */}
+          {showArcadePlugins && (role === 'parent' || !incomingGameRequest) && (
+            <div className="pl-2 pr-1 py-1.5 space-y-1 bg-[#0c0c0c] rounded-xl border border-emerald-500/30 my-1">
               <div className="text-[10px] font-bold text-emerald-400 px-2 py-0.5">ARCADE GAMES (8 ACTIVE)</div>
               <div className="max-h-52 overflow-y-auto space-y-1 scrollbar-none pr-1">
                 {ARCADE_GAMES.map((game) => (
                   <button
                     key={game.id}
-                    onClick={() => setActiveGameModal(game)}
+                    onClick={() => handleLaunchGame(game)}
                     className="w-full text-left bg-[#141414] hover:bg-[#1f1f1f] border border-[#262626] p-2 rounded-lg transition-all cursor-pointer flex items-center justify-between group"
                   >
                     <span className="text-[11px] font-bold text-gray-200 group-hover:text-white truncate">{game.name}</span>
@@ -3118,32 +3156,57 @@ export default function App() {
         )}
       </main>
 
-      {/* ARCADE GAME PLAY MODAL */}
+      {/* SYNCHRONIZED COLOURFUL MULTIPLAYER GAME MODAL (ZERO-LAG) */}
       {activeGameModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#141414] border border-[#2e2e2e] rounded-3xl p-5 w-full max-w-md text-center shadow-2xl relative space-y-4">
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-[#141414] border-2 border-emerald-500/50 rounded-3xl p-6 w-full max-w-lg text-center shadow-2xl relative space-y-4">
             <div className="flex items-center justify-between border-b border-[#222] pb-3">
               <div className="flex items-center gap-2">
-                <Gamepad2 size={18} className="text-emerald-400" />
-                <h3 className="text-sm font-bold text-white">{activeGameModal.name}</h3>
+                <Gamepad2 size={20} className="text-emerald-400" />
+                <h3 className="text-base font-extrabold text-white">{activeGameModal.name}</h3>
               </div>
-              <button onClick={() => setActiveGameModal(null)} className="text-gray-400 hover:text-white p-1"><X size={16} /></button>
+              <button onClick={() => setActiveGameModal(null)} className="text-gray-400 hover:text-white p-1.5 rounded-full bg-[#222]"><X size={16} /></button>
             </div>
 
-            <div className="bg-[#0e0e0e] border border-[#222] rounded-2xl p-6 space-y-3">
-              <Trophy size={36} className="mx-auto text-amber-400 animate-pulse" />
-              <p className="text-xs font-bold text-white">Live Multiplayer Session (A & H)</p>
-              <p className="text-[11px] text-gray-400">{activeGameModal.desc}</p>
+            <div className="bg-[#0a0a0a] border border-[#222] rounded-2xl p-6 space-y-4">
+              <div className="flex items-center justify-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 py-1.5 px-3 rounded-full w-fit mx-auto">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span>Live Multiplayer Session Active (A & H)</span>
+              </div>
+
+              {activeGameModal.id === 'tictactoe' ? (
+                <div className="space-y-4">
+                  <p className="text-xs text-gray-300">Turn: <strong className="text-amber-400">{isXNext ? 'Player X' : 'Player O'}</strong></p>
+                  <div className="grid grid-cols-3 gap-2.5 max-w-[260px] mx-auto">
+                    {tictactoeBoard.map((val, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleTicTacToeClick(idx)}
+                        className={`h-20 rounded-2xl text-2xl font-black flex items-center justify-center transition-all cursor-pointer shadow-lg ${
+                          val === 'X' ? 'bg-blue-600 text-white' : val === 'O' ? 'bg-rose-600 text-white' : 'bg-[#1a1a1a] hover:bg-[#252525] text-gray-500 border border-[#333]'
+                        }`}
+                      >
+                        {val}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4 py-8">
+                  <Trophy size={44} className="mx-auto text-amber-400 animate-bounce" />
+                  <h4 className="text-sm font-bold text-white">{activeGameModal.name} Arena</h4>
+                  <p className="text-xs text-gray-400 max-w-xs mx-auto">Synchronized real-time multiplayer controller initialized successfully. Tap below to start action!</p>
+                </div>
+              )}
             </div>
 
             <button
               onClick={() => {
-                confetti({ particleCount: 60, spread: 80, origin: { y: 0.6 } });
-                setActiveGameModal(null);
+                confetti({ particleCount: 75, spread: 90, origin: { y: 0.6 } });
               }}
-              className="w-full bg-[#1c3a6b] hover:bg-[#254d8f] text-white text-xs py-3 rounded-xl font-bold cursor-pointer transition-all"
+              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs py-3 rounded-xl font-bold cursor-pointer shadow-lg active:scale-95 transition-all"
             >
-              Start Session & Play
+              Send Celebration Confetti 🎉
             </button>
           </div>
         </div>
