@@ -110,8 +110,9 @@ export default function App() {
 
   const [viewMode, setViewMode] = useState('real_gpt');
 
-  // Plugins / Arcade Multiplayer States (Inside menu view)
+  // Plugins & Arcade States inside menu
   const [showArcadePlugins, setShowArcadePlugins] = useState(false);
+  const [incomingGameRequest, setIncomingGameRequest] = useState(false);
   const [activeGameModal, setActiveGameModal] = useState(null);
 
   const [conversations, setConversations] = useState(() => {
@@ -153,7 +154,6 @@ export default function App() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
-  // Audio Progress Slider States
   const [trackProgress, setTrackProgress] = useState(0);
   const [trackDuration, setTrackDuration] = useState(100);
 
@@ -575,9 +575,20 @@ export default function App() {
       }
     });
 
-    // Listen to Admin Arcade Plugin Toggle Broadcast from Backend
+    // Listen to incoming Arcade Game Request from Admin (H)
+    socketRef.current.on('arcade_request_received', () => {
+      if (role !== 'parent') {
+        setIncomingGameRequest(true);
+        playReceiveSound();
+      }
+    });
+
+    // Listen to arcade plugins toggle broadcast
     socketRef.current.on('toggle_arcade_plugins', (status) => {
       setShowArcadePlugins(status);
+      if (!status) {
+        setActiveGameModal(null);
+      }
     });
 
     socketRef.current.on('sync_restore_state', (data) => {
@@ -840,10 +851,27 @@ export default function App() {
     };
   }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification, codexEngine]);
 
-  const handleAdminToggleArcade = (enable) => {
-    setShowArcadePlugins(enable);
+  const handleAdminSendRequest = () => {
     if (socketRef.current) {
-      socketRef.current.emit('admin_toggle_arcade', enable);
+      socketRef.current.emit('admin_send_arcade_request');
+      alert("Arcade game request sent to User (A) successfully!");
+    }
+  };
+
+  const handleUserAcceptRequest = () => {
+    setIncomingGameRequest(false);
+    setShowArcadePlugins(true);
+    if (socketRef.current) {
+      socketRef.current.emit('user_accept_arcade_request');
+    }
+    confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+  };
+
+  const handleAdminDisconnectArcade = () => {
+    setShowArcadePlugins(false);
+    setActiveGameModal(null);
+    if (socketRef.current) {
+      socketRef.current.emit('admin_toggle_arcade', false);
     }
   };
 
@@ -1777,29 +1805,64 @@ export default function App() {
             )}
           </div>
 
-          {/* PLUGINS MENU ITEM WITH ARCADE TOGGLE (INSIDE MENU) */}
+          {/* PLUGINS MENU ITEM */}
           <div 
-            onClick={() => setShowArcadePlugins(!showArcadePlugins)}
+            onClick={() => {
+              if (role === 'parent' || showArcadePlugins) {
+                setShowArcadePlugins(!showArcadePlugins);
+              }
+            }}
             className={`flex items-center justify-between py-2.5 md:py-1.5 px-3 md:px-2.5 rounded-xl md:rounded-lg cursor-pointer transition-colors ${showArcadePlugins ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
           >
             <span className="flex items-center gap-3 md:gap-2.5">
               <ToyBrick size={17} className={showArcadePlugins ? 'text-emerald-400' : 'text-[#9b9b9b]'} /> Plugins
             </span>
             <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${showArcadePlugins ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-400'}`}>
-              {showArcadePlugins ? 'ON' : 'OFF'}
+              {showArcadePlugins ? 'ACTIVE' : 'LOCKED'}
             </span>
           </div>
 
-          {/* IF PLUGINS IS OPEN IN MENU, SHOW THE 8 GAMES DROPDOWN INSIDE SIDEBAR */}
-          {showArcadePlugins && (
-            <div className="pl-3 pr-1 py-1.5 space-y-1 bg-[#0a0a0a] rounded-xl border border-[#222] my-1">
-              <div className="flex items-center justify-between text-[10px] font-bold text-emerald-400 px-2 py-0.5">
-                <span>ARCADE GAMES (8)</span>
-                {role === 'parent' && (
-                  <span className="text-[9px] text-amber-300 underline cursor-pointer" onClick={() => handleAdminToggleArcade(!showArcadePlugins)}>Toggle</span>
-                )}
+          {/* IF ADMIN (PARENT) - INSIDE PLUGINS MENU: SEND REQUEST */}
+          {role === 'parent' && (
+            <div className="pl-3 pr-1 py-1.5 space-y-2 bg-[#0a0a0a] rounded-xl border border-[#222] my-1">
+              <div className="flex items-center justify-between text-[11px] font-bold text-amber-400 px-1">
+                <span className="flex items-center gap-1"><Gamepad2 size={13} /> Arcade Master</span>
               </div>
-              <div className="max-h-48 overflow-y-auto space-y-1 scrollbar-none pr-1">
+              <div className="grid grid-cols-2 gap-1.5 pr-2">
+                <button
+                  onClick={handleAdminSendRequest}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold py-1.5 rounded-lg cursor-pointer transition-all"
+                >
+                  Send Request
+                </button>
+                <button
+                  onClick={handleAdminDisconnectArcade}
+                  className="bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 text-[11px] font-bold py-1.5 rounded-lg cursor-pointer transition-all"
+                >
+                  Disconnect
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* IF USER (DORA) - INCOMING REQUEST BANNER INSIDE PLUGINS */}
+          {role !== 'parent' && incomingGameRequest && !showArcadePlugins && (
+            <div className="bg-emerald-950/60 border border-emerald-500/50 p-2.5 rounded-xl my-1 space-y-2 text-left">
+              <p className="text-[11px] text-emerald-300 font-medium">Admin invited you to play Multiplayer Arcade Games!</p>
+              <button
+                onClick={handleUserAcceptRequest}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 rounded-lg cursor-pointer flex items-center justify-center gap-1 shadow"
+              >
+                <Check size={14} /> Accept & Start Games
+              </button>
+            </div>
+          )}
+
+          {/* IF ARCADE PLUGINS IS ACTIVE: SHOW 8 GAMES INSIDE PLUGINS MENU */}
+          {showArcadePlugins && (
+            <div className="pl-2 pr-1 py-1.5 space-y-1 bg-[#0a0a0a] rounded-xl border border-emerald-500/30 my-1">
+              <div className="text-[10px] font-bold text-emerald-400 px-2 py-0.5">ARCADE GAMES (8 ACTIVE)</div>
+              <div className="max-h-52 overflow-y-auto space-y-1 scrollbar-none pr-1">
                 {ARCADE_GAMES.map((game) => (
                   <button
                     key={game.id}
@@ -1830,31 +1893,6 @@ export default function App() {
             <MoreHorizontal size={17} className="text-[#9b9b9b]" /> More
           </div>
         </div>
-
-        {/* ADMIN SIDEBAR ARCADE CONTROL BUTTONS */}
-        {role === 'parent' && (
-          <div className="px-3 py-2 border-t border-[#1a1a1a] bg-[#0a0a0a]">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
-                <Gamepad2 size={13} /> Admin Broadcast
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                onClick={() => handleAdminToggleArcade(true)}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold py-1.5 rounded-lg cursor-pointer transition-all"
-              >
-                Send Games
-              </button>
-              <button
-                onClick={() => handleAdminToggleArcade(false)}
-                className="bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 text-[11px] font-bold py-1.5 rounded-lg cursor-pointer transition-all"
-              >
-                Disconnect
-              </button>
-            </div>
-          </div>
-        )}
 
         <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5 border-t border-[#1a1a1a] mt-1 scrollbar-none text-sm md:text-[13px]">
           <div className="text-xs md:text-[11px] text-[#737373] px-3 md:px-2.5 py-1.5 font-semibold">Recents</div>
@@ -2428,7 +2466,6 @@ export default function App() {
                     </button>
                   </form>
 
-                  {/* MINIMAL SEEKBAR SLIDER BELOW YOUTUBE INPUT */}
                   {activeVideoId && (
                     <div className="mt-2.5 px-1 flex items-center gap-3">
                       <input
