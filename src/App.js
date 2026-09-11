@@ -9,7 +9,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy
+  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -113,11 +113,14 @@ export default function App() {
   // Plugins & Arcade States inside menu
   const [showArcadePlugins, setShowArcadePlugins] = useState(false);
   const [incomingGameRequest, setIncomingGameRequest] = useState(false);
-  const [activeGameModal, setActiveGameModal] = useState(null);
+  const [activeGame, setActiveGame] = useState(null); // Embedded inside Plugin view instead of popup
 
-  // Live Interactive Game States
+  // Live Colorful Game States
   const [tictactoeBoard, setTictactoeBoard] = useState(Array(9).fill(null));
   const [isXNext, setIsXNext] = useState(true);
+  const [ludoPos, setLudoPos] = useState({ p1: 0, p2: 0 });
+  const [ludoTurn, setLudoTurn] = useState('p1');
+  const [diceVal, setDiceVal] = useState(1);
 
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem('stealth_conversations');
@@ -589,13 +592,12 @@ export default function App() {
     socketRef.current.on('toggle_arcade_plugins', (status) => {
       setShowArcadePlugins(status);
       if (!status) {
-        setActiveGameModal(null);
+        setActiveGame(null);
       }
     });
 
-    // Real-Time Synchronized Game Launch (Zero Lag)
     socketRef.current.on('launch_game_session', (gameObj) => {
-      setActiveGameModal(gameObj);
+      setActiveGame(gameObj);
       playReceiveSound();
     });
 
@@ -603,6 +605,10 @@ export default function App() {
       if (moveData.gameId === 'tictactoe') {
         setTictactoeBoard(moveData.board);
         setIsXNext(moveData.isXNext);
+      } else if (moveData.gameId === 'ludo') {
+        setLudoPos(moveData.pos);
+        setLudoTurn(moveData.turn);
+        setDiceVal(moveData.dice);
       }
     });
 
@@ -884,31 +890,61 @@ export default function App() {
 
   const handleAdminDisconnectArcade = () => {
     setShowArcadePlugins(false);
-    setActiveGameModal(null);
+    setActiveGame(null);
     if (socketRef.current) {
       socketRef.current.emit('admin_toggle_arcade', false);
     }
   };
 
   const handleLaunchGame = (game) => {
-    setActiveGameModal(game);
+    setActiveGame(game);
     if (socketRef.current) {
       socketRef.current.emit('launch_multiplayer_game', game);
     }
   };
 
   const handleTicTacToeClick = (idx) => {
-    if (tictactoeBoard[idx] || activeGameModal?.id !== 'tictactoe') return;
+    // Turn logic: Admin (parent) is X (Player 1), User (user) is O (Player 2)
+    const myTurn = (role === 'parent' && isXNext) || (role !== 'parent' && !isXNext);
+    if (!myTurn || tictactoeBoard[idx] || activeGame?.id !== 'tictactoe') return;
+
     const newBoard = [...tictactoeBoard];
     newBoard[idx] = isXNext ? 'X' : 'O';
+    const nextState = !isXNext;
     setTictactoeBoard(newBoard);
-    setIsXNext(!isXNext);
+    setIsXNext(nextState);
 
     if (socketRef.current) {
       socketRef.current.emit('arcade_game_action', {
         gameId: 'tictactoe',
         board: newBoard,
-        isXNext: !isXNext
+        isXNext: nextState
+      });
+    }
+  };
+
+  const handleLudoRoll = () => {
+    const myTurn = (role === 'parent' && ludoTurn === 'p1') || (role !== 'parent' && ludoTurn === 'p2');
+    if (!myTurn) return;
+
+    const roll = Math.floor(Math.random() * 6) + 1;
+    setDiceVal(roll);
+    const newPos = { ...ludoPos };
+    if (ludoTurn === 'p1') {
+      newPos.p1 = Math.min(30, newPos.p1 + roll);
+    } else {
+      newPos.p2 = Math.min(30, newPos.p2 + roll);
+    }
+    const nextTurn = ludoTurn === 'p1' ? 'p2' : 'p1';
+    setLudoPos(newPos);
+    setLudoTurn(nextTurn);
+
+    if (socketRef.current) {
+      socketRef.current.emit('arcade_game_action', {
+        gameId: 'ludo',
+        pos: newPos,
+        turn: nextTurn,
+        dice: roll
       });
     }
   };
@@ -1843,7 +1879,7 @@ export default function App() {
             )}
           </div>
 
-          {/* PLUGINS MENU WITH FULLY EMBEDDED CONTROLS INSIDE */}
+          {/* PLUGINS MENU ITEM */}
           <div 
             onClick={() => {
               if (role === 'parent' || showArcadePlugins) {
@@ -1860,7 +1896,7 @@ export default function App() {
             </span>
           </div>
 
-          {/* INSIDE PLUGINS MENU: ADMIN SEND REQUEST & DISCONNECT (HIDDEN FROM OUTSIDE) */}
+          {/* INSIDE PLUGINS MENU: ADMIN SEND REQUEST & DISCONNECT */}
           {showArcadePlugins && role === 'parent' && (
             <div className="pl-3 pr-2 py-2 space-y-2 bg-[#0c0c0c] rounded-xl border border-[#222] my-1">
               <div className="flex items-center justify-between text-[11px] font-bold text-amber-400">
@@ -1869,7 +1905,7 @@ export default function App() {
               <div className="grid grid-cols-2 gap-1.5">
                 <button
                   onClick={handleAdminSendRequest}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold py-1.5 rounded-lg cursor-pointer transition-all"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold py-1.5 rounded-lg cursor-pointer transition-all shadow"
                 >
                   Send Request
                 </button>
@@ -1891,7 +1927,7 @@ export default function App() {
                 onClick={handleUserAcceptRequest}
                 className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 rounded-lg cursor-pointer flex items-center justify-center gap-1 shadow"
               >
-                <Check size={14} /> Accept & Start Games
+                <Check size={14} /> Accept & Unlock Games
               </button>
             </div>
           )}
@@ -2094,870 +2130,971 @@ export default function App() {
           </div>
         )}
 
-        {viewMode === 'real_gpt' && (
-          <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-4 sm:space-y-6 scrollbar-none">
-            {conversations.map((msg) => (
-              <div key={msg.id} className="w-full">
-                {msg.role === 'user' ? (
-                  <div className="flex justify-end my-2 sm:my-3">
-                    <div className="bg-[#1c3a6b] text-white px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl max-w-[88%] sm:max-w-[80%] text-sm sm:text-[13.5px] leading-relaxed shadow-lg whitespace-pre-wrap break-words select-text">
-                      {msg.text}
+        {/* EMBEDDED PLUGIN GAME VIEW (NO POPUPS) */}
+        {activeGame ? (
+          <section className="flex-1 overflow-y-auto px-4 py-6 max-w-3xl w-full mx-auto space-y-4 scrollbar-none font-sans flex flex-col items-center justify-center">
+            <div className="w-full bg-[#121212] border-2 border-emerald-500/40 rounded-3xl p-6 shadow-2xl relative space-y-5 text-center">
+              <div className="flex items-center justify-between border-b border-[#222] pb-3">
+                <div className="flex items-center gap-2">
+                  <Gamepad2 size={22} className="text-emerald-400 animate-bounce" />
+                  <h2 className="text-lg font-black text-white">{activeGame.name}</h2>
+                </div>
+                <button 
+                  onClick={() => setActiveGame(null)} 
+                  className="bg-zinc-800 hover:bg-zinc-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all"
+                >
+                  Close Game
+                </button>
+              </div>
+
+              <div className="flex items-center justify-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 py-1.5 px-4 rounded-full mx-auto">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                <span>Multiplayer Live Session Active (Role: <strong className="text-white uppercase">{role === 'parent' ? 'Admin (H)' : 'User (A)'}</strong>)</span>
+              </div>
+
+              {/* GAME 1: TIC TAC TOE (TURN LOCKED & COLORFUL) */}
+              {activeGame.id === 'tictactoe' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto shadow-inner">
+                  <div className="text-sm font-bold text-gray-200">
+                    Turn: <span className={`px-2.5 py-1 rounded-lg text-white font-mono ${isXNext ? 'bg-blue-600' : 'bg-rose-600'}`}>{isXNext ? 'Player X (Admin)' : 'Player O (User)'}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {tictactoeBoard.map((val, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleTicTacToeClick(idx)}
+                        className={`h-24 rounded-2xl text-3xl font-black flex items-center justify-center transition-all cursor-pointer shadow-xl transform active:scale-95 ${
+                          val === 'X' ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-blue-500/30' : val === 'O' ? 'bg-gradient-to-br from-rose-600 to-pink-600 text-white shadow-rose-500/30' : 'bg-[#1a1a1a] hover:bg-[#252525] text-gray-600 border border-[#333]'
+                        }`}
+                      >
+                        {val}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setTictactoeBoard(Array(9).fill(null));
+                      setIsXNext(true);
+                      if (socketRef.current) socketRef.current.emit('arcade_game_action', { gameId: 'tictactoe', board: Array(9).fill(null), isXNext: true });
+                    }}
+                    className="text-xs text-amber-400 hover:underline flex items-center gap-1 mx-auto pt-2 cursor-pointer"
+                  >
+                    <RotateCcw size={13} /> Reset Board
+                  </button>
+                </div>
+              )}
+
+              {/* GAME 2: LUDO QUICK SPRINT */}
+              {activeGame.id === 'ludo' && (
+                <div className="space-y-5 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-md mx-auto">
+                  <div className="flex justify-around items-center text-xs font-bold text-gray-300">
+                    <div className={`p-3 rounded-xl border ${ludoTurn === 'p1' ? 'bg-blue-600/30 border-blue-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333]'}`}>
+                      Player 1 (Admin): Position {ludoPos.p1} / 30
+                    </div>
+                    <div className={`p-3 rounded-xl border ${ludoTurn === 'p2' ? 'bg-rose-600/30 border-rose-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333]'}`}>
+                      Player 2 (User): Position {ludoPos.p2} / 30
                     </div>
                   </div>
-                ) : (
-                  <div className="w-full my-3 sm:my-4">
-                    <div className="bg-[#1e1e1e] border border-[#2e2e2e] rounded-2xl p-4 sm:p-6 shadow-2xl relative space-y-3 sm:space-y-4 font-sans select-text">
-                      <div className="flex items-center justify-between border-b border-[#282828] pb-2.5 text-[#a3a3a3]">
-                        <button className="flex items-center gap-1.5 bg-[#2a2a2a] text-gray-300 text-xs px-2.5 py-1 rounded-md cursor-pointer">
-                          <Edit3 size={13} />
-                          <span>Edit</span>
-                        </button>
-                        <div className="flex items-center gap-3">
-                          <button className="hover:text-white cursor-pointer" title="Copy"><Copy size={15} /></button>
-                          <button className="hover:text-white cursor-pointer" title="Download"><Download size={15} /></button>
-                          <button className="hover:text-white cursor-pointer" title="Full Screen"><Maximize2 size={15} /></button>
+
+                  <div className="bg-[#141414] border border-[#262626] p-4 rounded-2xl flex items-center justify-between">
+                    <div className="text-sm font-extrabold text-amber-400 flex items-center gap-2">
+                      <span>Dice Roll:</span>
+                      <span className="w-10 h-10 rounded-xl bg-amber-500 text-black font-black text-xl flex items-center justify-center shadow">{diceVal}</span>
+                    </div>
+                    <button
+                      onClick={handleLudoRoll}
+                      className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-lg cursor-pointer active:scale-95"
+                    >
+                      Roll Dice ({ludoTurn === 'p1' ? 'Admin Turn' : 'User Turn'})
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* DEFAULT GAME ARENA FOR OTHER 6 GAMES */}
+              {activeGame.id !== 'tictactoe' && activeGame.id !== 'ludo' && (
+                <div className="bg-[#0a0a0a] border border-[#222] p-8 rounded-2xl space-y-4 max-w-md mx-auto">
+                  <Trophy size={48} className="mx-auto text-amber-400 animate-bounce" />
+                  <h3 className="text-base font-bold text-white">{activeGame.name} Arena</h3>
+                  <p className="text-xs text-gray-400">{activeGame.desc}</p>
+                  <button
+                    onClick={() => confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } })}
+                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs py-3 rounded-xl font-bold shadow cursor-pointer active:scale-95"
+                  >
+                    Send Celebration Confetti 🎉
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
+        ) : (
+          <>
+            {viewMode === 'real_gpt' && (
+              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-4 sm:space-y-6 scrollbar-none">
+                {conversations.map((msg) => (
+                  <div key={msg.id} className="w-full">
+                    {msg.role === 'user' ? (
+                      <div className="flex justify-end my-2 sm:my-3">
+                        <div className="bg-[#1c3a6b] text-white px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl max-w-[88%] sm:max-w-[80%] text-sm sm:text-[13.5px] leading-relaxed shadow-lg whitespace-pre-wrap break-words select-text">
+                          {msg.text}
                         </div>
                       </div>
-
-                      <div className="text-[#ececf1] text-sm sm:text-[13.5px] leading-[1.7] font-normal tracking-wide whitespace-pre-wrap break-words">
-                        {msg.text}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3.5 text-[#737373] px-2 pt-2 text-xs">
-                      <button className="hover:text-white cursor-pointer"><Copy size={15} /></button>
-                      <button className="hover:text-white cursor-pointer"><ThumbsUp size={15} /></button>
-                      <button className="hover:text-white cursor-pointer"><ThumbsDown size={15} /></button>
-                      <button className="hover:text-white cursor-pointer"><Share size={15} /></button>
-                      <button className="hover:text-white cursor-pointer"><RotateCw size={15} /></button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {isThinking && (
-              <div className="flex items-center gap-2 text-xs text-gray-400 italic px-2">
-                <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-                <span>ChatGPT is writing detailed response...</span>
-              </div>
-            )}
-
-            <div className="flex justify-center items-center gap-1.5 text-xs text-[#737373] pt-3 pb-2">
-              <span>Today 5:27 PM</span>
-              <div className="w-5 h-5 rounded-full bg-[#1e1e1e] flex items-center justify-center">
-                <ChevronDown size={12} />
-              </div>
-            </div>
-
-            <div ref={messageEndRef} />
-          </section>
-        )}
-
-        {viewMode === 'stealth' && (
-          <section className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
-            <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs md:text-[12.5px]">
-              <div className="bg-[#212121] px-4 md:px-5 py-2.5 md:py-3 flex items-center justify-between border-b border-[#2e2e2e] text-[#b4b4b4]">
-                <div className="flex items-center gap-2">
-                  <Code size={15} className="text-[#888]" />
-                  <span className="text-xs md:text-[13px] font-medium text-[#dedede]">JSON Schema</span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <button className="hover:text-white cursor-pointer p-1">
-                    <Copy size={14} />
-                  </button>
-                  <button className="flex items-center gap-1.5 bg-[#2c2c2c] hover:bg-[#383838] text-white px-2.5 py-1 rounded-md cursor-pointer text-xs font-medium">
-                    <Play size={11} fill="currentColor" />
-                    <span>Run</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-4 sm:p-6 text-[#d4d4d4] space-y-2 overflow-x-hidden leading-relaxed text-[12px] md:text-[12.5px]">
-                <div><span className="text-[#c586c0]">import</span> <span className="text-[#9cdcfe]">random</span></div>
-                <br />
-                <div>
-                  <span className="text-[#569cd6]">def</span> <span className="text-[#dcdcaa]">generate_random_data</span>(<span className="text-[#9cdcfe]">size</span>=<span className="text-[#b5cea8]">10</span>):
-                </div>
-                <div className="pl-3 sm:pl-4"><span className="text-[#9cdcfe]">data</span> = []</div>
-                <div className="pl-3 sm:pl-4">
-                  <span className="text-[#c586c0]">for</span> <span className="text-[#9cdcfe]">_</span> <span className="text-[#c586c0]">in</span> <span className="text-[#dcdcaa]">range</span>(<span className="text-[#9cdcfe]">size</span>):
-                </div>
-                <div className="pl-6 sm:pl-8">
-                  <span className="text-[#9cdcfe]">number</span> = <span className="text-[#9cdcfe]">random</span>.<span className="text-[#dcdcaa]">randint</span>(<span className="text-[#b5cea8]">1</span>, <span className="text-[#b5cea8]">100</span>)
-                </div>
-                <div className="pl-6 sm:pl-8">
-                  <span className="text-[#9cdcfe]">data</span>.<span className="text-[#dcdcaa]">append</span>(<span className="text-[#9cdcfe]">number</span>)
-                </div>
-                <div className="pl-3 sm:pl-4">
-                  <span className="text-[#c586c0]">return</span> <span className="text-[#9cdcfe]">data</span>
-                </div>
-                <br />
-
-                <div className="border-y border-[#2a2a2a] py-2.5 my-2 bg-[#121212]/80 rounded-xl px-2.5 md:px-3.5">
-                  <div className="text-[#6a9955] mb-1.5 flex items-center justify-between flex-wrap gap-2 text-xs">
-                    <span className="flex items-center gap-2">
-                      <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'A' : 'H'})`}</span>
-                      {isPeerTyping && (
-                        <span className="text-[#38bdf8] font-mono animate-pulse flex items-center gap-1.5 font-semibold">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#38bdf8] animate-ping" />
-                          {role === 'user' ? 'H' : 'A'} is typing...
-                        </span>
-                      )}
-                    </span>
-                    <span className="text-[11px] text-gray-500 font-sans">
-                      {role === 'parent' 
-                        ? `Total (${displayedStealthMessages.length}) records [Permanent View]` 
-                        : `Showing last (${displayedStealthMessages.length}) records`}
-                    </span>
-                  </div>
-
-                  <div 
-                    ref={streamContainerRef}
-                    className="space-y-1 max-h-60 sm:max-h-64 overflow-y-auto pr-1 scrollbar-none flex flex-col"
-                  >
-                    {displayedStealthMessages.length === 0 ? (
-                      <div className="text-[#6a9955] pl-2">{`# Waiting for execution runtime data...`}</div>
                     ) : (
-                      displayedStealthMessages.map((m, idx) => {
-                        const displayName = m.senderRole === 'user' ? 'A' : 'H';
-                        const showStatusReceipt = m.senderRole === role;
-                        const isSeen = Boolean(m.isSeen);
-                        const isReactionOpen = activeReactionMsgId === m._id;
-                        const isHighlighted = highlightedMsgId === m._id;
-
-                        const hasReplyTag = m.text && m.text.startsWith('[⤴');
-                        let replySnippet = "";
-                        let cleanBody = m.text;
-
-                        if (hasReplyTag) {
-                          const closingIndex = m.text.indexOf(']');
-                          if (closingIndex !== -1) {
-                            replySnippet = m.text.substring(1, closingIndex);
-                            cleanBody = m.text.substring(closingIndex + 1).trim();
-                          }
-                        }
-
-                        return (
-                          <div 
-                            key={idx} 
-                            id={`stealth-msg-${m._id}`}
-                            className={`group relative flex items-start justify-between px-2 py-1 rounded-lg transition-all gap-2 ${
-                              isHighlighted ? 'bg-emerald-950/70 border border-emerald-500/50' : 'hover:bg-[#202020]'
-                            }`}
-                          >
-                            <div className="flex-1 break-words overflow-wrap-anywhere text-left flex flex-wrap items-center text-xs">
-                              <span className="text-[#9cdcfe] shrink-0 font-bold">{displayName}</span>
-                              <span className="mx-1 text-[#d4d4d4]">=</span>
-
-                              {hasReplyTag && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleScrollToMessage(m.replyRefId)}
-                                  className="inline-flex items-center text-[10px] bg-[#222] hover:bg-[#2d2d2d] text-emerald-400 px-1.5 py-0.5 rounded border border-[#333] mr-1.5 cursor-pointer font-medium"
-                                  title="Jump to quoted message"
-                                >
-                                  {replySnippet}
-                                </button>
-                              )}
-
-                              {m.isMedia ? (
-                                <button 
-                                  type="button"
-                                  onClick={() => handleOpenViewOnce(m)}
-                                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer transition-all border ${
-                                    m.mediaOpened 
-                                      ? 'bg-[#18261e] border-emerald-700 text-emerald-300' 
-                                      : 'bg-[#252525] hover:bg-[#333] border-[#3d3d3d] text-amber-300'
-                                  }`}
-                                  title={m.mediaOpened ? "Asset viewed" : "Click to view once"}
-                                >
-                                  {m.mediaOpened ? <Eye size={12} className="text-emerald-400" /> : <EyeOff size={12} className="text-amber-400 animate-pulse" />}
-                                  <span>{m.mediaOpened ? '[Opened: binary_raw]' : '[View Once: payload_locked]'}</span>
-                                </button>
-                              ) : (
-                                <span className="text-[#ce9178] break-all">{`"${cleanBody}"`}</span>
-                              )}
-                              
-                              <button 
-                                type="button"
-                                onClick={() => handleStartReply(m)}
-                                title="Reply to this message"
-                                className="inline-flex items-center text-gray-400 hover:text-emerald-400 hover:scale-125 transition-transform px-1 ml-1 cursor-pointer font-bold text-xs"
-                              >
-                                ⤴
-                              </button>
-                              
-                              <div 
-                                className="relative inline-flex items-center ml-1 py-0.5"
-                                onMouseEnter={() => setActiveReactionMsgId(m._id)}
-                                onMouseLeave={() => setActiveReactionMsgId(null)}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveReactionMsgId(activeReactionMsgId === m._id ? null : m._id);
-                                }}
-                              >
-                                <span className="text-[#6a9955] text-[10px] shrink-0 font-mono cursor-pointer hover:text-emerald-400 transition-colors">
-                                  {`[${m.timeFormatted}]`}
-                                </span>
-
-                                {isReactionOpen && (
-                                  <div 
-                                    className="absolute left-0 -top-8 z-30 bg-[#1e1e1e] border border-[#3a3a3a] px-2 py-1 rounded-full shadow-2xl flex items-center gap-1.5 backdrop-blur-md"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    {HOVER_REACTIONS.map((emoji, eIdx) => (
-                                      <button
-                                        key={eIdx}
-                                        type="button"
-                                        onClick={() => handleSelectReaction(m._id, emoji)}
-                                        className="text-sm p-0.5 hover:scale-125 transition-transform cursor-pointer"
-                                      >
-                                        {emoji}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-
-                              {m.reaction && (
-                                <span className="ml-1 inline-flex items-center bg-[#252525] border border-[#383838] px-1.5 py-0.2 rounded-full text-[10px] shadow">
-                                  {m.reaction}
-                                </span>
-                              )}
-                              
-                              {showStatusReceipt && (
-                                <span 
-                                  className={`text-[12px] font-mono tracking-tighter shrink-0 ml-1 font-bold transition-colors duration-100 ${
-                                    isSeen ? 'text-[#38bdf8]' : 'text-gray-500'
-                                  }`}
-                                  title={isSeen ? "Seen by counterpart" : "Sent"}
-                                >
-                                  {isSeen ? '..' : '.'}
-                                </span>
-                              )}
+                      <div className="w-full my-3 sm:my-4">
+                        <div className="bg-[#1e1e1e] border border-[#2e2e2e] rounded-2xl p-4 sm:p-6 shadow-2xl relative space-y-3 sm:space-y-4 font-sans select-text">
+                          <div className="flex items-center justify-between border-b border-[#282828] pb-2.5 text-[#a3a3a3]">
+                            <button className="flex items-center gap-1.5 bg-[#2a2a2a] text-gray-300 text-xs px-2.5 py-1 rounded-md cursor-pointer">
+                              <Edit3 size={13} />
+                              <span>Edit</span>
+                            </button>
+                            <div className="flex items-center gap-3">
+                              <button className="hover:text-white cursor-pointer" title="Copy"><Copy size={15} /></button>
+                              <button className="hover:text-white cursor-pointer" title="Download"><Download size={15} /></button>
+                              <button className="hover:text-white cursor-pointer" title="Full Screen"><Maximize2 size={15} /></button>
                             </div>
-
-                            {role === 'parent' && (
-                              <button 
-                                type="button"
-                                onClick={(e) => togglePendingFlag(e, m)}
-                                title={m.flaggedPending ? "Mark as Resolved" : "Add to Answer Pending"}
-                                className={`px-2 py-0.5 text-xs font-bold rounded cursor-pointer transition-all shrink-0 ${
-                                  m.flaggedPending 
-                                    ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-105' 
-                                    : 'bg-[#2a2a2a] text-gray-400 hover:text-white hover:bg-[#383838]'
-                                }`}
-                              >
-                                !
-                              </button>
-                            )}
                           </div>
-                        );
-                      })
+
+                          <div className="text-[#ececf1] text-sm sm:text-[13.5px] leading-[1.7] font-normal tracking-wide whitespace-pre-wrap break-words">
+                            {msg.text}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3.5 text-[#737373] px-2 pt-2 text-xs">
+                          <button className="hover:text-white cursor-pointer"><Copy size={15} /></button>
+                          <button className="hover:text-white cursor-pointer"><ThumbsUp size={15} /></button>
+                          <button className="hover:text-white cursor-pointer"><ThumbsDown size={15} /></button>
+                          <button className="hover:text-white cursor-pointer"><Share size={15} /></button>
+                          <button className="hover:text-white cursor-pointer"><RotateCw size={15} /></button>
+                        </div>
+                      </div>
                     )}
-                    <div ref={messageEndRef} />
-                  </div>
-                </div>
-
-                <div><span className="text-[#9cdcfe]">numbers</span> = <span className="text-[#dcdcaa]">generate_random_data</span>(<span className="text-[#b5cea8]">20</span>)</div>
-                <div><span className="text-[#dcdcaa]">print</span>(<span className="text-[#ce9178]">"Generated numbers:"</span>, <span className="text-[#9cdcfe]">numbers</span>)</div>
-                <br />
-                <div><span className="text-[#9cdcfe]">total</span> = <span className="text-[#dcdcaa]">sum</span>(<span className="text-[#9cdcfe]">numbers</span>)</div>
-                <div><span className="text-[#9cdcfe]">average</span> = <span className="text-[#9cdcfe]">total</span> / <span className="text-[#dcdcaa]">len</span>(<span className="text-[#9cdcfe]">numbers</span>)</div>
-                <div><span className="text-[#9cdcfe]">maximum</span> = <span className="text-[#dcdcaa]">max</span>(<span className="text-[#9cdcfe]">numbers</span>)</div>
-                <div><span className="text-[#9cdcfe]">minimum</span> = <span className="text-[#dcdcaa]">min</span>(<span className="text-[#9cdcfe]">numbers</span>)</div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {viewMode === 'images_archive' && (
-          <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-3 scrollbar-none font-sans">
-            <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
-              <div className="flex items-center gap-2">
-                <ImageIcon className="text-blue-400" size={18} />
-                <h2 className="text-sm font-semibold text-white">Archived Media Vault</h2>
-              </div>
-              <span className="text-[11px] text-gray-400 font-mono">{archivedImages.length} items</span>
-            </div>
-
-            {archivedImages.length === 0 ? (
-              <div className="text-center py-16 text-gray-500 text-xs">
-                No images archived yet.
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-3">
-                {archivedImages.map((item, idx) => (
-                  <div key={idx} className="bg-[#171717] border border-[#2a2a2a] rounded-xl overflow-hidden shadow-lg group relative">
-                    <img 
-                      src={item.data} 
-                      alt="Archived" 
-                      className="w-full h-32 sm:h-36 object-cover cursor-pointer hover:scale-105 transition-transform"
-                      onClick={() => window.open(item.data, '_blank')}
-                    />
-                    <div className="p-2 bg-[#121212] flex items-center justify-between text-[10px] text-gray-400 font-mono">
-                      <span className="font-bold text-blue-400">{item.sender}</span>
-                      <span>{item.time}</span>
-                    </div>
                   </div>
                 ))}
-              </div>
+
+                {isThinking && (
+                  <div className="flex items-center gap-2 text-xs text-gray-400 italic px-2">
+                    <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                    <span>ChatGPT is writing detailed response...</span>
+                  </div>
+                )}
+
+                <div className="flex justify-center items-center gap-1.5 text-xs text-[#737373] pt-3 pb-2">
+                  <span>Today 5:27 PM</span>
+                  <div className="w-5 h-5 rounded-full bg-[#1e1e1e] flex items-center justify-center">
+                    <ChevronDown size={12} />
+                  </div>
+                </div>
+
+                <div ref={messageEndRef} />
+              </section>
             )}
-          </section>
-        )}
 
-        {viewMode === 'scheduled' && (
-          <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-4 scrollbar-none font-sans">
-            <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                  <Music size={18} />
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-white">Synced Music Lounge</h2>
-                  <p className="text-[11px] text-gray-400">Continuous background audio synchronization</p>
-                </div>
-              </div>
-
-              {syncStatus === 'connected' && (
-                <button
-                  onClick={handleDisconnectSync}
-                  className="flex items-center gap-1 bg-rose-950 border border-rose-800 text-rose-300 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer"
-                >
-                  <Unlink size={12} /> Disconnect
-                </button>
-              )}
-            </div>
-
-            {syncStatus !== 'connected' ? (
-              <div className="bg-[#141414] border border-[#262626] rounded-2xl p-6 sm:p-8 text-center space-y-4 shadow-xl">
-                <div className="w-14 h-14 rounded-full bg-[#1e1e1e] border border-[#333] flex items-center justify-center text-amber-400 mx-auto">
-                  <Radio size={26} className={syncStatus === 'requested' ? 'animate-pulse text-blue-400' : ''} />
-                </div>
-
-                <div>
-                  <h3 className="text-base font-bold text-white">Two-Way Handshake</h3>
-                  <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
-                    Both sides must authorize the synchronized audio stream.
-                  </p>
-                </div>
-
-                {syncStatus === 'idle' && (
-                  <button
-                    onClick={handleSendSyncInvite}
-                    className="w-full sm:w-auto bg-[#1c3a6b] text-white px-6 py-3 rounded-xl text-xs font-bold cursor-pointer inline-flex items-center justify-center gap-2 active:scale-95"
-                  >
-                    <Link2 size={15} />
-                    <span>Send Connection Request ({role === 'parent' ? 'Admin' : 'User'})</span>
-                  </button>
-                )}
-
-                {syncStatus === 'requested' && (
-                  <div className="inline-flex items-center gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-4 py-2.5 rounded-xl">
-                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                    <span>Invitation sent! Waiting for counterpart...</span>
-                  </div>
-                )}
-
-                {syncStatus === 'incoming_request' && (
-                  <div className="bg-emerald-950/40 border border-emerald-500/40 p-4 rounded-2xl max-w-sm mx-auto space-y-3">
-                    <p className="text-xs text-emerald-300 font-medium">
-                      Incoming lounge invitation from <strong className="text-white uppercase">{incomingInviteRole}</strong>!
-                    </p>
-                    <button
-                      onClick={handleAcceptSyncInvite}
-                      className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-                    >
-                      <Check size={16} /> Accept & Join Synced Lounge
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3 sm:space-y-4">
-                <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3 flex items-center justify-between shadow-lg">
-                  <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold font-mono">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    <span>LINKED (Persists across refresh)</span>
-                  </div>
-                  <span className="text-[11px] text-gray-400 font-mono">Exact Sync</span>
-                </div>
-
-                <div className="relative">
-                  <form onSubmit={(e) => { e.preventDefault(); handleTriggerSong(youtubeUrlInput); }} className="flex gap-2">
-                    <input 
-                      type="text" 
-                      value={youtubeUrlInput}
-                      onChange={(e) => handleQueryChange(e.target.value)}
-                      onFocus={() => { if (ytSuggestions.length > 0) setShowSuggestions(true); }}
-                      placeholder="Paste YouTube link or type song name..."
-                      className="flex-1 bg-[#171717] border border-[#2c2c2c] rounded-xl px-3.5 py-2.5 text-sm sm:text-xs text-white placeholder-gray-500 outline-none"
-                    />
-                    <button
-                      type="submit"
-                      disabled={isLoadingTrack}
-                      className="bg-[#1c3a6b] text-white px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold shrink-0 cursor-pointer flex items-center gap-1"
-                    >
-                      {isLoadingTrack ? <Loader2 size={14} className="animate-spin" /> : null}
-                      <span>{isLoadingTrack ? 'Syncing...' : 'Play'}</span>
-                    </button>
-                  </form>
-
-                  {activeVideoId && (
-                    <div className="mt-2.5 px-1 flex items-center gap-3">
-                      <input
-                        type="range"
-                        min={0}
-                        max={trackDuration || 100}
-                        value={trackProgress}
-                        onChange={handleSeekSlider}
-                        className="w-full accent-emerald-400 bg-[#2a2a2a] h-1.5 rounded-lg cursor-pointer outline-none"
-                      />
+            {viewMode === 'stealth' && (
+              <section className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
+                <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs md:text-[12.5px]">
+                  <div className="bg-[#212121] px-4 md:px-5 py-2.5 md:py-3 flex items-center justify-between border-b border-[#2e2e2e] text-[#b4b4b4]">
+                    <div className="flex items-center gap-2">
+                      <Code size={15} className="text-[#888]" />
+                      <span className="text-xs md:text-[13px] font-medium text-[#dedede]">JSON Schema</span>
                     </div>
-                  )}
-
-                  {showSuggestions && ytSuggestions.length > 0 && (
-                    <div className="absolute left-0 right-16 top-full mt-1.5 bg-[#171717] border border-[#333] rounded-xl shadow-2xl z-30 max-h-48 overflow-y-auto py-1">
-                      {ytSuggestions.map((sugg, sIdx) => (
-                        <div
-                          key={sIdx}
-                          onClick={() => handleSelectSuggestion(sugg)}
-                          className="px-4 py-2.5 text-xs text-gray-200 hover:bg-[#252525] cursor-pointer flex items-center gap-2 border-b border-[#222]/50 last:border-none"
-                        >
-                          <Search size={13} className="text-gray-500" />
-                          <span>{sugg}</span>
-                        </div>
-                      ))}
+                    <div className="flex items-center gap-2.5">
+                      <button className="hover:text-white cursor-pointer p-1">
+                        <Copy size={14} />
+                      </button>
+                      <button className="flex items-center gap-1.5 bg-[#2c2c2c] hover:bg-[#383838] text-white px-2.5 py-1 rounded-md cursor-pointer text-xs font-medium">
+                        <Play size={11} fill="currentColor" />
+                        <span>Run</span>
+                      </button>
                     </div>
-                  )}
-                </div>
-
-                <div className="w-full bg-[#121212] border border-[#242424] rounded-2xl p-5 sm:p-6 text-center space-y-2.5 shadow-xl">
-                  <div className="w-14 h-14 rounded-full bg-[#1c1c1c] border border-[#2e2e2e] flex items-center justify-center text-emerald-400 mx-auto">
-                    <Volume2 size={24} className={isPlaying ? 'animate-bounce' : ''} />
                   </div>
-                  <div>
-                    <span className="text-[10px] text-gray-500 font-mono uppercase tracking-wider block">Live Synchronized</span>
-                    <h3 className="text-sm sm:text-base font-bold text-white mt-1 break-words">
-                      {activeTrackTitle || "No track playing. Search or paste link above."}
-                    </h3>
-                  </div>
-                </div>
 
-                {activeVideoId && (
-                  <div className="bg-[#171717] border border-[#292929] rounded-2xl p-2.5 sm:p-3 flex items-center justify-between">
-                    <button
-                      onClick={handleTogglePlayPause}
-                      className="bg-[#242424] text-white p-2.5 px-4 rounded-xl cursor-pointer flex items-center gap-2 text-xs font-semibold"
-                    >
-                      {isPlaying ? <Pause size={15} /> : <Play size={15} />}
-                      <span>{isPlaying ? 'Pause for Both' : 'Play for Both'}</span>
-                    </button>
-
-                    <button
-                      onClick={handleDisconnectSync}
-                      className="text-xs text-rose-400 px-3 py-2 rounded-lg border border-rose-900/50 cursor-pointer"
-                    >
-                      Disconnect
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-        )}
-
-        {viewMode === 'codex' && (
-          <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-3 sm:space-y-4 scrollbar-none font-sans">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#222] pb-2.5 gap-2">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                  <TerminalSquare size={18} />
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-white">Codex</h2>
-                  <p className="text-[11px] text-gray-400">Watch Together (Dual Cloud & Local)</p>
-                </div>
-              </div>
-
-              {role === 'parent' && (
-                <div className="flex overflow-x-auto scrollbar-none bg-[#181818] p-1 rounded-xl border border-[#2c2c2c] gap-1 text-xs shrink-0 max-w-full">
-                  <button
-                    type="button"
-                    onClick={() => { setCodexEngine('gofile'); setMovieError(''); }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer shrink-0 ${
-                      codexEngine === 'gofile' ? 'bg-[#252525] text-emerald-400 shadow' : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    <Tv size={13} />
-                    <span>Stream</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setCodexEngine('youtube'); setMovieError(''); }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer shrink-0 ${
-                      codexEngine === 'youtube' ? 'bg-[#252525] text-blue-400 shadow' : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    <Video size={13} />
-                    <span>YouTube</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setCodexEngine('embed'); setMovieError(''); }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer shrink-0 ${
-                      codexEngine === 'embed' ? 'bg-[#252525] text-purple-400 shadow' : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    <Globe size={13} />
-                    <span>Embed API</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setCodexEngine('local'); setMovieError(''); }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer shrink-0 ${
-                      codexEngine === 'local' ? 'bg-[#252525] text-amber-400 shadow' : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    <HardDrive size={13} />
-                    <span>Local File</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {role === 'parent' && (
-              <div className="space-y-2">
-                {codexEngine !== 'local' ? (
-                  <form onSubmit={handleLoadMovie} className="flex gap-2">
-                    <input 
-                      type="text"
-                      value={movieInputUrl}
-                      onChange={(e) => setMovieInputUrl(e.target.value)}
-                      placeholder={
-                        codexEngine === 'gofile'
-                          ? "Direct stream link (GoFile / Pixeldrain MP4)..."
-                          : codexEngine === 'youtube'
-                          ? "YouTube watch link..."
-                          : "Enter IMDb ID (e.g. tt0499549)..."
-                      }
-                      className="flex-1 bg-[#171717] border border-[#2c2c2c] rounded-xl px-3.5 py-2.5 text-sm sm:text-xs text-white placeholder-gray-500 outline-none"
-                    />
-                    <button
-                      type="submit"
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold cursor-pointer shrink-0 shadow active:scale-95"
-                    >
-                      Broadcast
-                    </button>
-                  </form>
-                ) : (
-                  <div className="bg-[#141414] border border-[#2c2c2c] p-3 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="p-4 sm:p-6 text-[#d4d4d4] space-y-2 overflow-x-hidden leading-relaxed text-[12px] md:text-[12.5px]">
+                    <div><span className="text-[#c586c0]">import</span> <span className="text-[#9cdcfe]">random</span></div>
+                    <br />
                     <div>
-                      <span className="text-xs font-bold text-amber-400 block">Local File Zero-Data Mode Active</span>
-                      <span className="text-[11px] text-gray-400">Play/pause will be synced locally with zero internet consumption!</span>
+                      <span className="text-[#569cd6]">def</span> <span className="text-[#dcdcaa]">generate_random_data</span>(<span className="text-[#9cdcfe]">size</span>=<span className="text-[#b5cea8]">10</span>):
                     </div>
-                    <div className="flex gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => localVideoInputRef.current && localVideoInputRef.current.click()}
-                        className="bg-[#242424] text-white px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer border border-[#333]"
-                      >
-                        {localFileName ? `Change: ${localFileName.substring(0, 12)}...` : "📁 Pick Movie"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleLoadMovie}
-                        className="bg-amber-600 text-black px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                      >
-                        Broadcast
-                      </button>
+                    <div className="pl-3 sm:pl-4"><span className="text-[#9cdcfe]">data</span> = []</div>
+                    <div className="pl-3 sm:pl-4">
+                      <span className="text-[#c586c0]">for</span> <span className="text-[#9cdcfe]">_</span> <span className="text-[#c586c0]">in</span> <span className="text-[#dcdcaa]">range</span>(<span className="text-[#9cdcfe]">size</span>):
                     </div>
-                  </div>
-                )}
+                    <div className="pl-6 sm:pl-8">
+                      <span className="text-[#9cdcfe]">number</span> = <span className="text-[#9cdcfe]">random</span>.<span className="text-[#dcdcaa]">randint</span>(<span className="text-[#b5cea8]">1</span>, <span className="text-[#b5cea8]">100</span>)
+                    </div>
+                    <div className="pl-6 sm:pl-8">
+                      <span className="text-[#9cdcfe]">data</span>.<span className="text-[#dcdcaa]">append</span>(<span className="text-[#9cdcfe]">number</span>)
+                    </div>
+                    <div className="pl-3 sm:pl-4">
+                      <span className="text-[#c586c0]">return</span> <span className="text-[#9cdcfe]">data</span>
+                    </div>
+                    <br />
 
-                {codexEngine === 'embed' && (
-                  <div className="flex items-center justify-between bg-[#141414] border border-[#252525] px-3 py-2 rounded-xl text-xs gap-2 overflow-x-auto scrollbar-none">
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-gray-400 text-[11px] font-semibold">Mirror:</span>
-                      <div className="flex gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleSwitchEmbedServer('vidlink')}
-                          className={`px-2 py-1 rounded text-[11px] font-medium cursor-pointer ${embedServer === 'vidlink' ? 'bg-purple-600 text-white' : 'bg-[#222] text-gray-400'}`}
-                        >
-                          Server 1
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSwitchEmbedServer('autoembed')}
-                          className={`px-2 py-1 rounded text-[11px] font-medium cursor-pointer ${embedServer === 'autoembed' ? 'bg-purple-600 text-white' : 'bg-[#222] text-gray-400'}`}
-                        >
-                          Server 2
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSwitchEmbedServer('vidsrc_xyz')}
-                          className={`px-2 py-1 rounded text-[11px] font-medium cursor-pointer ${embedServer === 'vidsrc_xyz' ? 'bg-purple-600 text-white' : 'bg-[#222] text-gray-400'}`}
-                        >
-                          Server 3
-                        </button>
+                    <div className="border-y border-[#2a2a2a] py-2.5 my-2 bg-[#121212]/80 rounded-xl px-2.5 md:px-3.5">
+                      <div className="text-[#6a9955] mb-1.5 flex items-center justify-between flex-wrap gap-2 text-xs">
+                        <span className="flex items-center gap-2">
+                          <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'A' : 'H'})`}</span>
+                          {isPeerTyping && (
+                            <span className="text-[#38bdf8] font-mono animate-pulse flex items-center gap-1.5 font-semibold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#38bdf8] animate-ping" />
+                              {role === 'user' ? 'H' : 'A'} is typing...
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-[11px] text-gray-500 font-sans">
+                          {role === 'parent' 
+                            ? `Total (${displayedStealthMessages.length}) records [Permanent View]` 
+                            : `Showing last (${displayedStealthMessages.length}) records`}
+                        </span>
+                      </div>
+
+                      <div 
+                        ref={streamContainerRef}
+                        className="space-y-1 max-h-60 sm:max-h-64 overflow-y-auto pr-1 scrollbar-none flex flex-col"
+                      >
+                        {displayedStealthMessages.length === 0 ? (
+                          <div className="text-[#6a9955] pl-2">{`# Waiting for execution runtime data...`}</div>
+                        ) : (
+                          displayedStealthMessages.map((m, idx) => {
+                            const displayName = m.senderRole === 'user' ? 'A' : 'H';
+                            const showStatusReceipt = m.senderRole === role;
+                            const isSeen = Boolean(m.isSeen);
+                            const isReactionOpen = activeReactionMsgId === m._id;
+                            const isHighlighted = highlightedMsgId === m._id;
+
+                            const hasReplyTag = m.text && m.text.startsWith('[⤴');
+                            let replySnippet = "";
+                            let cleanBody = m.text;
+
+                            if (hasReplyTag) {
+                              const closingIndex = m.text.indexOf(']');
+                              if (closingIndex !== -1) {
+                                replySnippet = m.text.substring(1, closingIndex);
+                                cleanBody = m.text.substring(closingIndex + 1).trim();
+                              }
+                            }
+
+                            return (
+                              <div 
+                                key={idx} 
+                                id={`stealth-msg-${m._id}`}
+                                className={`group relative flex items-start justify-between px-2 py-1 rounded-lg transition-all gap-2 ${
+                                  isHighlighted ? 'bg-emerald-950/70 border border-emerald-500/50' : 'hover:bg-[#202020]'
+                                }`}
+                              >
+                                <div className="flex-1 break-words overflow-wrap-anywhere text-left flex flex-wrap items-center text-xs">
+                                  <span className="text-[#9cdcfe] shrink-0 font-bold">{displayName}</span>
+                                  <span className="mx-1 text-[#d4d4d4]">=</span>
+
+                                  {hasReplyTag && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleScrollToMessage(m.replyRefId)}
+                                      className="inline-flex items-center text-[10px] bg-[#222] hover:bg-[#2d2d2d] text-emerald-400 px-1.5 py-0.5 rounded border border-[#333] mr-1.5 cursor-pointer font-medium"
+                                      title="Jump to quoted message"
+                                    >
+                                      {replySnippet}
+                                    </button>
+                                  )}
+
+                                  {m.isMedia ? (
+                                    <button 
+                                      type="button"
+                                      onClick={() => handleOpenViewOnce(m)}
+                                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer transition-all border ${
+                                        m.mediaOpened 
+                                          ? 'bg-[#18261e] border-emerald-700 text-emerald-300' 
+                                          : 'bg-[#252525] hover:bg-[#333] border-[#3d3d3d] text-amber-300'
+                                      }`}
+                                      title={m.mediaOpened ? "Asset viewed" : "Click to view once"}
+                                    >
+                                      {m.mediaOpened ? <Eye size={12} className="text-emerald-400" /> : <EyeOff size={12} className="text-amber-400 animate-pulse" />}
+                                      <span>{m.mediaOpened ? '[Opened: binary_raw]' : '[View Once: payload_locked]'}</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-[#ce9178] break-all">{`"${cleanBody}"`}</span>
+                                  )}
+                                  
+                                  <button 
+                                    type="button"
+                                    onClick={() => handleStartReply(m)}
+                                    title="Reply to this message"
+                                    className="inline-flex items-center text-gray-400 hover:text-emerald-400 hover:scale-125 transition-transform px-1 ml-1 cursor-pointer font-bold text-xs"
+                                  >
+                                    ⤴
+                                  </button>
+                                  
+                                  <div 
+                                    className="relative inline-flex items-center ml-1 py-0.5"
+                                    onMouseEnter={() => setActiveReactionMsgId(m._id)}
+                                    onMouseLeave={() => setActiveReactionMsgId(null)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveReactionMsgId(activeReactionMsgId === m._id ? null : m._id);
+                                    }}
+                                  >
+                                    <span className="text-[#6a9955] text-[10px] shrink-0 font-mono cursor-pointer hover:text-emerald-400 transition-colors">
+                                      {`[${m.timeFormatted}]`}
+                                    </span>
+
+                                    {isReactionOpen && (
+                                      <div 
+                                        className="absolute left-0 -top-8 z-30 bg-[#1e1e1e] border border-[#3a3a3a] px-2 py-1 rounded-full shadow-2xl flex items-center gap-1.5 backdrop-blur-md"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {HOVER_REACTIONS.map((emoji, eIdx) => (
+                                          <button
+                                            key={eIdx}
+                                            type="button"
+                                            onClick={() => handleSelectReaction(m._id, emoji)}
+                                            className="text-sm p-0.5 hover:scale-125 transition-transform cursor-pointer"
+                                          >
+                                            {emoji}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {m.reaction && (
+                                    <span className="ml-1 inline-flex items-center bg-[#252525] border border-[#383838] px-1.5 py-0.2 rounded-full text-[10px] shadow">
+                                      {m.reaction}
+                                    </span>
+                                  )}
+                                  
+                                  {showStatusReceipt && (
+                                    <span 
+                                      className={`text-[12px] font-mono tracking-tighter shrink-0 ml-1 font-bold transition-colors duration-100 ${
+                                        isSeen ? 'text-[#38bdf8]' : 'text-gray-500'
+                                      }`}
+                                      title={isSeen ? "Seen by counterpart" : "Sent"}
+                                    >
+                                      {isSeen ? '..' : '.'}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {role === 'parent' && (
+                                  <button 
+                                    type="button"
+                                    onClick={(e) => togglePendingFlag(e, m)}
+                                    title={m.flaggedPending ? "Mark as Resolved" : "Add to Answer Pending"}
+                                    className={`px-2 py-0.5 text-xs font-bold rounded cursor-pointer transition-all shrink-0 ${
+                                      m.flaggedPending 
+                                        ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-105' 
+                                        : 'bg-[#2a2a2a] text-gray-400 hover:text-white hover:bg-[#383838]'
+                                    }`}
+                                  >
+                                    !
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                        <div ref={messageEndRef} />
                       </div>
                     </div>
 
-                    {activeEmbedUrl && (
-                      <a 
-                        href={activeEmbedUrl} 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="text-purple-400 text-[11px] flex items-center gap-1 font-medium underline shrink-0"
+                    <div><span className="text-[#9cdcfe]">numbers</span> = <span className="text-[#dcdcaa]">generate_random_data</span>(<span className="text-[#b5cea8]">20</span>)</div>
+                    <div><span className="text-[#dcdcaa]">print</span>(<span className="text-[#ce9178]">"Generated numbers:"</span>, <span className="text-[#9cdcfe]">numbers</span>)</div>
+                    <br />
+                    <div><span className="text-[#9cdcfe]">total</span> = <span className="text-[#dcdcaa]">sum</span>(<span className="text-[#9cdcfe]">numbers</span>)</div>
+                    <div><span className="text-[#9cdcfe]">average</span> = <span className="text-[#9cdcfe]">total</span> / <span className="text-[#dcdcaa]">len</span>(<span className="text-[#9cdcfe]">numbers</span>)</div>
+                    <div><span className="text-[#9cdcfe]">maximum</span> = <span className="text-[#dcdcaa]">max</span>(<span className="text-[#9cdcfe]">numbers</span>)</div>
+                    <div><span className="text-[#9cdcfe]">minimum</span> = <span className="text-[#dcdcaa]">min</span>(<span className="text-[#9cdcfe]">numbers</span>)</div>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {viewMode === 'images_archive' && (
+              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-3 scrollbar-none font-sans">
+                <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="text-blue-400" size={18} />
+                    <h2 className="text-sm font-semibold text-white">Archived Media Vault</h2>
+                  </div>
+                  <span className="text-[11px] text-gray-400 font-mono">{archivedImages.length} items</span>
+                </div>
+
+                {archivedImages.length === 0 ? (
+                  <div className="text-center py-16 text-gray-500 text-xs">
+                    No images archived yet.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-3">
+                    {archivedImages.map((item, idx) => (
+                      <div key={idx} className="bg-[#171717] border border-[#2a2a2a] rounded-xl overflow-hidden shadow-lg group relative">
+                        <img 
+                          src={item.data} 
+                          alt="Archived" 
+                          className="w-full h-32 sm:h-36 object-cover cursor-pointer hover:scale-105 transition-transform"
+                          onClick={() => window.open(item.data, '_blank')}
+                        />
+                        <div className="p-2 bg-[#121212] flex items-center justify-between text-[10px] text-gray-400 font-mono">
+                          <span className="font-bold text-blue-400">{item.sender}</span>
+                          <span>{item.time}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {viewMode === 'scheduled' && (
+              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-4 scrollbar-none font-sans">
+                <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                      <Music size={18} />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-white">Synced Music Lounge</h2>
+                      <p className="text-[11px] text-gray-400">Continuous background audio synchronization</p>
+                    </div>
+                  </div>
+
+                  {syncStatus === 'connected' && (
+                    <button
+                      onClick={handleDisconnectSync}
+                      className="flex items-center gap-1 bg-rose-950 border border-rose-800 text-rose-300 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer"
+                    >
+                      <Unlink size={12} /> Disconnect
+                    </button>
+                  )}
+                </div>
+
+                {syncStatus !== 'connected' ? (
+                  <div className="bg-[#141414] border border-[#262626] rounded-2xl p-6 sm:p-8 text-center space-y-4 shadow-xl">
+                    <div className="w-14 h-14 rounded-full bg-[#1e1e1e] border border-[#333] flex items-center justify-center text-amber-400 mx-auto">
+                      <Radio size={26} className={syncStatus === 'requested' ? 'animate-pulse text-blue-400' : ''} />
+                    </div>
+
+                    <div>
+                      <h3 className="text-base font-bold text-white">Two-Way Handshake</h3>
+                      <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
+                        Both sides must authorize the synchronized audio stream.
+                      </p>
+                    </div>
+
+                    {syncStatus === 'idle' && (
+                      <button
+                        onClick={handleSendSyncInvite}
+                        className="w-full sm:w-auto bg-[#1c3a6b] text-white px-6 py-3 rounded-xl text-xs font-bold cursor-pointer inline-flex items-center justify-center gap-2 active:scale-95"
                       >
-                        <ExternalLink size={12} />
-                        <span>Direct</span>
-                      </a>
+                        <Link2 size={15} />
+                        <span>Send Connection Request ({role === 'parent' ? 'Admin' : 'User'})</span>
+                      </button>
+                    )}
+
+                    {syncStatus === 'requested' && (
+                      <div className="inline-flex items-center gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-4 py-2.5 rounded-xl">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                        <span>Invitation sent! Waiting for counterpart...</span>
+                      </div>
+                    )}
+
+                    {syncStatus === 'incoming_request' && (
+                      <div className="bg-emerald-950/40 border border-emerald-500/40 p-4 rounded-2xl max-w-sm mx-auto space-y-3">
+                        <p className="text-xs text-emerald-300 font-medium">
+                          Incoming lounge invitation from <strong className="text-white uppercase">{incomingInviteRole}</strong>!
+                        </p>
+                        <button
+                          onClick={handleAcceptSyncInvite}
+                          className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                        >
+                          <Check size={16} /> Accept & Join Synced Lounge
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3 sm:space-y-4">
+                    <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3 flex items-center justify-between shadow-lg">
+                      <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold font-mono">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                        <span>LINKED (Persists across refresh)</span>
+                      </div>
+                      <span className="text-[11px] text-gray-400 font-mono">Exact Sync</span>
+                    </div>
+
+                    <div className="relative">
+                      <form onSubmit={(e) => { e.preventDefault(); handleTriggerSong(youtubeUrlInput); }} className="flex gap-2">
+                        <input 
+                          type="text" 
+                          value={youtubeUrlInput}
+                          onChange={(e) => handleQueryChange(e.target.value)}
+                          onFocus={() => { if (ytSuggestions.length > 0) setShowSuggestions(true); }}
+                          placeholder="Paste YouTube link or type song name..."
+                          className="flex-1 bg-[#171717] border border-[#2c2c2c] rounded-xl px-3.5 py-2.5 text-sm sm:text-xs text-white placeholder-gray-500 outline-none"
+                        />
+                        <button
+                          type="submit"
+                          disabled={isLoadingTrack}
+                          className="bg-[#1c3a6b] text-white px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold shrink-0 cursor-pointer flex items-center gap-1"
+                        >
+                          {isLoadingTrack ? <Loader2 size={14} className="animate-spin" /> : null}
+                          <span>{isLoadingTrack ? 'Syncing...' : 'Play'}</span>
+                        </button>
+                      </form>
+
+                      {activeVideoId && (
+                        <div className="mt-2.5 px-1 flex items-center gap-3">
+                          <input
+                            type="range"
+                            min={0}
+                            max={trackDuration || 100}
+                            value={trackProgress}
+                            onChange={handleSeekSlider}
+                            className="w-full accent-emerald-400 bg-[#2a2a2a] h-1.5 rounded-lg cursor-pointer outline-none"
+                          />
+                        </div>
+                      )}
+
+                      {showSuggestions && ytSuggestions.length > 0 && (
+                        <div className="absolute left-0 right-16 top-full mt-1.5 bg-[#171717] border border-[#333] rounded-xl shadow-2xl z-30 max-h-48 overflow-y-auto py-1">
+                          {ytSuggestions.map((sugg, sIdx) => (
+                            <div
+                              key={sIdx}
+                              onClick={() => handleSelectSuggestion(sugg)}
+                              className="px-4 py-2.5 text-xs text-gray-200 hover:bg-[#252525] cursor-pointer flex items-center gap-2 border-b border-[#222]/50 last:border-none"
+                            >
+                              <Search size={13} className="text-gray-500" />
+                              <span>{sugg}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="w-full bg-[#121212] border border-[#242424] rounded-2xl p-5 sm:p-6 text-center space-y-2.5 shadow-xl">
+                      <div className="w-14 h-14 rounded-full bg-[#1c1c1c] border border-[#2e2e2e] flex items-center justify-center text-emerald-400 mx-auto">
+                        <Volume2 size={24} className={isPlaying ? 'animate-bounce' : ''} />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-gray-500 font-mono uppercase tracking-wider block">Live Synchronized</span>
+                        <h3 className="text-sm sm:text-base font-bold text-white mt-1 break-words">
+                          {activeTrackTitle || "No track playing. Search or paste link above."}
+                        </h3>
+                      </div>
+                    </div>
+
+                    {activeVideoId && (
+                      <div className="bg-[#171717] border border-[#292929] rounded-2xl p-2.5 sm:p-3 flex items-center justify-between">
+                        <button
+                          onClick={handleTogglePlayPause}
+                          className="bg-[#242424] text-white p-2.5 px-4 rounded-xl cursor-pointer flex items-center gap-2 text-xs font-semibold"
+                        >
+                          {isPlaying ? <Pause size={15} /> : <Play size={15} />}
+                          <span>{isPlaying ? 'Pause for Both' : 'Play for Both'}</span>
+                        </button>
+
+                        <button
+                          onClick={handleDisconnectSync}
+                          className="text-xs text-rose-400 px-3 py-2 rounded-lg border border-rose-900/50 cursor-pointer"
+                        >
+                          Disconnect
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}
-              </div>
+              </section>
             )}
 
-            {movieError && (
-              <div className="bg-amber-950/40 border border-amber-600/40 text-amber-300 p-2.5 rounded-xl text-xs flex items-center gap-2">
-                <AlertTriangle size={16} className="shrink-0 text-amber-400" />
-                <span>{movieError}</span>
-              </div>
-            )}
-
-            <div className="w-full bg-[#0a0a0a] border border-[#242424] rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center min-h-[220px] sm:min-h-[380px]">
-              {codexEngine === 'gofile' ? (
-                activeMovieSrc ? (
-                  <video 
-                    ref={html5VideoRef}
-                    src={activeMovieSrc}
-                    controls
-                    playsInline
-                    referrerPolicy="no-referrer"
-                    crossOrigin="anonymous"
-                    onPlay={handleHtml5Play}
-                    onPause={handleHtml5Pause}
-                    onSeeked={handleHtml5Seeked}
-                    onError={() => {
-                      setMovieError("Cannot decode video. Web browsers (Chrome/Safari) do NOT support .MKV files. Please use standard .MP4 (H.264/AAC) format.");
-                    }}
-                    className="w-full max-h-[55vh] sm:max-h-[72vh] object-contain rounded-2xl bg-black"
-                  />
-                ) : (
-                  <div className="text-center p-6 space-y-2 text-gray-500">
-                    <Tv size={36} className="mx-auto opacity-30 text-emerald-400" />
-                    <p className="text-xs">
-                      {role === 'parent' ? "Paste direct MP4 link above and click Broadcast" : "Waiting for Admin to broadcast stream..."}
-                    </p>
-                  </div>
-                )
-              ) : codexEngine === 'youtube' ? (
-                activeMovieYTId ? (
-                  <iframe 
-                    src={`https://www.youtube.com/embed/${activeMovieYTId}?autoplay=1&controls=1&modestbranding=1&rel=0`}
-                    title="Codex YouTube"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="w-full h-[45vh] sm:h-[65vh] rounded-2xl border-none"
-                  />
-                ) : (
-                  <div className="text-center p-6 space-y-2 text-gray-500">
-                    <Film size={36} className="mx-auto opacity-30 text-blue-400" />
-                    <p className="text-xs">
-                      {role === 'parent' ? "Paste YouTube watch link above to stream." : "Waiting for Admin to broadcast video..."}
-                    </p>
-                  </div>
-                )
-              ) : codexEngine === 'embed' ? (
-                activeEmbedUrl ? (
-                  <iframe 
-                    key={activeEmbedUrl}
-                    src={activeEmbedUrl}
-                    title="Codex Embed API"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                    referrerPolicy="origin"
-                    className="w-full h-[50vh] sm:h-[68vh] rounded-2xl border-none bg-black"
-                  />
-                ) : (
-                  <div className="text-center p-6 space-y-2 text-gray-500">
-                    <Globe size={36} className="mx-auto opacity-30 text-purple-400" />
-                    <p className="text-xs">
-                      {role === 'parent' ? "Enter IMDb ID (e.g. tt0499549) to stream movies." : "Waiting for Admin to load Embed API..."}
-                    </p>
-                  </div>
-                )
-              ) : (
-                localVideoSrc ? (
-                  <div className="w-full relative flex flex-col items-center">
-                    <video 
-                      ref={html5VideoRef}
-                      src={localVideoSrc}
-                      controls
-                      playsInline
-                      onPlay={handleHtml5Play}
-                      onPause={handleHtml5Pause}
-                      onSeeked={handleHtml5Seeked}
-                      className="w-full max-h-[50vh] sm:max-h-[70vh] object-contain rounded-2xl bg-black"
-                    />
-                    <div className="w-full bg-[#111] p-2 flex items-center justify-between text-[11px] text-gray-400 px-3 font-mono">
-                      <span className="truncate max-w-[200px]">📁 {localFileName}</span>
-                      <button 
-                        onClick={() => localVideoInputRef.current && localVideoInputRef.current.click()}
-                        className="text-amber-400 underline cursor-pointer"
-                      >
-                        Change
-                      </button>
+            {viewMode === 'codex' && (
+              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-3 sm:space-y-4 scrollbar-none font-sans">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#222] pb-2.5 gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                      <TerminalSquare size={18} />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-white">Codex</h2>
+                      <p className="text-[11px] text-gray-400">Watch Together (Dual Cloud & Local)</p>
                     </div>
                   </div>
-                ) : (
-                  <div className="text-center p-6 space-y-2.5 text-gray-400">
-                    <HardDrive size={36} className="mx-auto opacity-40 text-amber-400" />
-                    <p className="text-xs font-semibold text-white">Local File Sync (Offline)</p>
-                    <p className="text-[11px] text-gray-400 max-w-xs mx-auto">
-                      Select downloaded movie from your device. Both sides will be millisecond frame synced!
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => localVideoInputRef.current && localVideoInputRef.current.click()}
-                      className="bg-[#242424] text-white px-4 py-2.5 rounded-xl text-xs font-semibold cursor-pointer border border-[#333]"
-                    >
-                      Select Movie File
-                    </button>
+
+                  {role === 'parent' && (
+                    <div className="flex overflow-x-auto scrollbar-none bg-[#181818] p-1 rounded-xl border border-[#2c2c2c] gap-1 text-xs shrink-0 max-w-full">
+                      <button
+                        type="button"
+                        onClick={() => { setCodexEngine('gofile'); setMovieError(''); }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer shrink-0 ${
+                          codexEngine === 'gofile' ? 'bg-[#252525] text-emerald-400 shadow' : 'text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        <Tv size={13} />
+                        <span>Stream</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setCodexEngine('youtube'); setMovieError(''); }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer shrink-0 ${
+                          codexEngine === 'youtube' ? 'bg-[#252525] text-blue-400 shadow' : 'text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        <Video size={13} />
+                        <span>YouTube</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setCodexEngine('embed'); setMovieError(''); }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer shrink-0 ${
+                          codexEngine === 'embed' ? 'bg-[#252525] text-purple-400 shadow' : 'text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        <Globe size={13} />
+                        <span>Embed API</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setCodexEngine('local'); setMovieError(''); }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer shrink-0 ${
+                          codexEngine === 'local' ? 'bg-[#252525] text-amber-400 shadow' : 'text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        <HardDrive size={13} />
+                        <span>Local File</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {role === 'parent' && (
+                  <div className="space-y-2">
+                    {codexEngine !== 'local' ? (
+                      <form onSubmit={handleLoadMovie} className="flex gap-2">
+                        <input 
+                          type="text"
+                          value={movieInputUrl}
+                          onChange={(e) => setMovieInputUrl(e.target.value)}
+                          placeholder={
+                            codexEngine === 'gofile'
+                              ? "Direct stream link (GoFile / Pixeldrain MP4)..."
+                              : codexEngine === 'youtube'
+                              ? "YouTube watch link..."
+                              : "Enter IMDb ID (e.g. tt0499549)..."
+                          }
+                          className="flex-1 bg-[#171717] border border-[#2c2c2c] rounded-xl px-3.5 py-2.5 text-sm sm:text-xs text-white placeholder-gray-500 outline-none"
+                        />
+                        <button
+                          type="submit"
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold cursor-pointer shrink-0 shadow active:scale-95"
+                        >
+                          Broadcast
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="bg-[#141414] border border-[#2c2c2c] p-3 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                        <div>
+                          <span className="text-xs font-bold text-amber-400 block">Local File Zero-Data Mode Active</span>
+                          <span className="text-[11px] text-gray-400">Play/pause will be synced locally with zero internet consumption!</span>
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => localVideoInputRef.current && localVideoInputRef.current.click()}
+                            className="bg-[#242424] text-white px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer border border-[#333]"
+                          >
+                            {localFileName ? `Change: ${localFileName.substring(0, 12)}...` : "📁 Pick Movie"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleLoadMovie}
+                            className="bg-amber-600 text-black px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
+                          >
+                            Broadcast
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {codexEngine === 'embed' && (
+                      <div className="flex items-center justify-between bg-[#141414] border border-[#252525] px-3 py-2 rounded-xl text-xs gap-2 overflow-x-auto scrollbar-none">
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-gray-400 text-[11px] font-semibold">Mirror:</span>
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleSwitchEmbedServer('vidlink')}
+                              className={`px-2 py-1 rounded text-[11px] font-medium cursor-pointer ${embedServer === 'vidlink' ? 'bg-purple-600 text-white' : 'bg-[#222] text-gray-400'}`}
+                            >
+                              Server 1
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSwitchEmbedServer('autoembed')}
+                              className={`px-2 py-1 rounded text-[11px] font-medium cursor-pointer ${embedServer === 'autoembed' ? 'bg-purple-600 text-white' : 'bg-[#222] text-gray-400'}`}
+                            >
+                              Server 2
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSwitchEmbedServer('vidsrc_xyz')}
+                              className={`px-2 py-1 rounded text-[11px] font-medium cursor-pointer ${embedServer === 'vidsrc_xyz' ? 'bg-purple-600 text-white' : 'bg-[#222] text-gray-400'}`}
+                            >
+                              Server 3
+                            </button>
+                          </div>
+                        </div>
+
+                        {activeEmbedUrl && (
+                          <a 
+                            href={activeEmbedUrl} 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="text-purple-400 text-[11px] flex items-center gap-1 font-medium underline shrink-0"
+                          >
+                            <ExternalLink size={12} />
+                            <span>Direct</span>
+                          </a>
+                        )}
+                      </div>
+                    )}
                   </div>
-                )
+                )}
+
+                {movieError && (
+                  <div className="bg-amber-950/40 border border-amber-600/40 text-amber-300 p-2.5 rounded-xl text-xs flex items-center gap-2">
+                    <AlertTriangle size={16} className="shrink-0 text-amber-400" />
+                    <span>{movieError}</span>
+                  </div>
+                )}
+
+                <div className="w-full bg-[#0a0a0a] border border-[#242424] rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center min-h-[220px] sm:min-h-[380px]">
+                  {codexEngine === 'gofile' ? (
+                    activeMovieSrc ? (
+                      <video 
+                        ref={html5VideoRef}
+                        src={activeMovieSrc}
+                        controls
+                        playsInline
+                        referrerPolicy="no-referrer"
+                        crossOrigin="anonymous"
+                        onPlay={handleHtml5Play}
+                        onPause={handleHtml5Pause}
+                        onSeeked={handleHtml5Seeked}
+                        onError={() => {
+                          setMovieError("Cannot decode video. Web browsers (Chrome/Safari) do NOT support .MKV files. Please use standard .MP4 (H.264/AAC) format.");
+                        }}
+                        className="w-full max-h-[55vh] sm:max-h-[72vh] object-contain rounded-2xl bg-black"
+                      />
+                    ) : (
+                      <div className="text-center p-6 space-y-2 text-gray-500">
+                        <Tv size={36} className="mx-auto opacity-30 text-emerald-400" />
+                        <p className="text-xs">
+                          {role === 'parent' ? "Paste direct MP4 link above and click Broadcast" : "Waiting for Admin to broadcast stream..."}
+                        </p>
+                      </div>
+                    )
+                  ) : codexEngine === 'youtube' ? (
+                    activeMovieYTId ? (
+                      <iframe 
+                        src={`https://www.youtube.com/embed/${activeMovieYTId}?autoplay=1&controls=1&modestbranding=1&rel=0`}
+                        title="Codex YouTube"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="w-full h-[45vh] sm:h-[65vh] rounded-2xl border-none"
+                      />
+                    ) : (
+                      <div className="text-center p-6 space-y-2 text-gray-500">
+                        <Film size={36} className="mx-auto opacity-30 text-blue-400" />
+                        <p className="text-xs">
+                          {role === 'parent' ? "Paste YouTube watch link above to stream." : "Waiting for Admin to broadcast video..."}
+                        </p>
+                      </div>
+                    )
+                  ) : codexEngine === 'embed' ? (
+                    activeEmbedUrl ? (
+                      <iframe 
+                        key={activeEmbedUrl}
+                        src={activeEmbedUrl}
+                        title="Codex Embed API"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                        referrerPolicy="origin"
+                        className="w-full h-[50vh] sm:h-[68vh] rounded-2xl border-none bg-black"
+                      />
+                    ) : (
+                      <div className="text-center p-6 space-y-2 text-gray-500">
+                        <Globe size={36} className="mx-auto opacity-30 text-purple-400" />
+                        <p className="text-xs">
+                          {role === 'parent' ? "Enter IMDb ID (e.g. tt0499549) to stream movies." : "Waiting for Admin to load Embed API..."}
+                        </p>
+                      </div>
+                    )
+                  ) : (
+                    localVideoSrc ? (
+                      <div className="w-full relative flex flex-col items-center">
+                        <video 
+                          ref={html5VideoRef}
+                          src={localVideoSrc}
+                          controls
+                          playsInline
+                          onPlay={handleHtml5Play}
+                          onPause={handleHtml5Pause}
+                          onSeeked={handleHtml5Seeked}
+                          className="w-full max-h-[50vh] sm:max-h-[70vh] object-contain rounded-2xl bg-black"
+                        />
+                        <div className="w-full bg-[#111] p-2 flex items-center justify-between text-[11px] text-gray-400 px-3 font-mono">
+                          <span className="truncate max-w-[200px]">📁 {localFileName}</span>
+                          <button 
+                            onClick={() => localVideoInputRef.current && localVideoInputRef.current.click()}
+                            className="text-amber-400 underline cursor-pointer"
+                          >
+                            Change
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center p-6 space-y-2.5 text-gray-400">
+                        <HardDrive size={36} className="mx-auto opacity-40 text-amber-400" />
+                        <p className="text-xs font-semibold text-white">Local File Sync (Offline)</p>
+                        <p className="text-[11px] text-gray-400 max-w-xs mx-auto">
+                          Select downloaded movie from your device. Both sides will be millisecond frame synced!
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => localVideoInputRef.current && localVideoInputRef.current.click()}
+                          className="bg-[#242424] text-white px-4 py-2.5 rounded-xl text-xs font-semibold cursor-pointer border border-[#333]"
+                        >
+                          Select Movie File
+                        </button>
+                      </div>
+                    )
+                  )}
+                </div>
+              </section>
+            )}
+
+            <div className="px-3 sm:px-6 lg:px-8 pb-3 sm:pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
+              {replyTarget && (
+                <div className="mb-2 bg-[#1a1a1a] border border-[#333] px-3.5 py-1.5 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <span className="text-emerald-400 font-bold">⤴ {replyTarget.senderRole}:</span>
+                    <span className="text-gray-300 truncate italic">"{replyTarget.text}"</span>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setReplyTarget(null)}
+                    className="text-gray-400 hover:text-white p-0.5 rounded cursor-pointer"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
               )}
+
+              {viewMode === 'stealth' && isPeerTyping && (
+                <div className="mb-1.5 px-3 flex items-center gap-2 text-[11px] font-mono text-[#38bdf8] select-none animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#38bdf8] animate-ping" />
+                  <span>{role === 'user' ? 'H' : 'A'} is currently typing...</span>
+                </div>
+              )}
+
+              {showMiniEmojiBar && (
+                <div className="absolute right-12 bottom-16 z-30 bg-[#1e1e1e]/95 backdrop-blur-md border border-[#333] px-2 py-1 rounded-full shadow-2xl flex items-center gap-1.5 animate-in fade-in duration-150">
+                  {QUICK_EMOJIS.map((emoji, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleEmojiClick(emoji)}
+                      className="text-base sm:text-lg p-1 hover:scale-125 active:scale-95 transition-transform cursor-pointer"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="w-full relative">
+                <div className="w-full bg-[#212121] rounded-full border border-[#2e2e2e] focus-within:border-[#444] px-3 sm:px-4 py-2 sm:py-2.5 flex items-center gap-2 sm:gap-3 shadow-2xl min-h-[48px]">
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      if (viewMode === 'stealth' && fileInputRef.current) {
+                        fileInputRef.current.click();
+                      }
+                    }}
+                    className="text-[#9b9b9b] hover:text-white p-1 rounded-full cursor-pointer shrink-0"
+                    title={viewMode === 'stealth' ? "Send Photo" : "Options"}
+                  >
+                    <Plus size={20} />
+                  </button>
+
+                  <input 
+                    ref={inputRef}
+                    type="text"
+                    value={input}
+                    onChange={handleInputChange}
+                    placeholder={
+                      viewMode === 'stealth' 
+                        ? (replyTarget ? `Reply to ${replyTarget.senderRole}...` : "Schema entry... (/gpt to exit)") 
+                        : "Ask anything"
+                    }
+                    className="flex-1 bg-transparent text-base sm:text-[13.5px] text-white placeholder-[#8e8e8e] outline-none min-w-0"
+                  />
+
+                  <button 
+                    type="button"
+                    onClick={() => setShowMiniEmojiBar(!showMiniEmojiBar)}
+                    className={`p-1.5 rounded-full cursor-pointer shrink-0 ${showMiniEmojiBar ? 'text-amber-400' : 'text-[#8e8e8e] hover:text-white'}`}
+                    title="Reactions"
+                  >
+                    <Smile size={19} />
+                  </button>
+
+                  <button 
+                    type="button" 
+                    onContextMenu={(e) => {
+                      if (role === 'parent') {
+                        e.preventDefault();
+                        setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
+                      }
+                    }}
+                    onMouseDown={() => {
+                      if (role === 'parent') {
+                        window.thinkLongPressTimer = setTimeout(() => {
+                          setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
+                        }, 500);
+                      }
+                    }}
+                    onMouseUp={() => {
+                      if (window.thinkLongPressTimer) clearTimeout(window.thinkLongPressTimer);
+                    }}
+                    onTouchStart={() => {
+                      if (role === 'parent') {
+                        window.thinkLongPressTimer = setTimeout(() => {
+                          setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
+                        }, 500);
+                      }
+                    }}
+                    onTouchEnd={() => {
+                      if (window.thinkLongPressTimer) clearTimeout(window.thinkLongPressTimer);
+                    }}
+                    title={role === 'parent' ? "Hold to open secret chat" : "Think"}
+                    className="flex items-center gap-1 text-xs text-[#9b9b9b] hover:text-white px-2 py-1 rounded-full hover:bg-[#2c2c2c] cursor-pointer shrink-0 select-none"
+                  >
+                    <Sparkles size={13} className="text-blue-400" />
+                    <span className="hidden sm:inline">Think</span>
+                  </button>
+
+                  <button type="button" className="text-[#9b9b9b] hover:text-white p-1 cursor-pointer shrink-0">
+                    <Mic size={19} />
+                  </button>
+
+                  <button 
+                    type="submit" 
+                    className="bg-[#1c3a6b] hover:bg-[#254d8f] text-white w-8 h-8 rounded-full cursor-pointer flex items-center justify-center shadow shrink-0 active:scale-95 transition-transform"
+                  >
+                    {input.trim() ? <ArrowUp size={16} /> : <AudioLines size={16} />}
+                  </button>
+                </div>
+              </form>
             </div>
-          </section>
+          </>
         )}
-
-        <div className="px-3 sm:px-6 lg:px-8 pb-3 sm:pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
-          {replyTarget && (
-            <div className="mb-2 bg-[#1a1a1a] border border-[#333] px-3.5 py-1.5 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-150">
-              <div className="flex items-center gap-2 overflow-hidden">
-                <span className="text-emerald-400 font-bold">⤴ {replyTarget.senderRole}:</span>
-                <span className="text-gray-300 truncate italic">"{replyTarget.text}"</span>
-              </div>
-              <button 
-                type="button" 
-                onClick={() => setReplyTarget(null)}
-                className="text-gray-400 hover:text-white p-0.5 rounded cursor-pointer"
-              >
-                <X size={15} />
-              </button>
-            </div>
-          )}
-
-          {viewMode === 'stealth' && isPeerTyping && (
-            <div className="mb-1.5 px-3 flex items-center gap-2 text-[11px] font-mono text-[#38bdf8] select-none animate-pulse">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#38bdf8] animate-ping" />
-              <span>{role === 'user' ? 'H' : 'A'} is currently typing...</span>
-            </div>
-          )}
-
-          {showMiniEmojiBar && (
-            <div className="absolute right-12 bottom-16 z-30 bg-[#1e1e1e]/95 backdrop-blur-md border border-[#333] px-2 py-1 rounded-full shadow-2xl flex items-center gap-1.5 animate-in fade-in duration-150">
-              {QUICK_EMOJIS.map((emoji, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => handleEmojiClick(emoji)}
-                  className="text-base sm:text-lg p-1 hover:scale-125 active:scale-95 transition-transform cursor-pointer"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="w-full relative">
-            <div className="w-full bg-[#212121] rounded-full border border-[#2e2e2e] focus-within:border-[#444] px-3 sm:px-4 py-2 sm:py-2.5 flex items-center gap-2 sm:gap-3 shadow-2xl min-h-[48px]">
-              <button 
-                type="button" 
-                onClick={() => {
-                  if (viewMode === 'stealth' && fileInputRef.current) {
-                    fileInputRef.current.click();
-                  }
-                }}
-                className="text-[#9b9b9b] hover:text-white p-1 rounded-full cursor-pointer shrink-0"
-                title={viewMode === 'stealth' ? "Send Photo" : "Options"}
-              >
-                <Plus size={20} />
-              </button>
-
-              <input 
-                ref={inputRef}
-                type="text"
-                value={input}
-                onChange={handleInputChange}
-                placeholder={
-                  viewMode === 'stealth' 
-                    ? (replyTarget ? `Reply to ${replyTarget.senderRole}...` : "Schema entry... (/gpt to exit)") 
-                    : "Ask anything"
-                }
-                className="flex-1 bg-transparent text-base sm:text-[13.5px] text-white placeholder-[#8e8e8e] outline-none min-w-0"
-              />
-
-              <button 
-                type="button"
-                onClick={() => setShowMiniEmojiBar(!showMiniEmojiBar)}
-                className={`p-1.5 rounded-full cursor-pointer shrink-0 ${showMiniEmojiBar ? 'text-amber-400' : 'text-[#8e8e8e] hover:text-white'}`}
-                title="Reactions"
-              >
-                <Smile size={19} />
-              </button>
-
-              <button 
-                type="button" 
-                onContextMenu={(e) => {
-                  if (role === 'parent') {
-                    e.preventDefault();
-                    setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
-                  }
-                }}
-                onMouseDown={() => {
-                  if (role === 'parent') {
-                    window.thinkLongPressTimer = setTimeout(() => {
-                      setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
-                    }, 500);
-                  }
-                }}
-                onMouseUp={() => {
-                  if (window.thinkLongPressTimer) clearTimeout(window.thinkLongPressTimer);
-                }}
-                onTouchStart={() => {
-                  if (role === 'parent') {
-                    window.thinkLongPressTimer = setTimeout(() => {
-                      setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
-                    }, 500);
-                  }
-                }}
-                onTouchEnd={() => {
-                  if (window.thinkLongPressTimer) clearTimeout(window.thinkLongPressTimer);
-                }}
-                title={role === 'parent' ? "Hold to open secret chat" : "Think"}
-                className="flex items-center gap-1 text-xs text-[#9b9b9b] hover:text-white px-2 py-1 rounded-full hover:bg-[#2c2c2c] cursor-pointer shrink-0 select-none"
-              >
-                <Sparkles size={13} className="text-blue-400" />
-                <span className="hidden sm:inline">Think</span>
-              </button>
-
-              <button type="button" className="text-[#9b9b9b] hover:text-white p-1 cursor-pointer shrink-0">
-                <Mic size={19} />
-              </button>
-
-              <button 
-                type="submit" 
-                className="bg-[#1c3a6b] hover:bg-[#254d8f] text-white w-8 h-8 rounded-full cursor-pointer flex items-center justify-center shadow shrink-0 active:scale-95 transition-transform"
-              >
-                {input.trim() ? <ArrowUp size={16} /> : <AudioLines size={16} />}
-              </button>
-            </div>
-          </form>
-        </div>
 
         {activeViewImage && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4">
@@ -3155,62 +3292,6 @@ export default function App() {
           </div>
         )}
       </main>
-
-      {/* SYNCHRONIZED COLOURFUL MULTIPLAYER GAME MODAL (ZERO-LAG) */}
-      {activeGameModal && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#141414] border-2 border-emerald-500/50 rounded-3xl p-6 w-full max-w-lg text-center shadow-2xl relative space-y-4">
-            <div className="flex items-center justify-between border-b border-[#222] pb-3">
-              <div className="flex items-center gap-2">
-                <Gamepad2 size={20} className="text-emerald-400" />
-                <h3 className="text-base font-extrabold text-white">{activeGameModal.name}</h3>
-              </div>
-              <button onClick={() => setActiveGameModal(null)} className="text-gray-400 hover:text-white p-1.5 rounded-full bg-[#222]"><X size={16} /></button>
-            </div>
-
-            <div className="bg-[#0a0a0a] border border-[#222] rounded-2xl p-6 space-y-4">
-              <div className="flex items-center justify-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 py-1.5 px-3 rounded-full w-fit mx-auto">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span>Live Multiplayer Session Active (A & H)</span>
-              </div>
-
-              {activeGameModal.id === 'tictactoe' ? (
-                <div className="space-y-4">
-                  <p className="text-xs text-gray-300">Turn: <strong className="text-amber-400">{isXNext ? 'Player X' : 'Player O'}</strong></p>
-                  <div className="grid grid-cols-3 gap-2.5 max-w-[260px] mx-auto">
-                    {tictactoeBoard.map((val, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => handleTicTacToeClick(idx)}
-                        className={`h-20 rounded-2xl text-2xl font-black flex items-center justify-center transition-all cursor-pointer shadow-lg ${
-                          val === 'X' ? 'bg-blue-600 text-white' : val === 'O' ? 'bg-rose-600 text-white' : 'bg-[#1a1a1a] hover:bg-[#252525] text-gray-500 border border-[#333]'
-                        }`}
-                      >
-                        {val}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4 py-8">
-                  <Trophy size={44} className="mx-auto text-amber-400 animate-bounce" />
-                  <h4 className="text-sm font-bold text-white">{activeGameModal.name} Arena</h4>
-                  <p className="text-xs text-gray-400 max-w-xs mx-auto">Synchronized real-time multiplayer controller initialized successfully. Tap below to start action!</p>
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={() => {
-                confetti({ particleCount: 75, spread: 90, origin: { y: 0.6 } });
-              }}
-              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs py-3 rounded-xl font-bold cursor-pointer shadow-lg active:scale-95 transition-all"
-            >
-              Send Celebration Confetti 🎉
-            </button>
-          </div>
-        </div>
-      )}
 
     </div>
   );
