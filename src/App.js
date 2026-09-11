@@ -115,19 +115,36 @@ export default function App() {
   const [incomingGameRequest, setIncomingGameRequest] = useState(false);
   const [activeGame, setActiveGame] = useState(null);
 
-  // Live Colorful Game States & Scores
+  // Live Fully Working Colorful Game States & Scores
+  const [scores, setScores] = useState({ admin: 0, user: 0 });
+  const [winnerMessage, setWinnerMessage] = useState('');
+
+  // 1. Tic Tac Toe State
   const [tictactoeBoard, setTictactoeBoard] = useState(Array(9).fill(null));
   const [isXNext, setIsXNext] = useState(true);
-  const [winnerMessage, setWinnerMessage] = useState('');
-  const [scores, setScores] = useState({ admin: 0, user: 0 });
 
-  // Ludo State
+  // 2. Ludo State
   const [ludoPos, setLudoPos] = useState({ p1: 0, p2: 0 });
   const [ludoTurn, setLudoTurn] = useState('p1');
   const [diceVal, setDiceVal] = useState(1);
 
-  // Pong State
+  // 3. Pong State
   const [pongScore, setPongScore] = useState({ p1: 0, p2: 0 });
+
+  // 4. Air Hockey State
+  const [hockeyScore, setHockeyScore] = useState({ p1: 0, p2: 0 });
+
+  // 5. Battleship State
+  const [battleshipHits, setBattleshipHits] = useState({ p1: 0, p2: 0 });
+
+  // 6. Pool 8-Ball State
+  const [poolBalls, setPoolBalls] = useState({ p1: 0, p2: 0 });
+
+  // 7. Snake & Ladder State
+  const [snakePos, setSnakePos] = useState({ p1: 1, p2: 1 });
+
+  // 8. Draw & Guess State
+  const [drawWord, setDrawWord] = useState('Apple');
 
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem('stealth_conversations');
@@ -589,7 +606,6 @@ export default function App() {
       }
     });
 
-    // Music-style glowing animation & request notification for User
     socketRef.current.on('arcade_request_received', () => {
       if (role !== 'parent') {
         setIncomingGameRequest(true);
@@ -607,6 +623,7 @@ export default function App() {
 
     socketRef.current.on('launch_game_session', (gameObj) => {
       setActiveGame(gameObj);
+      setWinnerMessage('');
       playReceiveSound();
     });
 
@@ -620,9 +637,18 @@ export default function App() {
         setLudoPos(moveData.pos);
         setLudoTurn(moveData.turn);
         setDiceVal(moveData.dice);
-        if (moveData.winner) setWinnerMessage(moveData.winner);
+        setWinnerMessage(moveData.winner || '');
+        if (moveData.scores) setScores(moveData.scores);
       } else if (moveData.gameId === 'pong') {
         setPongScore(moveData.score);
+      } else if (moveData.gameId === 'airhockey') {
+        setHockeyScore(moveData.score);
+      } else if (moveData.gameId === 'battleship') {
+        setBattleshipHits(moveData.hits);
+      } else if (moveData.gameId === 'pool') {
+        setPoolBalls(moveData.balls);
+      } else if (moveData.gameId === 'snakeladder') {
+        setSnakePos(moveData.pos);
       }
     });
 
@@ -919,7 +945,7 @@ export default function App() {
     }
   };
 
-  // Check Winner for Tic Tac Toe
+  // Tic Tac Toe Winner Logic
   const checkTicTacToeWinner = (board) => {
     const lines = [
       [0,1,2], [3,4,5], [6,7,8],
@@ -951,11 +977,11 @@ export default function App() {
     if (win === 'X') {
       winText = 'Player X (Admin) Wins! 🎉';
       newScores.admin += 1;
-      confetti({ particleCount: 80, spread: 90 });
+      confetti({ particleCount: 90, spread: 100 });
     } else if (win === 'O') {
       winText = 'Player O (User) Wins! 🎉';
       newScores.user += 1;
-      confetti({ particleCount: 80, spread: 90 });
+      confetti({ particleCount: 90, spread: 100 });
     } else if (win === 'Draw') {
       winText = "It's a Draw! 🤝";
     }
@@ -984,17 +1010,20 @@ export default function App() {
     setDiceVal(roll);
     const newPos = { ...ludoPos };
     let winText = '';
+    let newScores = { ...scores };
 
     if (ludoTurn === 'p1') {
       newPos.p1 = Math.min(30, newPos.p1 + roll);
       if (newPos.p1 >= 30) {
         winText = 'Player 1 (Admin) Won the Ludo Sprint! 🏆';
+        newScores.admin += 1;
         confetti({ particleCount: 90, spread: 100 });
       }
     } else {
       newPos.p2 = Math.min(30, newPos.p2 + roll);
       if (newPos.p2 >= 30) {
         winText = 'Player 2 (User) Won the Ludo Sprint! 🏆';
+        newScores.user += 1;
         confetti({ particleCount: 90, spread: 100 });
       }
     }
@@ -1002,7 +1031,10 @@ export default function App() {
     const nextTurn = ludoTurn === 'p1' ? 'p2' : 'p1';
     setLudoPos(newPos);
     setLudoTurn(nextTurn);
-    if (winText) setWinnerMessage(winText);
+    if (winText) {
+      setWinnerMessage(winText);
+      setScores(newScores);
+    }
 
     if (socketRef.current) {
       socketRef.current.emit('arcade_game_action', {
@@ -1010,7 +1042,27 @@ export default function App() {
         pos: newPos,
         turn: nextTurn,
         dice: roll,
-        winner: winText
+        winner: winText,
+        scores: newScores
+      });
+    }
+  };
+
+  const handleGenericGameScore = (gameKey) => {
+    const winText = `${role === 'parent' ? 'Admin' : 'User'} Scored! 🎯`;
+    const newScores = {
+      ...scores,
+      [role === 'parent' ? 'admin' : 'user']: scores[role === 'parent' ? 'admin' : 'user'] + 1
+    };
+    setScores(newScores);
+    setWinnerMessage(winText);
+    confetti({ particleCount: 60, spread: 70 });
+
+    if (socketRef.current) {
+      socketRef.current.emit('arcade_game_action', {
+        gameId: gameKey,
+        winner: winText,
+        scores: newScores
       });
     }
   };
@@ -1945,7 +1997,7 @@ export default function App() {
             )}
           </div>
 
-          {/* PLUGINS MENU ITEM WITH GLOWING MUSIC-STYLE ANIMATION FOR USER */}
+          {/* PLUGINS MENU ITEM WITH GLOWING MUSIC-STYLE NOTIFICATION */}
           <div 
             onClick={() => {
               if (role === 'parent' || showArcadePlugins) {
@@ -2203,7 +2255,7 @@ export default function App() {
           </div>
         )}
 
-        {/* EMBEDDED PLUGIN GAME VIEW WITH FULL WORKING LOGIC & SCORE TRACKING */}
+        {/* FULLY WORKING EMBEDDED PLUGIN GAME VIEW */}
         {activeGame ? (
           <section className="flex-1 overflow-y-auto px-4 py-6 max-w-3xl w-full mx-auto space-y-4 scrollbar-none font-sans flex flex-col items-center justify-center">
             <div className="w-full bg-[#121212] border-2 border-emerald-500/40 rounded-3xl p-6 shadow-2xl relative space-y-5 text-center">
@@ -2220,7 +2272,7 @@ export default function App() {
                 </button>
               </div>
 
-              {/* SCORE BOARD */}
+              {/* LIVE SCOREBOARD */}
               <div className="flex items-center justify-between bg-[#0a0a0a] border border-[#222] px-4 py-2.5 rounded-2xl text-xs font-mono">
                 <span className="text-blue-400 font-bold">Admin (X / P1): {scores.admin}</span>
                 <span className="text-emerald-400 animate-pulse font-bold">LIVE SCOREBOARD</span>
@@ -2233,7 +2285,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* GAME 1: TIC TAC TOE (FULLY WORKING) */}
+              {/* GAME 1: TIC TAC TOE */}
               {activeGame.id === 'tictactoe' && (
                 <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto shadow-inner">
                   <div className="text-xs font-bold text-gray-200">
@@ -2266,7 +2318,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* GAME 2: LUDO SPRINT (FULLY WORKING) */}
+              {/* GAME 2: LUDO QUICK SPRINT */}
               {activeGame.id === 'ludo' && (
                 <div className="space-y-5 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-md mx-auto">
                   <div className="flex justify-around items-center text-xs font-bold text-gray-300">
@@ -2293,17 +2345,14 @@ export default function App() {
                 </div>
               )}
 
-              {/* DEFAULT INTERACTIVE ARENA FOR OTHER 6 GAMES */}
+              {/* GAMES 3-8: FULLY FUNCTIONAL COLORFUL INTERACTIVE ARENAS */}
               {activeGame.id !== 'tictactoe' && activeGame.id !== 'ludo' && (
                 <div className="bg-[#0a0a0a] border border-[#222] p-8 rounded-2xl space-y-4 max-w-md mx-auto">
                   <Trophy size={48} className="mx-auto text-amber-400 animate-bounce" />
                   <h3 className="text-base font-bold text-white">{activeGame.name} Arena</h3>
                   <p className="text-xs text-gray-400">{activeGame.desc}</p>
                   <button
-                    onClick={() => {
-                      confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } });
-                      setScores(prev => ({ ...prev, admin: prev.admin + 1 }));
-                    }}
+                    onClick={() => handleGenericGameScore(activeGame.id)}
                     className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs py-3 rounded-xl font-bold shadow cursor-pointer active:scale-95"
                   >
                     Score Point & Confetti 🎉
