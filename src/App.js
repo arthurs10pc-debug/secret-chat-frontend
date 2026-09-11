@@ -110,7 +110,7 @@ export default function App() {
 
   const [viewMode, setViewMode] = useState('real_gpt');
 
-  // Plugins / Arcade Multiplayer Sidebar States (Admin Controlled)
+  // Plugins / Arcade Multiplayer States (Inside menu view)
   const [showArcadePlugins, setShowArcadePlugins] = useState(false);
   const [activeGameModal, setActiveGameModal] = useState(null);
 
@@ -575,7 +575,7 @@ export default function App() {
       }
     });
 
-    // Listen to Admin Arcade Plugin Toggle Broadcast
+    // Listen to Admin Arcade Plugin Toggle Broadcast from Backend
     socketRef.current.on('toggle_arcade_plugins', (status) => {
       setShowArcadePlugins(status);
     });
@@ -1777,9 +1777,43 @@ export default function App() {
             )}
           </div>
 
-          <div className="flex items-center gap-3 md:gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-2.5 md:py-1.5 px-3 md:px-2.5 rounded-xl md:rounded-lg cursor-pointer transition-colors">
-            <ToyBrick size={17} className="text-[#9b9b9b]" /> Plugins
+          {/* PLUGINS MENU ITEM WITH ARCADE TOGGLE (INSIDE MENU) */}
+          <div 
+            onClick={() => setShowArcadePlugins(!showArcadePlugins)}
+            className={`flex items-center justify-between py-2.5 md:py-1.5 px-3 md:px-2.5 rounded-xl md:rounded-lg cursor-pointer transition-colors ${showArcadePlugins ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
+          >
+            <span className="flex items-center gap-3 md:gap-2.5">
+              <ToyBrick size={17} className={showArcadePlugins ? 'text-emerald-400' : 'text-[#9b9b9b]'} /> Plugins
+            </span>
+            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${showArcadePlugins ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-400'}`}>
+              {showArcadePlugins ? 'ON' : 'OFF'}
+            </span>
           </div>
+
+          {/* IF PLUGINS IS OPEN IN MENU, SHOW THE 8 GAMES DROPDOWN INSIDE SIDEBAR */}
+          {showArcadePlugins && (
+            <div className="pl-3 pr-1 py-1.5 space-y-1 bg-[#0a0a0a] rounded-xl border border-[#222] my-1">
+              <div className="flex items-center justify-between text-[10px] font-bold text-emerald-400 px-2 py-0.5">
+                <span>ARCADE GAMES (8)</span>
+                {role === 'parent' && (
+                  <span className="text-[9px] text-amber-300 underline cursor-pointer" onClick={() => handleAdminToggleArcade(!showArcadePlugins)}>Toggle</span>
+                )}
+              </div>
+              <div className="max-h-48 overflow-y-auto space-y-1 scrollbar-none pr-1">
+                {ARCADE_GAMES.map((game) => (
+                  <button
+                    key={game.id}
+                    onClick={() => setActiveGameModal(game)}
+                    className="w-full text-left bg-[#141414] hover:bg-[#1f1f1f] border border-[#262626] p-2 rounded-lg transition-all cursor-pointer flex items-center justify-between group"
+                  >
+                    <span className="text-[11px] font-bold text-gray-200 group-hover:text-white truncate">{game.name}</span>
+                    <Play size={10} className="text-gray-400 group-hover:text-emerald-400 shrink-0 ml-1" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-3 md:gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-2.5 md:py-1.5 px-3 md:px-2.5 rounded-xl md:rounded-lg cursor-pointer transition-colors">
             <FolderGit2 size={17} className="text-[#9b9b9b]" /> Projects
           </div>
@@ -1797,15 +1831,12 @@ export default function App() {
           </div>
         </div>
 
-        {/* ADMIN SIDEBAR ARCADE CONTROL PANEL (Visible only to Admin/Parent) */}
+        {/* ADMIN SIDEBAR ARCADE CONTROL BUTTONS */}
         {role === 'parent' && (
           <div className="px-3 py-2 border-t border-[#1a1a1a] bg-[#0a0a0a]">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-1.5">
               <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
-                <Gamepad2 size={13} /> Arcade Control
-              </span>
-              <span className={`px-1.5 py-0.5 text-[9px] font-mono rounded font-bold ${showArcadePlugins ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-400'}`}>
-                {showArcadePlugins ? 'ACTIVE' : 'OFF'}
+                <Gamepad2 size={13} /> Admin Broadcast
               </span>
             </div>
             <div className="grid grid-cols-2 gap-1.5">
@@ -1882,37 +1913,7 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main Layout Grid when Arcade Plugins / Sidebar is active for User */}
-      <div className={`flex-1 flex overflow-hidden ${showArcadePlugins ? 'grid md:grid-cols-[260px_1fr]' : 'flex-col'}`}>
-        
-        {/* LEFT PLUGIN / ARCADE 8-GAMES PANEL FOR USERS */}
-        {showArcadePlugins && (
-          <aside className="hidden md:flex flex-col bg-[#080808] border-r border-[#1e1e1e] p-3 overflow-y-auto shrink-0 select-none">
-            <div className="flex items-center gap-2 pb-2 mb-2 border-b border-[#222]">
-              <Gamepad2 size={16} className="text-emerald-400" />
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider">Arcade Plugins (8)</h3>
-            </div>
-            <p className="text-[10px] text-gray-400 mb-2">Live multiplayer mini-games for A & H session.</p>
-
-            <div className="space-y-1.5">
-              {ARCADE_GAMES.map((game) => (
-                <button
-                  key={game.id}
-                  onClick={() => setActiveGameModal(game)}
-                  className="w-full text-left bg-[#121212] hover:bg-[#1a1a1a] border border-[#222] hover:border-emerald-500/50 p-2 rounded-xl transition-all cursor-pointer group flex items-center justify-between"
-                >
-                  <div>
-                    <h4 className="text-[11px] font-bold text-white group-hover:text-emerald-400 transition-colors">{game.name}</h4>
-                    <p className="text-[9px] text-gray-400 line-clamp-1">{game.desc}</p>
-                  </div>
-                  <Play size={12} className="text-gray-500 group-hover:text-emerald-400 shrink-0 ml-1" />
-                </button>
-              ))}
-            </div>
-          </aside>
-        )}
-
-        <main className="flex-1 flex flex-col relative bg-[#000000] overflow-hidden min-w-0">
+      <main className="flex-1 flex flex-col relative bg-[#000000] overflow-hidden min-w-0">
         <header className="h-14 md:h-12 flex items-center justify-between px-3 md:px-4 shrink-0 z-10 border-b border-[#141414]">
           <div className="flex items-center gap-2 overflow-hidden">
             <button 
@@ -2834,7 +2835,6 @@ export default function App() {
                 <Smile size={19} />
               </button>
 
-              {/* MOBILE & DESKTOP LONG-PRESS GESTURE ON THINK BUTTON (PARENT ONLY) */}
               <button 
                 type="button" 
                 onContextMenu={(e) => {
@@ -3081,9 +3081,7 @@ export default function App() {
         )}
       </main>
 
-      </div>
-
-      {/* ARCADE GAME PLAY MODAL FOR USERS */}
+      {/* ARCADE GAME PLAY MODAL */}
       {activeGameModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-[#141414] border border-[#2e2e2e] rounded-3xl p-5 w-full max-w-md text-center shadow-2xl relative space-y-4">
