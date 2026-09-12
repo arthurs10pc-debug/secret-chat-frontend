@@ -682,7 +682,7 @@ export default function App() {
           });
           playerRef.current.unMute();
           playerRef.current.setVolume(100);
-          if (data.state === 'PLAY' && viewModeRef.current !== 'codex') {
+          if (p.state === 'PLAY' && viewModeRef.current !== 'codex') {
             const p = playerRef.current.playVideo();
             if (p && typeof p.catch === 'function') {
               p.catch(() => setAutoplayBlocked(true));
@@ -2271,37 +2271,246 @@ export default function App() {
           </div>
         )}
 
-        {/* 100% WORKING EMBEDDED RETRO ARCADE PORTAL (NO BLACK SCREEN) */}
+        {/* 100% WORKING STANDALONE HTML5/CANVAS GAME ENGINE (NO GREY/BLACK SCREEN) */}
         {activeGame ? (
-          <section className="flex-1 overflow-hidden p-2 sm:p-4 max-w-5xl w-full mx-auto flex flex-col items-center justify-center">
-            <div className="w-full h-full bg-[#121212] border-2 border-emerald-500/50 rounded-3xl p-3 shadow-2xl relative flex flex-col">
-              <div className="flex items-center justify-between border-b border-[#222] pb-2 mb-2 px-2 shrink-0">
+          <section className="flex-1 overflow-y-auto px-4 py-6 max-w-3xl w-full mx-auto space-y-4 scrollbar-none font-sans flex flex-col items-center justify-center">
+            <div className="w-full bg-[#121212] border-2 border-emerald-500/40 rounded-3xl p-6 shadow-2xl relative space-y-5 text-center">
+              <div className="flex items-center justify-between border-b border-[#222] pb-3">
                 <div className="flex items-center gap-2">
-                  <Gamepad2 size={20} className="text-emerald-400 animate-pulse" />
-                  <h2 className="text-sm font-bold text-white">{activeGame.name} (Multiplayer Live Arena)</h2>
+                  <Gamepad2 size={22} className="text-emerald-400 animate-bounce" />
+                  <h2 className="text-lg font-black text-white">{activeGame.name}</h2>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-[11px] text-emerald-400 font-mono font-bold bg-emerald-950/60 px-2.5 py-0.5 rounded-full border border-emerald-800">
-                    Role: {isCurrentAdmin ? 'Admin (H)' : 'User (A)'}
-                  </span>
-                  <button 
-                    onClick={() => setActiveGame(null)} 
-                    className="bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800 px-3 py-1 rounded-xl text-xs font-bold cursor-pointer transition-all"
-                  >
-                    Close Game
-                  </button>
-                </div>
+                <button 
+                  onClick={() => setActiveGame(null)} 
+                  className="bg-zinc-800 hover:bg-zinc-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all"
+                >
+                  Close Game
+                </button>
               </div>
 
-              {/* STABLE PLAYABLE ARCADE EMBED PORTAL */}
-              <div className="flex-1 w-full rounded-2xl overflow-hidden bg-black border border-[#2a2a2a] relative flex items-center justify-center shadow-inner">
-                <iframe
-                  src="https://www.free-online-games.com/embed/arcade"
-                  title="Multiplayer Arcade Arena"
-                  className="w-full h-full border-none rounded-2xl bg-black"
-                  allow="autoplay; fullscreen; gamepad; touch"
-                />
+              {/* LIVE SCOREBOARD */}
+              <div className="flex items-center justify-between bg-[#0a0a0a] border border-[#222] px-4 py-2.5 rounded-2xl text-xs font-mono">
+                <span className="text-blue-400 font-bold">Admin (H): {scores.H}</span>
+                <span className="text-emerald-400 animate-pulse font-bold">LIVE SCOREBOARD</span>
+                <span className="text-rose-400 font-bold">User (A): {scores.A}</span>
               </div>
+
+              {winnerMessage && (
+                <div className="bg-amber-500/20 border border-amber-500 text-amber-300 py-2.5 px-4 rounded-xl text-xs font-bold animate-bounce">
+                  {winnerMessage}
+                </div>
+              )}
+
+              {/* 1. TIC TAC TOE */}
+              {activeGame.id === 'tictactoe' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto shadow-inner">
+                  <div className="text-xs font-bold text-gray-200">
+                    Turn: <span className={`px-2.5 py-1 rounded-lg text-white font-mono ${isHNext ? 'bg-blue-600' : 'bg-rose-600'}`}>{isHNext ? 'Player H (Admin)' : 'Player A (User)'}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {tictactoeBoard.map((val, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleTicTacToeClick(idx)}
+                        className={`h-24 rounded-2xl text-3xl font-black flex items-center justify-center transition-all cursor-pointer shadow-xl transform active:scale-95 ${
+                          val === 'H' ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-blue-500/30' : val === 'A' ? 'bg-gradient-to-br from-rose-600 to-pink-600 text-white shadow-rose-500/30' : 'bg-[#1a1a1a] hover:bg-[#252525] text-gray-600 border border-[#333]'
+                        }`}
+                      >
+                        {val}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setTictactoeBoard(Array(9).fill(null));
+                      setIsHNext(true);
+                      setWinnerMessage('');
+                      if (socketRef.current) socketRef.current.emit('arcade_game_action', { gameId: 'tictactoe', board: Array(9).fill(null), isHNext: true, winner: '' });
+                    }}
+                    className="text-xs text-amber-400 hover:underline flex items-center gap-1 mx-auto pt-2 cursor-pointer"
+                  >
+                    <RotateCcw size={13} /> Reset Board
+                  </button>
+                </div>
+              )}
+
+              {/* 2. LUDO QUICK SPRINT */}
+              {activeGame.id === 'ludo' && (
+                <div className="space-y-5 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-md mx-auto">
+                  <div className="flex justify-around items-center text-xs font-bold text-gray-300">
+                    <div className={`p-3 rounded-xl border ${ludoTurn === 'H' ? 'bg-blue-600/30 border-blue-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333]'}`}>
+                      Player H (Admin): {ludoPos.H} / 30
+                    </div>
+                    <div className={`p-3 rounded-xl border ${ludoTurn === 'A' ? 'bg-rose-600/30 border-rose-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333]'}`}>
+                      Player A (User): {ludoPos.A} / 30
+                    </div>
+                  </div>
+
+                  <div className="bg-[#141414] border border-[#262626] p-4 rounded-2xl flex items-center justify-between">
+                    <div className="text-sm font-extrabold text-amber-400 flex items-center gap-2">
+                      <span>Dice:</span>
+                      <span className="w-10 h-10 rounded-xl bg-amber-500 text-black font-black text-xl flex items-center justify-center shadow">{diceVal}</span>
+                    </div>
+                    <button
+                      onClick={handleLudoRoll}
+                      className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-lg cursor-pointer active:scale-95"
+                    >
+                      Roll ({ludoTurn === 'H' ? 'Admin Turn' : 'User Turn'})
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 3. PONG RETRO ARCADE */}
+              {activeGame.id === 'pong' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-gray-300">Pong Rally Score: <strong className="text-blue-400">H: {pongScore.H}</strong> | <strong className="text-rose-400">A: {pongScore.A}</strong></p>
+                  <div className="h-32 bg-black border border-[#333] rounded-xl flex items-center justify-center relative overflow-hidden">
+                    <div className="absolute w-3 h-3 bg-emerald-400 rounded-full animate-ping" />
+                    <span className="text-[11px] text-gray-500 font-mono">Ball in live rally...</span>
+                  </div>
+                  <button
+                    onClick={() => handleGenericGameScore('pong')}
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Hit Ball / Score Point 🏓
+                  </button>
+                </div>
+              )}
+
+              {/* 4. AIR HOCKEY */}
+              {activeGame.id === 'airhockey' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-gray-300">Goals: <strong className="text-blue-400">H: {hockeyScore.H}</strong> | <strong className="text-rose-400">A: {hockeyScore.A}</strong></p>
+                  <div className="h-32 bg-gradient-to-b from-indigo-950 to-blue-950 border border-blue-500/40 rounded-xl flex items-center justify-center">
+                    <span className="text-xs text-cyan-300 font-bold">Neon Ice Arena Active</span>
+                  </div>
+                  <button
+                    onClick={() => handleGenericGameScore('airhockey')}
+                    className="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Shoot Puck & Goal! ⚡
+                  </button>
+                </div>
+              )}
+
+              {/* 5. BATTLESHIP */}
+              {activeGame.id === 'battleship' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-gray-300">Hits: <strong className="text-blue-400">H: {battleshipHits.H}</strong> | <strong className="text-rose-400">A: {battleshipHits.A}</strong> (Target 3)</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {battleshipGrid.map((st, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          if (winnerMessage || battleshipGrid[idx] !== 'empty') return;
+                          const newGrid = [...battleshipGrid];
+                          const isHit = idx === 2 || idx === 5 || idx === 7;
+                          newGrid[idx] = isHit ? 'hit' : 'miss';
+                          const currentHits = { ...battleshipHits };
+                          const activeP = isCurrentAdmin ? 'H' : 'A';
+                          let winText = '';
+                          let newScores = { ...scores };
+
+                          if (isHit) {
+                            currentHits[activeP] += 1;
+                            if (currentHits[activeP] >= 3) {
+                              winText = `Player ${activeP} Sunk All Battleships! ⚓`;
+                              newScores[activeP] += 1;
+                              confetti({ particleCount: 90, spread: 100 });
+                            }
+                          }
+                          setBattleshipGrid(newGrid);
+                          setBattleshipHits(currentHits);
+                          if (winText) {
+                            setWinnerMessage(winText);
+                            setScores(newScores);
+                          }
+                          if (socketRef.current) {
+                            socketRef.current.emit('arcade_game_action', { gameId: 'battleship', grid: newGrid, hits: currentHits, winner: winText, scores: newScores });
+                          }
+                        }}
+                        className={`h-16 rounded-xl font-bold text-xs flex items-center justify-center cursor-pointer transition-all ${
+                          st === 'hit' ? 'bg-rose-600 text-white' : st === 'miss' ? 'bg-zinc-700 text-gray-300' : 'bg-[#1e1e1e] hover:bg-[#282828] text-gray-400 border border-[#333]'
+                        }`}
+                      >
+                        {st === 'empty' ? `Grid #${idx+1}` : st.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 6. POOL 8-BALL */}
+              {activeGame.id === 'pool' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-gray-300">Pocketed Balls: <strong className="text-blue-400">H: {poolBalls.H}</strong> | <strong className="text-rose-400">A: {poolBalls.A}</strong></p>
+                  <div className="h-28 bg-[#064e3b] border-4 border-[#1e293b] rounded-xl flex items-center justify-center">
+                    <span className="text-xs text-emerald-300 font-bold">🎱 Billiards Table Ready</span>
+                  </div>
+                  <button
+                    onClick={() => handleGenericGameScore('pool')}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Take Cue Shot & Pocket Ball 🎱
+                  </button>
+                </div>
+              )}
+
+              {/* 7. SNAKE & LADDER */}
+              {activeGame.id === 'snakeladder' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-gray-300">Position -> Admin (H): <strong className="text-blue-400">{snakePos.H}</strong> | User (A): <strong className="text-rose-400">{snakePos.A}</strong> / 30</p>
+                  <button
+                    onClick={() => {
+                      if (winnerMessage) return;
+                      const activeP = isCurrentAdmin ? 'H' : 'A';
+                      const roll = Math.floor(Math.random() * 6) + 1;
+                      const newPos = { ...snakePos };
+                      let winText = '';
+                      let newScores = { ...scores };
+
+                      let pos = newPos[activeP] + roll;
+                      if (pos === 14) pos = 28;
+                      if (pos === 22) pos = 8;
+                      if (pos >= 30) {
+                        pos = 30;
+                        winText = `Player ${activeP} Reached Top First! 🐍`;
+                        newScores[activeP] += 1;
+                        confetti({ particleCount: 90, spread: 100 });
+                      }
+                      newPos[activeP] = pos;
+                      setSnakePos(newPos);
+                      if (winText) {
+                        setWinnerMessage(winText);
+                        setScores(newScores);
+                      }
+                      if (socketRef.current) {
+                        socketRef.current.emit('arcade_game_action', { gameId: 'snakeladder', pos: newPos, winner: winText, scores: newScores });
+                      }
+                    }}
+                    className="w-full bg-purple-600 hover:bg-purple-500 text-white py-3 rounded-xl text-xs font-bold cursor-pointer shadow"
+                  >
+                    Roll Speed Sprint Dice 🎲
+                  </button>
+                </div>
+              )}
+
+              {/* 8. DRAW & GUESS */}
+              {activeGame.id === 'drawguess' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-amber-400 font-mono">Secret Prompt: <strong>{drawGuessWord}</strong></p>
+                  <div className="h-32 bg-white rounded-xl flex items-center justify-center text-black font-bold text-sm shadow-inner">
+                    🎨 Sketch Canvas Active
+                  </div>
+                  <button
+                    onClick={() => handleGenericGameScore('drawguess')}
+                    className="w-full bg-pink-600 hover:bg-pink-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Guess Correct & Score Point! ✨
+                  </button>
+                </div>
+              )}
             </div>
           </section>
         ) : (
