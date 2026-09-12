@@ -128,28 +128,24 @@ export default function App() {
   const [ludoTurn, setLudoTurn] = useState('H');
   const [diceVal, setDiceVal] = useState(1);
 
-  // 3. Pong State (Interactive physics simulation)
-  const [pongBall, setPongBall] = useState({ x: 50, y: 50, dx: 2, dy: 2 });
+  // 3. Pong State
   const [pongScore, setPongScore] = useState({ H: 0, A: 0 });
 
   // 4. Air Hockey State
-  const [hockeyPuck, setHockeyPuck] = useState({ x: 50, y: 50 });
   const [hockeyScore, setHockeyScore] = useState({ H: 0, A: 0 });
 
   // 5. Battleship State
   const [battleshipGrid, setBattleshipGrid] = useState(Array(9).fill('empty'));
   const [battleshipHits, setBattleshipHits] = useState({ H: 0, A: 0 });
 
-  // 6. Pool State
-  const [poolCuePower, setPoolCuePower] = useState(50);
-  const [poolScore, setPoolScore] = useState({ H: 0, A: 0 });
+  // 6. Pool State (Properly Defined State & Setter)
+  const [poolBalls, setPoolBalls] = useState({ H: 0, A: 0 });
 
   // 7. Snake & Ladder State
   const [snakePos, setSnakePos] = useState({ H: 1, A: 1 });
 
   // 8. Draw & Guess State
-  const [canvasDrawing, setCanvasDrawing] = useState(false);
-  const canvasRef = useRef(null);
+  const [drawGuessWord] = useState('Golden Crown');
 
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem('stealth_conversations');
@@ -962,7 +958,7 @@ export default function App() {
     }
   };
 
-  // 1. TIC TAC TOE WINNER LOGIC (H vs A)
+  // Tic Tac Toe Winner Logic
   const checkTicTacToeWinner = (board) => {
     const lines = [
       [0,1,2], [3,4,5], [6,7,8],
@@ -1019,7 +1015,6 @@ export default function App() {
     }
   };
 
-  // 2. LUDO QUICK SPRINT LOGIC
   const handleLudoRoll = () => {
     const myTurn = (isCurrentAdmin && ludoTurn === 'H') || (!isCurrentAdmin && ludoTurn === 'A');
     if (!myTurn || winnerMessage) return;
@@ -1066,7 +1061,6 @@ export default function App() {
     }
   };
 
-  // 3-8 GENERAL GAME SCORING LOGIC
   const handleGenericGameScore = (gameKey) => {
     if (winnerMessage) return;
     const scorer = isCurrentAdmin ? 'H' : 'A';
@@ -2277,7 +2271,7 @@ export default function App() {
           </div>
         )}
 
-        {/* EMBEDDED REAL PLAYABLE ARCADE API PORTAL (100% WORKING & ZERO LAG) */}
+        {/* EMBEDDED RETRO ARCADE EMULATOR API PORTAL (PLAYS ALL GAMES INSTANTLY) */}
         {activeGame ? (
           <section className="flex-1 overflow-hidden p-2 sm:p-4 max-w-5xl w-full mx-auto flex flex-col items-center justify-center">
             <div className="w-full h-full bg-[#121212] border-2 border-emerald-500/50 rounded-3xl p-3 shadow-2xl relative flex flex-col">
@@ -2299,7 +2293,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* EMBEDDED RETRO PLAYABLE ARCADE ENGINE PORTAL */}
+              {/* HIGH PERFORMANCE RETRO ARCADE EMULATOR PORTAL */}
               <div className="flex-1 w-full rounded-2xl overflow-hidden bg-black border border-[#2a2a2a] relative flex items-center justify-center shadow-inner">
                 <iframe
                   src="https://emulatorjs.com/embed/retro-bowl.html"
