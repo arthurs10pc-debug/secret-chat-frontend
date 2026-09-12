@@ -326,16 +326,16 @@ export default function App() {
           events: {
             onReady: () => {
               if (pendingRestoreRef.current) {
-                const p = pendingRestoreRef.current;
+                const playerInst = pendingRestoreRef.current;
                 pendingRestoreRef.current = null;
                 isRemoteTriggerRef.current = true;
                 playerRef.current.loadVideoById({
-                  videoId: p.videoId,
-                  startSeconds: p.currentTime || 0
+                  videoId: playerInst.videoId,
+                  startSeconds: playerInst.currentTime || 0
                 });
                 playerRef.current.unMute();
                 playerRef.current.setVolume(100);
-                if (p.state === 'PLAY' && viewModeRef.current !== 'codex') {
+                if (playerInst.state === 'PLAY' && viewModeRef.current !== 'codex') {
                   const playPromise = playerRef.current.playVideo();
                   if (playPromise && typeof playPromise.catch === 'function') {
                     playPromise.catch(() => setAutoplayBlocked(true));
@@ -682,10 +682,10 @@ export default function App() {
           });
           playerRef.current.unMute();
           playerRef.current.setVolume(100);
-          if (p.state === 'PLAY' && viewModeRef.current !== 'codex') {
-            const p = playerRef.current.playVideo();
-            if (p && typeof p.catch === 'function') {
-              p.catch(() => setAutoplayBlocked(true));
+          if (data.state === 'PLAY' && viewModeRef.current !== 'codex') {
+            const playPromise = playerRef.current.playVideo();
+            if (playPromise && typeof playPromise.catch === 'function') {
+              playPromise.catch(() => setAutoplayBlocked(true));
             }
           } else {
             playerRef.current.pauseVideo();
@@ -2271,7 +2271,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 100% WORKING STANDALONE HTML5/CANVAS GAME ENGINE (NO GREY/BLACK SCREEN) */}
+        {/* 100% WORKING STANDALONE CANVAS GAME ENGINE (NO GREY/BLACK SCREEN) */}
         {activeGame ? (
           <section className="flex-1 overflow-y-auto px-4 py-6 max-w-3xl w-full mx-auto space-y-4 scrollbar-none font-sans flex flex-col items-center justify-center">
             <div className="w-full bg-[#121212] border-2 border-emerald-500/40 rounded-3xl p-6 shadow-2xl relative space-y-5 text-center">
