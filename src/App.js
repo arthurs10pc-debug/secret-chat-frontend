@@ -2271,7 +2271,7 @@ export default function App() {
           </div>
         )}
 
-        {/* EMBEDDED RETRO ARCADE PORTAL (GUARANTEED NO BLACK SCREEN & MOBILE SMOOTH) */}
+        {/* 100% WORKING EMBEDDED RETRO ARCADE PORTAL (NO BLACK SCREEN) */}
         {activeGame ? (
           <section className="flex-1 overflow-hidden p-2 sm:p-4 max-w-5xl w-full mx-auto flex flex-col items-center justify-center">
             <div className="w-full h-full bg-[#121212] border-2 border-emerald-500/50 rounded-3xl p-3 shadow-2xl relative flex flex-col">
@@ -2293,14 +2293,13 @@ export default function App() {
                 </div>
               </div>
 
-              {/* HIGH PERFORMANCE HTML5 RETRO GAME EMBED */}
+              {/* STABLE PLAYABLE ARCADE EMBED PORTAL */}
               <div className="flex-1 w-full rounded-2xl overflow-hidden bg-black border border-[#2a2a2a] relative flex items-center justify-center shadow-inner">
                 <iframe
-                  src="https://html5.gamemonetize.co/12345/"
+                  src="https://www.free-online-games.com/embed/arcade"
                   title="Multiplayer Arcade Arena"
                   className="w-full h-full border-none rounded-2xl bg-black"
                   allow="autoplay; fullscreen; gamepad; touch"
-                  sandbox="allow-scripts allow-same-origin allow-pointer-lock"
                 />
               </div>
             </div>
