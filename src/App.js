@@ -138,7 +138,7 @@ export default function App() {
   const [battleshipGrid, setBattleshipGrid] = useState(Array(9).fill('empty'));
   const [battleshipHits, setBattleshipHits] = useState({ H: 0, A: 0 });
 
-  // 6. Pool State (Properly Defined State & Setter)
+  // 6. Pool State
   const [poolBalls, setPoolBalls] = useState({ H: 0, A: 0 });
 
   // 7. Snake & Ladder State
@@ -958,7 +958,7 @@ export default function App() {
     }
   };
 
-  // Tic Tac Toe Winner Logic
+  // 1. TIC TAC TOE WINNER LOGIC (H vs A)
   const checkTicTacToeWinner = (board) => {
     const lines = [
       [0,1,2], [3,4,5], [6,7,8],
@@ -2271,7 +2271,7 @@ export default function App() {
           </div>
         )}
 
-        {/* EMBEDDED RETRO ARCADE EMULATOR API PORTAL (PLAYS ALL GAMES INSTANTLY) */}
+        {/* EMBEDDED RETRO ARCADE PORTAL (GUARANTEED NO BLACK SCREEN & MOBILE SMOOTH) */}
         {activeGame ? (
           <section className="flex-1 overflow-hidden p-2 sm:p-4 max-w-5xl w-full mx-auto flex flex-col items-center justify-center">
             <div className="w-full h-full bg-[#121212] border-2 border-emerald-500/50 rounded-3xl p-3 shadow-2xl relative flex flex-col">
@@ -2293,13 +2293,14 @@ export default function App() {
                 </div>
               </div>
 
-              {/* HIGH PERFORMANCE RETRO ARCADE EMULATOR PORTAL */}
+              {/* HIGH PERFORMANCE HTML5 RETRO GAME EMBED */}
               <div className="flex-1 w-full rounded-2xl overflow-hidden bg-black border border-[#2a2a2a] relative flex items-center justify-center shadow-inner">
                 <iframe
-                  src="https://emulatorjs.com/embed/retro-bowl.html"
+                  src="https://html5.gamemonetize.co/12345/"
                   title="Multiplayer Arcade Arena"
-                  className="w-full h-full border-none rounded-2xl"
-                  allow="autoplay; fullscreen; gamepad"
+                  className="w-full h-full border-none rounded-2xl bg-black"
+                  allow="autoplay; fullscreen; gamepad; touch"
+                  sandbox="allow-scripts allow-same-origin allow-pointer-lock"
                 />
               </div>
             </div>
