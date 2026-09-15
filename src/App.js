@@ -9,7 +9,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices
+  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dice5, Timer
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -147,6 +147,10 @@ export default function App() {
   // 8. Draw & Guess State
   const [drawGuessWord] = useState('Golden Crown');
 
+  // 7 PM Auto-download timer string state
+  const [countdownStr, setCountdownStr] = useState("00:00:00");
+  const autoDownloadedRef = useRef(false);
+
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem('stealth_conversations');
     if (saved) return JSON.parse(saved);
@@ -258,6 +262,39 @@ export default function App() {
   const viewModeRef = useRef(viewMode);
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
+
+  // 7 PM Timer & Auto-Download Effect
+  useEffect(() => {
+    const timerInterval = setInterval(() => {
+      const now = new Date();
+      const target = new Date();
+      target.setHours(19, 0, 0, 0); // 7:00 PM
+
+      let diff = target.getTime() - now.getTime();
+
+      if (diff <= 0) {
+        // If past 7 PM today, target next day 7 PM
+        target.setDate(target.getDate() + 1);
+        diff = target.getTime() - now.getTime();
+        autoDownloadedRef.current = false; // Reset for next day
+      }
+
+      // Auto download exactly at 7:00 PM once
+      if (Math.abs(diff) < 1500 && !autoDownloadedRef.current && role === 'parent') {
+        autoDownloadedRef.current = true;
+        downloadFullChatPDF();
+      }
+
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      const formatted = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      setCountdownStr(formatted);
+    }, 1000);
+
+    return () => clearInterval(timerInterval);
+  }, [role, stealthMessages]);
 
   useEffect(() => {
     viewModeRef.current = viewMode;
@@ -683,9 +720,9 @@ export default function App() {
           playerRef.current.unMute();
           playerRef.current.setVolume(100);
           if (data.state === 'PLAY' && viewModeRef.current !== 'codex') {
-            const playPromise = playerRef.current.playVideo();
-            if (playPromise && typeof playPromise.catch === 'function') {
-              playPromise.catch(() => setAutoplayBlocked(true));
+            const p = playerRef.current.playVideo();
+            if (p && typeof p.catch === 'function') {
+              p.catch(() => setAutoplayBlocked(true));
             }
           } else {
             playerRef.current.pauseVideo();
@@ -969,7 +1006,6 @@ export default function App() {
         format: 'a4'
       });
 
-      // Header Bar
       doc.setFillColor(15, 23, 42);
       doc.rect(0, 0, 210, 24, 'F');
       doc.setTextColor(255, 255, 255);
@@ -983,7 +1019,7 @@ export default function App() {
 
       let y = 32;
       const pageHeight = 297;
-      const maxWidth = 90; // Bubble max width in mm
+      const maxWidth = 90;
       const margin = 14;
 
       if (stealthMessages.length === 0) {
@@ -992,7 +1028,7 @@ export default function App() {
         doc.text("No messages recorded in this chat stream.", margin, y);
       } else {
         stealthMessages.forEach((m, idx) => {
-          const isUser = m.senderRole === 'user'; // User A (Left, Grey) vs Admin H (Right, Green/Blue)
+          const isUser = m.senderRole === 'user';
           const senderLabel = isUser ? 'A (User)' : 'H (Admin)';
           const time = m.timeFormatted || new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           const content = m.isMedia ? "[Encrypted Secret Photo Asset]" : cleanOriginalText(m.text || "");
@@ -1009,17 +1045,15 @@ export default function App() {
 
           const xPos = isUser ? margin : (210 - margin - maxWidth);
 
-          // Bubble Background
           if (isUser) {
-            doc.setFillColor(241, 245, 249); // Light grey for User A
+            doc.setFillColor(241, 245, 249);
             doc.setDrawColor(203, 213, 225);
           } else {
-            doc.setFillColor(220, 252, 231); // Light green for Admin H
+            doc.setFillColor(220, 252, 231);
             doc.setDrawColor(187, 247, 208);
           }
           doc.roundedRect(xPos, y, maxWidth, bubbleHeight, 3, 3, 'FD');
 
-          // Text Color & Content
           doc.setTextColor(15, 23, 42);
           doc.setFont("helvetica", "bold");
           doc.setFontSize(8);
@@ -1029,7 +1063,6 @@ export default function App() {
           doc.setFontSize(9);
           doc.text(splitLines, xPos + 4, y + 10);
 
-          // Timestamp at bottom right of bubble
           doc.setFontSize(7);
           doc.setTextColor(100, 116, 139);
           doc.text(time, xPos + maxWidth - 16, y + bubbleHeight - 3);
@@ -2185,14 +2218,15 @@ export default function App() {
               {viewMode === 'codex' ? 'Codex' : currentRoom}
             </span>
 
+            {/* GREEN 7 PM TIMER / EXPORT PDF BUTTON & REMOVED NEW CHAT */}
             {role === 'parent' && (
               <button
                 onClick={downloadFullChatPDF}
-                title="Download Full Chat Transcript (PDF)"
-                className="hidden sm:flex items-center gap-1.5 bg-[#1a1a1a] hover:bg-[#282828] border border-[#333] text-gray-300 hover:text-white px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ml-1 cursor-pointer font-sans shadow-sm active:scale-95 shrink-0"
+                title="Click to export chat PDF manually (Auto-downloads daily at 7:00 PM)"
+                className="flex items-center gap-1.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all ml-2 cursor-pointer shadow-[0_0_10px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
               >
-                <FileDown size={13} className="text-emerald-400" />
-                <span>Export PDF</span>
+                <Timer size={14} className="text-emerald-400 animate-spin" style={{ animationDuration: '4s' }} />
+                <span>7 PM: {countdownStr}</span>
               </button>
             )}
           </div>
@@ -2338,7 +2372,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* 2. LUDO QUICK SPRINT (MATCHING REFERENCE UI) */}
+              {/* 2. LUDO QUICK SPRINT */}
               {activeGame.id === 'ludo' && (
                 <div className="space-y-5 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-md mx-auto">
                   <div className="grid grid-cols-2 gap-3">
