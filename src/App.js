@@ -123,7 +123,7 @@ export default function App() {
   const [tictactoeBoard, setTictactoeBoard] = useState(Array(9).fill(null));
   const [isHNext, setIsHNext] = useState(true);
 
-  // 2. Ludo State (Accurate Track Positions 0 to 52)
+  // 2. Ludo State
   const [ludoPos, setLudoPos] = useState({ H: 0, A: 0 });
   const [ludoTurn, setLudoTurn] = useState('H');
   const [diceVal, setDiceVal] = useState(1);
@@ -683,9 +683,9 @@ export default function App() {
           playerRef.current.unMute();
           playerRef.current.setVolume(100);
           if (data.state === 'PLAY' && viewModeRef.current !== 'codex') {
-            const p = playerRef.current.playVideo();
-            if (p && typeof p.catch === 'function') {
-              p.catch(() => setAutoplayBlocked(true));
+            const playPromise = playerRef.current.playVideo();
+            if (playPromise && typeof playPromise.catch === 'function') {
+              playPromise.catch(() => setAutoplayBlocked(true));
             }
           } else {
             playerRef.current.pauseVideo();
@@ -958,6 +958,93 @@ export default function App() {
     }
   };
 
+  // WHATSAPP / IMESSAGE STYLE BUBBLE CHAT EXPORT TO PDF
+  const downloadFullChatPDF = () => {
+    if (role !== 'parent') return;
+
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // Header Bar
+      doc.setFillColor(15, 23, 42);
+      doc.rect(0, 0, 210, 24, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text("WhatsApp / Chat Transcript - Bubble Export", 14, 12);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(203, 213, 225);
+      doc.text(`Exported: ${new Date().toLocaleString()}  |  Total Messages: ${stealthMessages.length}`, 14, 19);
+
+      let y = 32;
+      const pageHeight = 297;
+      const maxWidth = 90; // Bubble max width in mm
+      const margin = 14;
+
+      if (stealthMessages.length === 0) {
+        doc.setTextColor(100, 116, 139);
+        doc.setFontSize(11);
+        doc.text("No messages recorded in this chat stream.", margin, y);
+      } else {
+        stealthMessages.forEach((m, idx) => {
+          const isUser = m.senderRole === 'user'; // User A (Left, Grey) vs Admin H (Right, Green/Blue)
+          const senderLabel = isUser ? 'A (User)' : 'H (Admin)';
+          const time = m.timeFormatted || new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const content = m.isMedia ? "[Encrypted Secret Photo Asset]" : cleanOriginalText(m.text || "");
+
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          const splitLines = doc.splitTextToSize(content || "(empty)", maxWidth);
+          const bubbleHeight = (splitLines.length * 4.5) + 10;
+
+          if (y + bubbleHeight > pageHeight - 15) {
+            doc.addPage();
+            y = 20;
+          }
+
+          const xPos = isUser ? margin : (210 - margin - maxWidth);
+
+          // Bubble Background
+          if (isUser) {
+            doc.setFillColor(241, 245, 249); // Light grey for User A
+            doc.setDrawColor(203, 213, 225);
+          } else {
+            doc.setFillColor(220, 252, 231); // Light green for Admin H
+            doc.setDrawColor(187, 247, 208);
+          }
+          doc.roundedRect(xPos, y, maxWidth, bubbleHeight, 3, 3, 'FD');
+
+          // Text Color & Content
+          doc.setTextColor(15, 23, 42);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(8);
+          doc.text(`${senderLabel}`, xPos + 4, y + 5);
+
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          doc.text(splitLines, xPos + 4, y + 10);
+
+          // Timestamp at bottom right of bubble
+          doc.setFontSize(7);
+          doc.setTextColor(100, 116, 139);
+          doc.text(time, xPos + maxWidth - 16, y + bubbleHeight - 3);
+
+          y += bubbleHeight + 4;
+        });
+      }
+
+      doc.save(`WhatsApp_Chat_Bubble_Transcript_${Date.now()}.pdf`);
+    } catch (err) {
+      console.error("PDF Export Error:", err);
+      alert("Error generating PDF: " + err.message);
+    }
+  };
+
   // Tic Tac Toe Winner Logic
   const checkTicTacToeWinner = (board) => {
     const lines = [
@@ -1015,7 +1102,6 @@ export default function App() {
     }
   };
 
-  // GORGEOUS CUSTOM LUDO BOARD LOGIC MATCHING THE REFERENCE IMAGE
   const handleLudoRoll = () => {
     const myTurn = (isCurrentAdmin && ludoTurn === 'H') || (!isCurrentAdmin && ludoTurn === 'A');
     if (!myTurn || winnerMessage) return;
@@ -1511,89 +1597,6 @@ export default function App() {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setHighlightedMsgId(targetMsgId);
       setTimeout(() => setHighlightedMsgId(null), 1800);
-    }
-  };
-
-  const downloadFullChatPDF = () => {
-    if (role !== 'parent') return;
-
-    try {
-      const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      doc.setFillColor(15, 23, 42);
-      doc.rect(0, 0, 210, 26, 'F');
-
-      doc.setTextColor(255, 255, 255);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(15);
-      doc.text("GMB Review Session - Secret Chat Transcript", 14, 12);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(203, 213, 225);
-      doc.text(`Generated: ${new Date().toLocaleString()}  |  Total Messages: ${stealthMessages.length}`, 14, 20);
-
-      let y = 36;
-      const pageHeight = 297;
-      const margin = 14;
-      const contentWidth = 182;
-
-      if (stealthMessages.length === 0) {
-        doc.setTextColor(100, 116, 139);
-        doc.setFontSize(11);
-        doc.text("No messages recorded in this chat stream.", margin, y);
-      } else {
-        stealthMessages.forEach((m, idx) => {
-          const senderLabel = m.senderRole === 'user' ? 'A (User)' : 'H (Admin)';
-          const time = m.timeFormatted || new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const isUser = m.senderRole === 'user';
-
-          if (y > pageHeight - 30) {
-            doc.addPage();
-            y = 20;
-          }
-
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(10);
-          if (isUser) {
-            doc.setTextColor(2, 132, 199);
-          } else {
-            doc.setTextColor(16, 185, 129);
-          }
-          doc.text(`[#${idx + 1}] ${senderLabel}  •  ${time}`, margin, y);
-          y += 5;
-
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(9.5);
-          doc.setTextColor(30, 41, 59);
-
-          const content = m.isMedia ? "[Encrypted Secret Photo Asset]" : cleanOriginalText(m.text || "");
-          const splitLines = doc.splitTextToSize(content || "(empty)", contentWidth);
-
-          const blockHeight = splitLines.length * 4.6;
-          if (y + blockHeight > pageHeight - 16) {
-            doc.addPage();
-            y = 20;
-          }
-
-          doc.text(splitLines, margin + 2, y);
-          y += blockHeight + 4;
-
-          doc.setDrawColor(226, 232, 240);
-          doc.setLineWidth(0.2);
-          doc.line(margin, y - 1, 210 - margin, y - 1);
-          y += 4;
-        });
-      }
-
-      doc.save(`GMB_Chat_Transcript_${Date.now()}.pdf`);
-    } catch (err) {
-      console.error("PDF Export Error:", err);
-      alert("Error generating PDF: " + err.message);
     }
   };
 
@@ -2272,7 +2275,7 @@ export default function App() {
           </div>
         )}
 
-        {/* CUSTOM GORGEOUS LUDO & ARCADE ENGINE (100% WORKING & MATCHING REFERENCE UI) */}
+        {/* FULLY WORKING EMBEDDED PLUGIN GAME VIEW */}
         {activeGame ? (
           <section className="flex-1 overflow-y-auto px-4 py-6 max-w-3xl w-full mx-auto space-y-4 scrollbar-none font-sans flex flex-col items-center justify-center">
             <div className="w-full bg-[#121212] border-2 border-emerald-500/40 rounded-3xl p-6 shadow-2xl relative space-y-5 text-center">
@@ -2335,7 +2338,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* 2. LUDO SPRINT (MATCHING REFERENCE IMAGE UI) */}
+              {/* 2. LUDO QUICK SPRINT (MATCHING REFERENCE UI) */}
               {activeGame.id === 'ludo' && (
                 <div className="space-y-5 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-md mx-auto">
                   <div className="grid grid-cols-2 gap-3">
@@ -3563,7 +3566,7 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="text-[10px] text-gray-400 block smudge mb-1">Time Slot 2 (Optional Second Alarm)</label>
+                      <label className="text-[10px] text-gray-400 block mb-1">Time Slot 2 (Optional Second Alarm)</label>
                       <input 
                         type="datetime-local" 
                         value={schedTime2}
