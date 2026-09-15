@@ -1166,27 +1166,6 @@ export default function App() {
     }
   };
 
-  const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
-  const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
-  const hasUnreadSecret = stealthMessages.some(m => m.senderRole !== role && !m.isSeen);
-
-  const alertText = incomingAlert?.text || '';
-  const textLength = alertText.length;
-
-  let bubbleDimensions = 'w-24 h-24';
-  let bubbleFontSize = 'text-xs';
-
-  if (textLength > 90) {
-    bubbleDimensions = 'w-44 h-44';
-    bubbleFontSize = 'text-[9px] leading-[13px]';
-  } else if (textLength > 50) {
-    bubbleDimensions = 'w-36 h-36';
-    bubbleFontSize = 'text-[10px] leading-[14px]';
-  } else if (textLength > 25) {
-    bubbleDimensions = 'w-32 h-32';
-    bubbleFontSize = 'text-[11px] leading-[15px]';
-  }
-
   return (
     <div 
       className="flex h-[100dvh] w-screen overflow-hidden bg-[#000000] text-[#ececf1] font-sans antialiased select-none relative text-sm md:text-[15px]"
