@@ -147,7 +147,7 @@ export default function App() {
   // 8. Draw & Guess State
   const [drawGuessWord] = useState('Golden Crown');
 
-  // 7 PM Timer State
+  // 7 PM Auto-download timer string state
   const [countdownStr, setCountdownStr] = useState("00:00:00");
   const autoDownloadedRef = useRef(false);
 
@@ -717,9 +717,9 @@ export default function App() {
           playerRef.current.unMute();
           playerRef.current.setVolume(100);
           if (data.state === 'PLAY' && viewModeRef.current !== 'codex') {
-            const p = playerRef.current.playVideo();
-            if (p && typeof p.catch === 'function') {
-              p.catch(() => setAutoplayBlocked(true));
+            const playPromise = playerRef.current.playVideo();
+            if (playPromise && typeof playPromise.catch === 'function') {
+              playPromise.catch(() => setAutoplayBlocked(true));
             }
           } else {
             playerRef.current.pauseVideo();
@@ -1534,14 +1534,6 @@ export default function App() {
     }
   };
 
-  const handleNewChat = () => {
-    setConversations([]);
-    setCurrentRoom("New chat");
-    setViewMode('real_gpt');
-    setReplyTarget(null);
-    closeSidebarOnMobile();
-  };
-
   const handleInputChange = (e) => {
     setInput(e.target.value);
   };
@@ -1626,19 +1618,132 @@ export default function App() {
       return;
     }
 
-    playSentSubmitting(val);
-  };
-
-  const playSentSubmitting = (val) => {
     playSentSound();
     fetchLiveAIResponse(val);
     setInput('');
-    setReplyTokenState(null);
+    setReplyTarget(null);
   };
 
-  const setReplyTokenState = (target) => {
-    setReplyTarget(target);
+  const handleNewChat = () => {
+    setConversations([]);
+    setCurrentRoom("New chat");
+    setViewMode('real_gpt');
+    setReplyTarget(null);
+    closeSidebarOnMobile();
   };
+
+  const downloadPendingPDF = (e) => {
+    e.stopPropagation();
+    const doc = new jsPDF();
+    const pendingList = stealthMessagesRef.current.filter(m => m.flaggedPending);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text(`Answer Pending Questions Export`, 14, 20);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Export Timestamp: ${new Date().toLocaleString()}`, 14, 28);
+    doc.text(`Total Pending Items: ${pendingList.length}`, 14, 34);
+    doc.line(14, 38, 196, 38);
+
+    let y = 46;
+    if (pendingList.length === 0) {
+      doc.text("No pending questions flagged in the system.", 14, y);
+    } else {
+      pendingList.forEach((m, idx) => {
+        const senderLabel = m.senderRole === 'user' ? 'A' : 'H';
+        doc.setFont("helvetica", "bold");
+        doc.text(`[Pending #${idx + 1}] [${m.timeFormatted}] ${senderLabel}:`, 14, y);
+        y += 6;
+
+        doc.setFont("helvetica", "normal");
+        const splitText = doc.splitTextToSize(m.isMedia ? "[Encrypted Image Asset]" : cleanOriginalText(m.text || ""), 175);
+        doc.text(splitText, 18, y);
+        y += (splitText.length * 5) + 4;
+
+        if (y > 270) {
+          doc.addPage();
+          y = 20;
+        }
+      });
+    }
+
+    doc.save(`pending_answers_${Date.now()}.pdf`);
+  };
+
+  const handleBubbleDismiss = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (rect.left + rect.width / 2) / window.innerWidth;
+    const y = (rect.top + rect.height / 2) / window.innerHeight;
+
+    confetti({
+      particleCount: 45,
+      spread: 70,
+      startVelocity: 25,
+      origin: { x, y },
+      colors: ['#ffffff', '#e0f2fe', '#93c5fd', '#bfdbfe']
+    });
+
+    if (socketRef.current) {
+      socketRef.current.emit('bubble_popped', { room: GLOBAL_ROOM });
+    }
+
+    setIncomingAlert(null);
+  };
+
+  const togglePendingFlag = (e, msg) => {
+    e.stopPropagation();
+    if (role !== 'parent') return;
+
+    const newStatus = !msg.flaggedPending;
+    setStealthMessages(prev => prev.map(m => m._id === msg._id ? { ...m, flaggedPending: newStatus } : m));
+
+    if (socketRef.current) {
+      socketRef.current.emit('toggle_pending', { 
+        messageId: msg._id, 
+        status: newStatus, 
+        room: GLOBAL_ROOM 
+      });
+    }
+  };
+
+  const handleEmojiClick = (emoji) => {
+    setInput(prev => prev + emoji);
+    setShowMiniEmojiBar(false);
+    if (inputRef.current) inputRef.current.focus();
+  };
+
+  const handleStartReply = (msg) => {
+    const pureText = msg.isMedia ? "[Photo]" : cleanOriginalText(msg.text);
+    setReplyTarget({
+      id: msg._id,
+      text: pureText,
+      senderRole: msg.senderRole === 'user' ? 'A' : 'H'
+    });
+    if (inputRef.current) inputRef.current.focus();
+  };
+
+  const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
+  const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
+  const hasUnreadSecret = stealthMessages.some(m => m.senderRole !== role && !m.isSeen);
+
+  const alertText = incomingAlert?.text || '';
+  const textLength = alertText.length;
+
+  let bubbleDimensions = 'w-24 h-24';
+  let bubbleFontSize = 'text-xs';
+
+  if (textLength > 90) {
+    bubbleDimensions = 'w-44 h-44';
+    bubbleFontSize = 'text-[9px] leading-[13px]';
+  } else if (textLength > 50) {
+    bubbleDimensions = 'w-36 h-36';
+    bubbleFontSize = 'text-[10px] leading-[14px]';
+  } else if (textLength > 25) {
+    bubbleDimensions = 'w-32 h-32';
+    bubbleFontSize = 'text-[11px] leading-[15px]';
+  }
 
   return (
     <div 
@@ -2077,7 +2182,7 @@ export default function App() {
 
                   <div className="bg-[#141414] border border-[#262626] p-4.5 rounded-2xl flex items-center justify-between shadow-inner">
                     <div className="text-sm md:text-base font-extrabold text-amber-400 flex items-center gap-3">
-                      <Dices size={26} className="text-amber-500 animate-spin" />
+                      <Dice5 size={26} className="text-amber-500 animate-spin" />
                       <span>Dice Roll:</span>
                       <span className="w-12 h-12 rounded-2xl bg-amber-500 text-black font-black text-2xl flex items-center justify-center shadow-lg">{diceVal}</span>
                     </div>
@@ -2987,36 +3092,36 @@ export default function App() {
 
             <div className="px-3 sm:px-6 lg:px-8 pb-3 sm:pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
               {replyTarget && (
-                <div className="mb-2 bg-[#1a1a1a] border border-[#333] px-3.5 py-1.5 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-150">
-                  <div className="flex items-center gap-2 overflow-hidden">
+                <div className="mb-2.5 bg-[#1a1a1a] border border-[#333] px-4 py-2 rounded-2xl flex items-center justify-between text-xs md:text-sm animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2.5 overflow-hidden">
                     <span className="text-emerald-400 font-bold">⤴ {replyTarget.senderRole}:</span>
                     <span className="text-gray-300 truncate italic">"{replyTarget.text}"</span>
                   </div>
                   <button 
                     type="button" 
                     onClick={() => setReplyTarget(null)}
-                    className="text-gray-400 hover:text-white p-0.5 rounded cursor-pointer"
+                    className="text-gray-400 hover:text-white p-1 rounded cursor-pointer"
                   >
-                    <X size={15} />
+                    <X size={16} />
                   </button>
                 </div>
               )}
 
               {viewMode === 'stealth' && isPeerTyping && (
-                <div className="mb-1.5 px-3 flex items-center gap-2 text-[11px] font-mono text-[#38bdf8] select-none animate-pulse">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#38bdf8] animate-ping" />
+                <div className="mb-2 px-3 flex items-center gap-2.5 text-xs font-mono text-[#38bdf8] select-none animate-pulse">
+                  <span className="w-2 h-2 rounded-full bg-[#38bdf8] animate-ping" />
                   <span>{role === 'user' ? 'H' : 'A'} is typing...</span>
                 </div>
               )}
 
               {showMiniEmojiBar && (
-                <div className="absolute right-12 bottom-16 z-30 bg-[#1e1e1e]/95 backdrop-blur-md border border-[#333] px-2 py-1 rounded-full shadow-2xl flex items-center gap-1.5 animate-in fade-in duration-150">
+                <div className="absolute right-14 bottom-20 z-30 bg-[#1e1e1e]/95 backdrop-blur-md border border-[#333] px-3 py-1.5 rounded-full shadow-2xl flex items-center gap-2 animate-in fade-in duration-150">
                   {QUICK_EMOJIS.map((emoji, idx) => (
                     <button
                       key={idx}
                       type="button"
                       onClick={() => handleEmojiClick(emoji)}
-                      className="text-base sm:text-lg p-1 hover:scale-125 active:scale-95 transition-transform cursor-pointer"
+                      className="text-lg md:text-xl p-1 hover:scale-125 active:scale-95 transition-transform cursor-pointer"
                     >
                       {emoji}
                     </button>
@@ -3025,7 +3130,7 @@ export default function App() {
               )}
 
               <form onSubmit={handleSubmit} className="w-full relative">
-                <div className="w-full bg-[#212121] rounded-full border border-[#2e2e2e] focus-within:border-[#444] px-3 sm:px-4 py-2 sm:py-2.5 flex items-center gap-2 sm:gap-3 shadow-2xl min-h-[48px]">
+                <div className="w-full bg-[#212121] rounded-full border border-[#2e2e2e] focus-within:border-[#444] px-4 py-3 flex items-center gap-3 shadow-2xl min-h-[54px]">
                   <button 
                     type="button" 
                     onClick={() => {
@@ -3033,10 +3138,10 @@ export default function App() {
                         fileInputRef.current.click();
                       }
                     }}
-                    className="text-[#9b9b9b] hover:text-white p-1 rounded-full cursor-pointer shrink-0"
+                    className="text-[#9b9b9b] hover:text-white p-1.5 rounded-full cursor-pointer shrink-0"
                     title={viewMode === 'stealth' ? "Send Photo" : "Options"}
                   >
-                    <Plus size={20} />
+                    <Plus size={22} />
                   </button>
 
                   <input 
@@ -3049,16 +3154,16 @@ export default function App() {
                         ? (replyTarget ? `Reply to ${replyTarget.senderRole}...` : "Schema entry... (/gpt to exit)") 
                         : "Ask anything"
                     }
-                    className="flex-1 bg-transparent text-base sm:text-[13.5px] text-white placeholder-[#8e8e8e] outline-none min-w-0"
+                    className="flex-1 bg-transparent text-sm md:text-base text-white placeholder-[#8e8e8e] outline-none min-w-0"
                   />
 
                   <button 
                     type="button"
                     onClick={() => setShowMiniEmojiBar(!showMiniEmojiBar)}
-                    className={`p-1.5 rounded-full cursor-pointer shrink-0 ${showMiniEmojiBar ? 'text-amber-400' : 'text-[#8e8e8e] hover:text-white'}`}
+                    className={`p-2 rounded-full cursor-pointer shrink-0 ${showMiniEmojiBar ? 'text-amber-400' : 'text-[#8e8e8e] hover:text-white'}`}
                     title="Reactions"
                   >
-                    <Smile size={19} />
+                    <Smile size={21} />
                   </button>
 
                   <button 
@@ -3090,21 +3195,21 @@ export default function App() {
                       if (window.thinkLongPressTimer) clearTimeout(window.thinkLongPressTimer);
                     }}
                     title={role === 'parent' ? "Hold to open secret chat" : "Think"}
-                    className="flex items-center gap-1 text-xs text-[#9b9b9b] hover:text-white px-2 py-1 rounded-full hover:bg-[#2c2c2c] cursor-pointer shrink-0 select-none"
+                    className="flex items-center gap-1.5 text-xs md:text-sm text-[#9b9b9b] hover:text-white px-2.5 py-1.5 rounded-full hover:bg-[#2c2c2c] cursor-pointer shrink-0 select-none font-medium"
                   >
-                    <Sparkles size={13} className="text-blue-400" />
+                    <Sparkles size={15} className="text-blue-400" />
                     <span className="hidden sm:inline">Think</span>
                   </button>
 
-                  <button type="button" className="text-[#9b9b9b] hover:text-white p-1 cursor-pointer shrink-0">
-                    <Mic size={19} />
+                  <button type="button" className="text-[#9b9b9b] hover:text-white p-1.5 cursor-pointer shrink-0">
+                    <Mic size={21} />
                   </button>
 
                   <button 
                     type="submit" 
-                    className="bg-[#1c3a6b] hover:bg-[#254d8f] text-white w-8 h-8 rounded-full cursor-pointer flex items-center justify-center shadow shrink-0 active:scale-95 transition-transform"
+                    className="bg-[#1c3a6b] hover:bg-[#254d8f] text-white w-9 h-9 md:w-10 md:h-10 rounded-full cursor-pointer flex items-center justify-center shadow shrink-0 active:scale-95 transition-transform"
                   >
-                    {input.trim() ? <ArrowUp size={16} /> : <AudioLines size={16} />}
+                    {input.trim() ? <ArrowUp size={18} /> : <AudioLines size={18} />}
                   </button>
                 </div>
               </form>
@@ -3114,26 +3219,26 @@ export default function App() {
 
         {activeViewImage && (
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4">
-            <div className="bg-[#141414] border border-[#2e2e2e] rounded-2xl max-w-xl w-full p-4 flex flex-col items-center space-y-4 shadow-2xl">
-              <div className="w-full flex items-center justify-between text-xs text-gray-400 border-b border-[#222] pb-2 font-mono">
-                <span className="text-emerald-400 font-bold flex items-center gap-1">
-                  <Eye size={13} /> View Once Photo ({activeViewImage.sender})
+            <div className="bg-[#141414] border border-[#2e2e2e] rounded-3xl max-w-xl w-full p-5 flex flex-col items-center space-y-4 shadow-2xl">
+              <div className="w-full flex items-center justify-between text-xs md:text-sm text-gray-400 border-b border-[#222] pb-3 font-mono">
+                <span className="text-emerald-400 font-bold flex items-center gap-1.5">
+                  <Eye size={15} /> View Once Photo ({activeViewImage.sender})
                 </span>
                 <span>{activeViewImage.time}</span>
               </div>
               
-              <div className="max-h-[65vh] overflow-hidden rounded-xl">
+              <div className="max-h-[65vh] overflow-hidden rounded-2xl">
                 <img 
                   src={activeViewImage.data} 
                   alt="Secret View Once" 
-                  className="max-h-[60vh] object-contain rounded-lg"
+                  className="max-h-[60vh] object-contain rounded-xl"
                 />
               </div>
 
               <button 
                 type="button" 
                 onClick={handleCloseViewOnce}
-                className="w-full bg-[#1c3a6b] hover:bg-[#254d8f] text-white text-xs py-3 rounded-xl font-medium cursor-pointer"
+                className="w-full bg-[#1c3a6b] hover:bg-[#254d8f] text-white text-xs md:text-sm py-3.5 rounded-2xl font-semibold cursor-pointer shadow"
               >
                 Done (Save to Images)
               </button>
@@ -3143,37 +3248,37 @@ export default function App() {
 
         {showPendingModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-[#171717] border border-[#2e2e2e] rounded-2xl w-full max-w-lg p-5 shadow-2xl space-y-4 font-sans">
-              <div className="flex items-center justify-between border-b border-[#262626] pb-3">
-                <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
-                  <AlertCircle size={18} />
+            <div className="bg-[#171717] border border-[#2e2e2e] rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-4 font-sans">
+              <div className="flex items-center justify-between border-b border-[#262626] pb-3.5">
+                <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm md:text-base">
+                  <AlertCircle size={20} />
                   <span>Answer Pending ({pendingMessages.length})</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
                   <button 
                     onClick={downloadPendingPDF}
                     title="Export to PDF"
-                    className="text-gray-400 hover:text-amber-400 p-1 cursor-pointer"
+                    className="text-gray-400 hover:text-amber-400 p-1.5 cursor-pointer"
                   >
-                    <Download size={16} />
+                    <Download size={18} />
                   </button>
-                  <button onClick={() => setShowPendingModal(false)} className="text-gray-400 hover:text-white cursor-pointer">
-                    <X size={18} />
+                  <button onClick={() => setShowPendingModal(false)} className="text-gray-400 hover:text-white p-1 cursor-pointer">
+                    <X size={20} />
                   </button>
                 </div>
               </div>
 
-              <div className="max-h-72 overflow-y-auto space-y-2 pr-1 scrollbar-none">
+              <div className="max-h-80 overflow-y-auto space-y-2.5 pr-1 scrollbar-none">
                 {pendingMessages.length === 0 ? (
-                  <div className="text-center text-xs text-gray-500 py-8">
+                  <div className="text-center text-xs md:text-sm text-gray-400 py-10">
                     No pending questions bookmarked.
                   </div>
                 ) : (
                   pendingMessages.map((m, idx) => (
-                    <div key={idx} className="bg-[#212121] border border-[#2d2d2d] p-3 rounded-xl flex items-start justify-between gap-3">
-                      <div className="space-y-1 text-xs">
-                        <div className="flex items-center gap-2 text-[11px] text-gray-400 font-mono">
-                          <span className="text-blue-400">{m.senderRole === 'user' ? 'A' : 'H'}</span>
+                    <div key={idx} className="bg-[#212121] border border-[#2d2d2d] p-3.5 rounded-2xl flex items-start justify-between gap-3.5">
+                      <div className="space-y-1.5 text-xs md:text-sm">
+                        <div className="flex items-center gap-2 text-xs text-gray-400 font-mono">
+                          <span className="text-blue-400 font-bold">{m.senderRole === 'user' ? 'A' : 'H'}</span>
                           <span>•</span>
                           <span>{m.timeFormatted}</span>
                         </div>
@@ -3183,9 +3288,9 @@ export default function App() {
                       </div>
                       <button 
                         onClick={(e) => togglePendingFlag(e, m)}
-                        className="bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-300 text-xs px-2.5 py-1.5 rounded-lg cursor-pointer flex items-center gap-1 shrink-0"
+                        className="bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-300 text-xs px-3 py-2 rounded-xl cursor-pointer flex items-center gap-1.5 shrink-0 font-bold"
                       >
-                        <Check size={13} /> Done
+                        <Check size={14} /> Done
                       </button>
                     </div>
                   ))
@@ -3198,7 +3303,7 @@ export default function App() {
         {incomingAlert && (
           <div 
             onClick={handleBubbleDismiss}
-            className={`absolute bottom-20 right-6 ${bubbleDimensions} rounded-full cursor-pointer z-50 flex items-center justify-center p-3 text-center transition-all duration-300 transform active:scale-95 animate-bounce shadow-2xl backdrop-blur-md overflow-hidden`}
+            className={`absolute bottom-24 right-6 ${bubbleDimensions} rounded-full cursor-pointer z-50 flex items-center justify-center p-3 text-center transition-all duration-300 transform active:scale-95 animate-bounce shadow-2xl backdrop-blur-md overflow-hidden`}
             style={{
               background: 'radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.1) 60%, rgba(255, 255, 255, 0.25) 100%)',
               border: '1px solid rgba(255, 255, 255, 0.6)',
@@ -3213,42 +3318,42 @@ export default function App() {
         )}
 
         {role === 'parent' && (
-          <div className="absolute bottom-16 right-4 sm:bottom-6 sm:right-6 z-40">
+          <div className="absolute bottom-20 right-4 sm:bottom-6 sm:right-6 z-40">
             <button 
               onClick={() => setIsBotOpen(!isBotOpen)}
-              className="bg-[#212121] hover:bg-[#2c2c2c] border border-[#333] p-3.5 rounded-full shadow-2xl text-emerald-400 cursor-pointer active:scale-90 transition-transform"
+              className="bg-[#212121] hover:bg-[#2c2c2c] border border-[#333] p-4 rounded-full shadow-2xl text-emerald-400 cursor-pointer active:scale-90 transition-transform"
             >
-              <Bot size={20} />
+              <Bot size={22} />
             </button>
 
             {isBotOpen && (
-              <div className="absolute bottom-14 right-0 w-80 max-w-[90vw] bg-[#121212] border border-[#282828] rounded-2xl p-4 shadow-2xl space-y-3 font-sans animate-in zoom-in-95 duration-150">
-                <div className="flex justify-between items-center text-xs font-semibold text-white pb-1 border-b border-[#222]">
+              <div className="absolute bottom-16 right-0 w-80 max-w-[90vw] bg-[#121212] border border-[#282828] rounded-3xl p-5 shadow-2xl space-y-3.5 font-sans animate-in zoom-in-95 duration-150">
+                <div className="flex justify-between items-center text-xs md:text-sm font-semibold text-white pb-2 border-b border-[#222]">
                   <div className="flex gap-2">
                     <button
                       onClick={() => setBotTab('instant')}
-                      className={`px-2 py-0.5 rounded ${botTab === 'instant' ? 'bg-[#252525] text-emerald-400' : 'text-gray-400'}`}
+                      className={`px-3 py-1 rounded-lg ${botTab === 'instant' ? 'bg-[#252525] text-emerald-400' : 'text-gray-400'}`}
                     >
                       Instant Alert
                     </button>
                     <button
                       onClick={() => setBotTab('schedule')}
-                      className={`px-2 py-0.5 rounded ${botTab === 'schedule' ? 'bg-[#252525] text-amber-400' : 'text-gray-400'}`}
+                      className={`px-3 py-1 rounded-lg ${botTab === 'schedule' ? 'bg-[#252525] text-amber-400' : 'text-gray-400'}`}
                     >
                       Schedule
                     </button>
                   </div>
-                  <button onClick={() => setIsBotOpen(false)} className="text-gray-400 hover:text-white p-1"><X size={15} /></button>
+                  <button onClick={() => setIsBotOpen(false)} className="text-gray-400 hover:text-white p-1"><X size={16} /></button>
                 </div>
 
                 {botTab === 'instant' ? (
-                  <div className="space-y-2.5">
+                  <div className="space-y-3">
                     <textarea 
                       rows={3}
                       value={customMsg}
                       onChange={(e) => setCustomMsg(e.target.value)}
                       placeholder="Type instant bubble message..."
-                      className="w-full bg-[#1e1e1e] text-xs p-2.5 rounded-lg outline-none border border-[#333] text-white resize-none"
+                      className="w-full bg-[#1e1e1e] text-xs md:text-sm p-3 rounded-xl outline-none border border-[#333] text-white resize-none"
                     />
                     <button 
                       onClick={() => {
@@ -3258,46 +3363,46 @@ export default function App() {
                           setIsBotOpen(false);
                         }
                       }}
-                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs py-2.5 rounded-lg font-medium cursor-pointer transition-colors"
+                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs md:text-sm py-3 rounded-xl font-semibold cursor-pointer transition-colors shadow"
                     >
                       Broadcast Now
                     </button>
                   </div>
                 ) : (
-                  <form onSubmit={handleScheduleAlertSubmit} className="space-y-2.5 text-xs text-left">
+                  <form onSubmit={handleScheduleAlertSubmit} className="space-y-3 text-xs md:text-sm text-left">
                     <textarea 
                       rows={2}
                       required
                       value={schedMsg}
                       onChange={(e) => setSchedMsg(e.target.value)}
                       placeholder="Message for bubble alarm..."
-                      className="w-full bg-[#1e1e1e] text-xs p-2.5 rounded-lg outline-none border border-[#333] text-white resize-none"
+                      className="w-full bg-[#1e1e1e] text-xs md:text-sm p-3 rounded-xl outline-none border border-[#333] text-white resize-none"
                     />
 
                     <div>
-                      <label className="text-[10px] text-gray-400 block mb-1">Time Slot 1 (Required)</label>
+                      <label className="text-[11px] text-gray-400 block mb-1">Time Slot 1 (Required)</label>
                       <input 
                         type="datetime-local" 
                         required
                         value={schedTime1}
                         onChange={(e) => setSchedTime1(e.target.value)}
-                        className="w-full bg-[#1e1e1e] border border-[#333] text-white p-2 rounded text-xs outline-none"
+                        className="w-full bg-[#1e1e1e] border border-[#333] text-white p-2.5 rounded-xl text-xs md:text-sm outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="text-[10px] text-gray-400 block mb-1">Time Slot 2 (Optional Second Alarm)</label>
+                      <label className="text-[11px] text-gray-400 block mb-1">Time Slot 2 (Optional Second Alarm)</label>
                       <input 
                         type="datetime-local" 
                         value={schedTime2}
                         onChange={(e) => setSchedTime2(e.target.value)}
-                        className="w-full bg-[#1e1e1e] border border-[#333] text-white p-2 rounded text-xs outline-none"
+                        className="w-full bg-[#1e1e1e] border border-[#333] text-white p-2.5 rounded-xl text-xs md:text-sm outline-none"
                       />
                     </div>
 
                     <button 
                       type="submit"
-                      className="w-full bg-amber-600 hover:bg-amber-500 text-black font-bold text-xs py-2.5 rounded-lg cursor-pointer"
+                      className="w-full bg-amber-600 hover:bg-amber-500 text-black font-bold text-xs md:text-sm py-3 rounded-xl cursor-pointer shadow"
                     >
                       Schedule Alert
                     </button>
