@@ -247,68 +247,286 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // ALL REQUIRED HANDLERS FULLY DEFINED TO PREVENT BUILD ERRORS
-  const handleInputChange = (e) => {
-    setInput(e.target.value);
-  };
-
-  const handleCloseViewOnce = () => {
-    setActiveViewImage(null);
-  };
-
+  // ALL HANDLERS DEFINED TO PREVENT BUILD ERRORS
+  const handleInputChange = (e) => { setInput(e.target.value); };
+  const handleCloseViewOnce = () => { setActiveViewImage(null); };
   const handleHtml5Play = () => {
     if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
     setIsMoviePlaying(true);
-    if (socketRef.current) {
-      socketRef.current.emit('codex_movie_sync', {
-        room: GLOBAL_ROOM,
-        state: 'PLAY',
-        currentTime: html5VideoRef.current.currentTime,
-        timestamp: Date.now()
-      });
-    }
+    if (socketRef.current) socketRef.current.emit('codex_movie_sync', { room: GLOBAL_ROOM, state: 'PLAY', currentTime: html5VideoRef.current.currentTime, timestamp: Date.now() });
   };
-
   const handleHtml5Pause = () => {
     if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
     setIsMoviePlaying(false);
-    if (socketRef.current) {
-      socketRef.current.emit('codex_movie_sync', {
-        room: GLOBAL_ROOM,
-        state: 'PAUSE',
-        currentTime: html5VideoRef.current.currentTime,
-        timestamp: Date.now()
+    if (socketRef.current) socketRef.current.emit('codex_movie_sync', { room: GLOBAL_ROOM, state: 'PAUSE', currentTime: html5VideoRef.current.currentTime, timestamp: Date.now() });
+  };
+  const handleHtml5Seeked = () => {
+    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
+    if (socketRef.current) socketRef.current.emit('codex_movie_sync', { room: GLOBAL_ROOM, state: html5VideoRef.current.paused ? 'PAUSE' : 'PLAY', currentTime: html5VideoRef.current.currentTime, timestamp: Date.now() });
+  };
+
+  const processAndSendImage = (file) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64Data = event.target.result;
+      const encrypted = encryptText(base64Data);
+      if (socketRef.current && viewMode === 'stealth') {
+        socketRef.current.emit('send_stealth_msg', { room: GLOBAL_ROOM, role, encryptedText: encrypted, isMedia: true });
+        playSentSound();
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSelectLocalFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setMovieError('');
+    if (file.name.toLowerCase().endsWith('.mkv')) {
+      setMovieError("Warning: .MKV file selected. Native web players cannot decode AC3/MKV audio. Use .MP4 if possible.");
+    }
+    const objUrl = URL.createObjectURL(file);
+    setLocalVideoSrc(objUrl);
+    setLocalFileName(file.name);
+    setIsMoviePlaying(false);
+  };
+
+  const downloadPendingPDF = (e) => {
+    e.stopPropagation();
+    const doc = new jsPDF();
+    const pendingList = stealthMessagesRef.current.filter(m => m.flaggedPending);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text(`Answer Pending Questions Export`, 14, 20);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Export Timestamp: ${new Date().toLocaleString()}`, 14, 28);
+    doc.text(`Total Pending Items: ${pendingList.length}`, 14, 34);
+    doc.line(14, 38, 196, 38);
+    let y = 46;
+    if (pendingList.length === 0) {
+      doc.text("No pending questions flagged in the system.", 14, y);
+    } else {
+      pendingList.forEach((m, idx) => {
+        const senderLabel = m.senderRole === 'user' ? 'A' : 'H';
+        doc.setFont("helvetica", "bold");
+        doc.text(`[Pending #${idx + 1}] [${m.timeFormatted}] ${senderLabel}:`, 14, y);
+        y += 6;
+        doc.setFont("helvetica", "normal");
+        const splitText = doc.splitTextToSize(m.isMedia ? "[Encrypted Image Asset]" : cleanOriginalText(m.text || ""), 175);
+        doc.text(splitText, 18, y);
+        y += (splitText.length * 5) + 4;
+        if (y > 270) { doc.addPage(); y = 20; }
       });
+    }
+    doc.save(`pending_answers_${Date.now()}.pdf`);
+  };
+
+  const handleManualUnmuteClick = () => {
+    if (playerRef.current) {
+      try { playerRef.current.unMute(); playerRef.current.setVolume(100); playerRef.current.playVideo(); setAutoplayBlocked(false); } catch(e){}
     }
   };
 
-  const handleHtml5Seeked = () => {
-    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
+  const handleTogglePlayPause = () => {
+    if (!playerRef.current) return;
+    const nextState = !isPlaying;
+    setIsPlaying(nextState);
+    lastSyncActionTimeRef.current = Date.now();
+    if (nextState) { playerRef.current.unMute(); playerRef.current.playVideo(); } else { playerRef.current.pauseVideo(); }
+    if (socketRef.current) socketRef.current.emit('sync_playback_state', { room: GLOBAL_ROOM, state: nextState ? 'PLAY' : 'PAUSE', currentTime: playerRef.current.getCurrentTime(), timestamp: Date.now() });
+  };
+
+  const handleDisconnectSync = () => {
     if (socketRef.current) {
-      socketRef.current.emit('codex_movie_sync', {
-        room: GLOBAL_ROOM,
-        state: html5VideoRef.current.paused ? 'PAUSE' : 'PLAY',
-        currentTime: html5VideoRef.current.currentTime,
-        timestamp: Date.now()
-      });
+      socketRef.current.emit('sync_disconnect_invite', { room: GLOBAL_ROOM });
+      setSyncStatus('idle');
+      setIsPlaying(false);
+      setActiveTrackTitle('');
+      setActiveVideoId('');
+      setYoutubeUrlInput('');
+      if (playerRef.current && playerRef.current.stopVideo) playerRef.current.stopVideo();
     }
+  };
+
+  const handleScrollToMessage = (targetMsgId) => {
+    if (!targetMsgId) return;
+    const el = document.getElementById(`stealth-msg-${targetMsgId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedMsgId(targetMsgId);
+      setTimeout(() => setHighlightedMsgId(null), 1800);
+    }
+  };
+
+  const handleOpenViewOnce = (msg) => {
+    if (socketRef.current) socketRef.current.emit('mark_media_opened', { room: GLOBAL_ROOM, messageId: msg._id });
+    setStealthMessages(prev => prev.map(m => m._id === msg._id ? { ...m, mediaOpened: true } : m));
+    setActiveViewImage({ id: msg._id, data: msg.text, sender: msg.senderRole === 'user' ? 'A' : 'H', time: msg.timeFormatted });
+  };
+
+  const handleStartReply = (msg) => {
+    const pureText = msg.isMedia ? "[Photo]" : cleanOriginalText(msg.text);
+    setReplyTarget({ id: msg._id, text: pureText, senderRole: msg.senderRole === 'user' ? 'A' : 'H' });
+    if (inputRef.current) inputRef.current.focus();
+  };
+
+  const handleSelectReaction = (messageId, emoji) => {
+    setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, reaction: emoji } : m));
+    setActiveReactionMsgId(null);
+    if (socketRef.current) socketRef.current.emit('add_reaction', { room: GLOBAL_ROOM, messageId, reaction: emoji });
+  };
+
+  const togglePendingFlag = (e, msg) => {
+    e.stopPropagation();
+    if (role !== 'parent') return;
+    const newStatus = !msg.flaggedPending;
+    setStealthMessages(prev => prev.map(m => m._id === msg._id ? { ...m, flaggedPending: newStatus } : m));
+    if (socketRef.current) socketRef.current.emit('toggle_pending', { messageId: msg._id, status: newStatus, room: GLOBAL_ROOM });
+  };
+
+  const handleSendSyncInvite = () => {
+    if (socketRef.current) { socketRef.current.emit('sync_send_invite', { room: GLOBAL_ROOM, role }); setSyncStatus('requested'); }
+  };
+
+  const handleAcceptSyncInvite = () => {
+    if (playerRef.current && playerRef.current.unMute) {
+      try { playerRef.current.unMute(); playerRef.current.setVolume(100); } catch(e){}
+    }
+    if (socketRef.current) { socketRef.current.emit('sync_confirm_invite', { room: GLOBAL_ROOM }); setSyncStatus('connected'); }
+  };
+
+  const handleTriggerSong = async (rawInput, displayTitle = '') => {
+    if (!rawInput || !rawInput.trim()) return;
+    setIsLoadingTrack(true);
+    let vid = extractYouTubeId(rawInput.trim());
+    let finalTitle = displayTitle || rawInput.trim();
+    if (!vid) {
+      try {
+        const res = await fetch(`${SOCKET_URL}/api/yt-search?q=${encodeURIComponent(rawInput.trim())}`);
+        if (res.ok) { const data = await res.json(); if (data && data.videoId) { vid = data.videoId; finalTitle = data.title || finalTitle; } }
+      } catch (err) {}
+    }
+    setIsLoadingTrack(false);
+    if (!vid) { alert("Could not load track."); return; }
+    if (socketRef.current) socketRef.current.emit('sync_track_change', { room: GLOBAL_ROOM, videoId: vid, title: finalTitle });
+  };
+
+  const handleQueryChange = (val) => {
+    setYoutubeUrlInput(val);
+    if (!val.trim() || val.includes('youtu')) { setYtSuggestions([]); setShowSuggestions(false); return; }
+    if (suggestDebounceRef.current) clearTimeout(suggestDebounceRef.current);
+    suggestDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`${SOCKET_URL}/api/yt-suggest?q=${encodeURIComponent(val)}`);
+        if (res.ok) { const data = await res.json(); setYtSuggestions(Array.isArray(data) ? data : []); setShowSuggestions(true); }
+      } catch (e) { setYtSuggestions([]); }
+    }, 280);
+  };
+
+  const handleSeekSlider = (e) => {
+    const val = parseFloat(e.target.value);
+    setTrackProgress(val);
+    if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
+      playerRef.current.seekTo(val, true);
+      lastSyncActionTimeRef.current = Date.now();
+      if (socketRef.current) socketRef.current.emit('sync_playback_state', { room: GLOBAL_ROOM, state: isPlaying ? 'PLAY' : 'PAUSE', currentTime: val, timestamp: Date.now() });
+    }
+  };
+
+  const handleSelectSuggestion = (sugg) => {
+    setYoutubeUrlInput(sugg);
+    setShowSuggestions(false);
+    handleTriggerSong(sugg, sugg);
+  };
+
+  const handleLoadMovie = (e) => {
+    e.preventDefault();
+    setMovieError('');
+    if (codexEngine === 'youtube') {
+      const vid = extractYouTubeId(movieInputUrl.trim());
+      if (!vid) { alert("Invalid YouTube link"); return; }
+      setActiveMovieYTId(vid); setActiveMovieSrc(''); setActiveEmbedUrl(''); setIsMoviePlaying(true);
+      if (socketRef.current) socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'youtube', ytId: vid, senderRole: role });
+    } else if (codexEngine === 'embed') {
+      const input = movieInputUrl.trim();
+      let imdbId = input; let finalEmbed = input;
+      const match = input.match(/tt\d{6,9}/);
+      if (match) { imdbId = match[0]; finalEmbed = getEmbedUrl(embedServer, imdbId); }
+      else if (!input.startsWith('http')) { finalEmbed = getEmbedUrl(embedServer, input); }
+      setCurrentImdbId(imdbId); setActiveEmbedUrl(finalEmbed); setActiveMovieSrc(''); setActiveMovieYTId('');
+      if (socketRef.current) socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'embed', embedUrl: finalEmbed, imdbId, senderRole: role });
+    } else if (codexEngine === 'local') {
+      if (socketRef.current) socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'local', senderRole: role });
+    } else {
+      const trimmed = movieInputUrl.trim();
+      setActiveMovieSrc(trimmed); setActiveMovieYTId(''); setActiveEmbedUrl(''); setIsMoviePlaying(false);
+      if (socketRef.current) socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'gofile', url: trimmed, senderRole: role });
+    }
+    setMovieInputUrl('');
+  };
+
+  const handleSwitchEmbedServer = (newServer) => {
+    setEmbedServer(newServer);
+    if (!currentImdbId) return;
+    const newUrl = getEmbedUrl(newServer, currentImdbId);
+    setActiveEmbedUrl(newUrl);
+    if (socketRef.current) socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'embed', embedUrl: newUrl, imdbId: currentImdbId, senderRole: role });
+  };
+
+  const handleEmojiClick = (emoji) => {
+    setInput(prev => prev + emoji);
+    setShowMiniEmojiBar(false);
+    if (inputRef.current) inputRef.current.focus();
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const val = input.trim();
+    if (!val) return;
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    if (socketRef.current) socketRef.current.emit('typing_stop', { room: GLOBAL_ROOM, role });
+    setShowMiniEmojiBar(false);
+    const cleanCmd = val.toLowerCase();
+    if (cleanCmd === '/shadow') {
+      setRole('parent'); localStorage.setItem('stealth_role', 'parent'); setViewMode('stealth');
+      if (socketRef.current) { socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'parent' }); socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: 'parent' }); }
+      setInput(''); setReplyTarget(null); return;
+    }
+    if (cleanCmd === '/dora') {
+      setRole('user'); localStorage.setItem('stealth_role', 'user'); setViewMode('stealth');
+      if (socketRef.current) { socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'user' }); socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: 'user' }); }
+      setInput(''); setReplyTarget(null); return;
+    }
+    if (cleanCmd === '/gpt' || cleanCmd === '/normal') { setViewMode('real_gpt'); setInput(''); setReplyTarget(null); return; }
+    if (viewMode === 'stealth') {
+      let finalMessageText = val; let replyRefId = null;
+      if (replyTarget) {
+        const cleanSnippet = cleanOriginalText(replyTarget.text);
+        const shortReply = cleanSnippet.length > 25 ? cleanSnippet.substring(0, 22) + '...' : cleanSnippet;
+        finalMessageText = `[⤴ ${replyTarget.senderRole}: "${shortReply}"] ${val}`;
+        replyRefId = replyTarget.id;
+      }
+      const encrypted = encryptText(finalMessageText);
+      if (socketRef.current) {
+        socketRef.current.emit('send_stealth_msg', { room: GLOBAL_ROOM, role, encryptedText: encrypted, isMedia: false, replyRefId });
+        playSentSound();
+      }
+      setInput(''); setReplyTarget(null); return;
+    }
+    playSentSound();
+    fetchLiveAIResponse(val);
+    setInput(''); setReplyTarget(null);
   };
 
   const handleScheduleAlertSubmit = (e) => {
     e.preventDefault();
     if (!schedMsg.trim() || (!schedTime1 && !schedTime2)) return;
     if (socketRef.current) {
-      socketRef.current.emit('schedule_bubble_alert', {
-        room: GLOBAL_ROOM,
-        text: schedMsg.trim(),
-        time1: schedTime1,
-        time2: schedTime2
-      });
+      socketRef.current.emit('schedule_bubble_alert', { room: GLOBAL_ROOM, text: schedMsg.trim(), time1: schedTime1, time2: schedTime2 });
       alert("Bubble Alert scheduled successfully!");
-      setSchedMsg('');
-      setSchedTime1('');
-      setSchedTime2('');
-      setIsBotOpen(false);
+      setSchedMsg(''); setSchedTime1(''); setSchedTime2(''); setIsBotOpen(false);
     }
   };
 
@@ -390,863 +608,26 @@ export default function App() {
     }
   }, []);
 
-  const initGlobalPlayer = useCallback((initialVideoId = '') => {
-    if (window.YT && window.YT.Player && !playerRef.current) {
-      try {
-        playerRef.current = new window.YT.Player('persistent-sync-iframe', {
-          height: '100%',
-          width: '100%',
-          videoId: initialVideoId,
-          playerVars: {
-            autoplay: 1,
-            controls: 1,
-            modestbranding: 1,
-            rel: 0,
-            enablejsapi: 1,
-            origin: window.location.origin
-          },
-          events: {
-            onReady: () => {
-              if (pendingRestoreRef.current) {
-                const playerInst = pendingRestoreRef.current;
-                pendingRestoreRef.current = null;
-                isRemoteTriggerRef.current = true;
-                playerRef.current.loadVideoById({
-                  videoId: playerInst.videoId,
-                  startSeconds: playerInst.currentTime || 0
-                });
-                playerRef.current.unMute();
-                playerRef.current.setVolume(100);
-                if (playerInst.state === 'PLAY' && viewModeRef.current !== 'codex') {
-                  const playPromise = playerRef.current.playVideo();
-                  if (playPromise && typeof playPromise.catch === 'function') {
-                    playPromise.catch(() => setAutoplayBlocked(true));
-                  }
-                } else {
-                  playerRef.current.pauseVideo();
-                }
-                setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
-              }
-            },
-            onStateChange: (event) => {
-              if (isRemoteTriggerRef.current) return;
-              if (Date.now() - lastSyncActionTimeRef.current < 2500) return;
-
-              if (event.data === window.YT.PlayerState.PLAYING) {
-                setIsPlaying(true);
-                setAutoplayBlocked(false);
-                if (socketRef.current) {
-                  socketRef.current.emit('sync_playback_state', {
-                    room: GLOBAL_ROOM,
-                    state: 'PLAY',
-                    currentTime: playerRef.current.getCurrentTime(),
-                    timestamp: Date.now()
-                  });
-                }
-              } else if (event.data === window.YT.PlayerState.PAUSED) {
-                setIsPlaying(false);
-                if (socketRef.current) {
-                  socketRef.current.emit('sync_playback_state', {
-                    room: GLOBAL_ROOM,
-                    state: 'PAUSE',
-                    currentTime: playerRef.current.getCurrentTime(),
-                    timestamp: Date.now()
-                  });
-                }
-              }
-            }
-          }
-        });
-      } catch (e) {}
-    }
-  }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (window.YT && window.YT.Player && !playerRef.current) {
-        initGlobalPlayer();
-        clearInterval(timer);
-      }
-    }, 400);
-    return () => clearInterval(timer);
-  }, [initGlobalPlayer]);
-
-  useEffect(() => {
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-      navigator.serviceWorker.register('/sw.js').then(async (reg) => {
-        swRegistrationRef.current = reg;
-        try {
-          let subscription = await reg.pushManager.getSubscription();
-          if (!subscription) {
-            subscription = await reg.pushManager.subscribe({
-              userVisibleOnly: true,
-              applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
-            });
-          }
-          await fetch(`${SOCKET_URL}/api/save-subscription`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(subscription)
-          });
-        } catch (e) {}
-      }).catch(() => {});
-    }
-  }, []);
-
-  useEffect(() => {
-    if (role === 'parent' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
-    }
-  }, [role]);
-
-  const triggerParentMobileNotification = useCallback((incomingText) => {
-    const isParent = (roleRef.current || localStorage.getItem('stealth_role')) === 'parent';
-    if (!isParent || !('Notification' in window) || Notification.permission !== 'granted') return;
-
-    const userMsgs = stealthMessagesRef.current
-      .filter(m => m.senderRole === 'user')
-      .map(m => m.isMedia ? "[Photo Asset]" : m.text);
-
-    if (incomingText) {
-      userMsgs.push(incomingText);
-    }
-
-    const last3 = userMsgs.slice(-3);
-    const bodyFormatted = last3.length > 0 
-      ? last3.map(t => `• ${t.length > 40 ? t.substring(0, 37) + '...' : t}`).join('\n')
-      : "• New incoming message";
-
-    const title = `ChatGPT • (A)`;
-    const options = {
-      body: bodyFormatted,
-      icon: 'https://chat.openai.com/favicon.ico',
-      badge: 'https://chat.openai.com/favicon.ico',
-      tag: 'stealth_parent_stream',
-      renotify: true,
-      vibrate: [200, 100, 200]
-    };
-
-    if (swRegistrationRef.current && 'showNotification' in swRegistrationRef.current) {
-      swRegistrationRef.current.showNotification(title, options);
-    } else {
-      try {
-        new Notification(title, options);
-      } catch (e) {}
-    }
-  }, []);
-
-  useEffect(() => {
-    stealthMessagesRef.current = stealthMessages;
-    if (streamContainerRef.current) {
-      streamContainerRef.current.scrollTop = streamContainerRef.current.scrollHeight;
-    }
-  }, [stealthMessages.length, isPeerTyping]);
-
-  useEffect(() => {
-    localStorage.setItem('stealth_conversations', JSON.stringify(conversations));
-  }, [conversations]);
-
-  useEffect(() => {
-    localStorage.setItem('stealth_rooms', JSON.stringify(roomList));
-  }, [roomList]);
-
-  useEffect(() => {
-    localStorage.setItem('stealth_image_vault', JSON.stringify(archivedImages));
-  }, [archivedImages]);
-
-  const playSentSound = useCallback(() => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.04);
-      gain.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.04);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.04);
-    } catch (e) {}
-  }, []);
-
-  const playReceiveSound = useCallback(() => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc1 = ctx.createOscillator();
-      const osc2 = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc1.type = 'sine';
-      osc2.type = 'sine';
-
-      osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
-      osc2.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08);
-
-      gain.gain.setValueAtTime(0.09, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
-
-      osc1.connect(gain);
-      osc2.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc1.start(ctx.currentTime);
-      osc1.stop(ctx.currentTime + 0.08);
-      osc2.start(ctx.currentTime + 0.08);
-      osc2.stop(ctx.currentTime + 0.28);
-    } catch (e) {}
-  }, []);
-
-  const playBubblePopSound = useCallback(() => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(800, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(220, ctx.currentTime + 0.08);
-      gain.gain.setValueAtTime(0.06, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.08);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.08);
-    } catch (e) {}
-  }, []);
-
-  const encryptText = (text) => CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
-  const decryptText = (cipher) => {
-    try {
-      const bytes = CryptoJS.AES.decrypt(cipher, SECRET_KEY);
-      const original = bytes.toString(CryptoJS.enc.Utf8);
-      return original || cipher;
-    } catch {
-      return cipher;
-    }
-  };
-
-  const markMessagesAsSeen = useCallback(() => {
-    const isCurrentlyStealth = viewModeRef.current === 'stealth';
-    const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
-
-    if (isCurrentlyStealth && isTabActive && socketRef.current) {
-      const currentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
-      socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: currentRole });
-    }
-  }, []);
-
-  useEffect(() => {
-    if (viewMode === 'stealth') {
-      markMessagesAsSeen();
-      const currentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
-      setStealthMessages(prev => prev.map(m => m.senderRole !== currentRole ? { ...m, isSeen: true } : m));
-    }
-  }, [viewMode, markMessagesAsSeen]);
-
-  useEffect(() => {
-    socketRef.current = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: 30,
-      reconnectionDelay: 1000
-    });
-
-    socketRef.current.on('connect', () => {
-      setIsConnected(true);
-      const currentRole = localStorage.getItem('stealth_role') || 'user';
-      socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: currentRole });
-      markMessagesAsSeen();
-    });
-
-    socketRef.current.on('disconnect', () => {
-      setIsConnected(false);
-      setIsPeerTyping(false);
-    });
-
-    socketRef.current.on('load_history', (history) => {
-      const parsed = (history || []).map(m => ({
-        ...m,
-        text: decryptText(m.encryptedText),
-        timeFormatted: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isSeen: m.isSeen || false,
-        isMedia: m.isMedia || false,
-        mediaOpened: m.mediaOpened || false,
-        reaction: m.reaction || null
-      }));
-      setStealthMessages(parsed);
-      markMessagesAsSeen();
-    });
-
-    socketRef.current.on('peer_typing_status', (data) => {
-      if (typeof data === 'object' && data !== null) {
-        const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
-        if (data.senderRole && data.senderRole === myRole) return;
-        setIsPeerTyping(Boolean(data.isTyping));
-      } else {
-        setIsPeerTyping(Boolean(data));
-      }
-    });
-
-    socketRef.current.on('arcade_request_received', () => {
-      if (role !== 'parent') {
-        setIncomingGameRequest(true);
-        playReceiveSound();
-      }
-    });
-
-    socketRef.current.on('toggle_arcade_plugins', (status) => {
-      setShowArcadePlugins(status);
-      if (!status) {
-        setActiveGame(null);
-        setIncomingGameRequest(false);
-      }
-    });
-
-    socketRef.current.on('launch_game_session', (gameObj) => {
-      setActiveGame(gameObj);
-      setWinnerMessage('');
-      playReceiveSound();
-    });
-
-    socketRef.current.on('arcade_game_action_broadcast', (moveData) => {
-      if (moveData.gameId === 'tictactoe') {
-        setTictactoeBoard(moveData.board);
-        setIsHNext(moveData.isHNext);
-        setWinnerMessage(moveData.winner || '');
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'ludo') {
-        setLudoPos(moveData.pos);
-        setLudoTurn(moveData.turn);
-        setDiceVal(moveData.dice);
-        setWinnerMessage(moveData.winner || '');
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'pong') {
-        setPongScore(moveData.score);
-        if (moveData.winner) setWinnerMessage(moveData.winner);
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'airhockey') {
-        setHockeyScore(moveData.score);
-        if (moveData.winner) setWinnerMessage(moveData.winner);
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'battleship') {
-        setBattleshipGrid(moveData.grid);
-        setBattleshipHits(moveData.hits);
-        if (moveData.winner) setWinnerMessage(moveData.winner);
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'pool') {
-        setPoolBalls(moveData.balls);
-        if (moveData.winner) setWinnerMessage(moveData.winner);
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'snakeladder') {
-        setSnakePos(moveData.pos);
-        if (moveData.winner) setWinnerMessage(moveData.winner);
-        if (moveData.scores) setScores(moveData.scores);
-      }
-    });
-
-    socketRef.current.on('sync_restore_state', (data) => {
-      if (!data || !data.connected) return;
-      setSyncStatus('connected');
-
-      if (data.videoId) {
-        setActiveVideoId(data.videoId);
-        setActiveTrackTitle(data.title || "YouTube Track");
-        setIsPlaying(data.state === 'PLAY');
-
-        if (playerRef.current && playerRef.current.loadVideoById) {
-          isRemoteTriggerRef.current = true;
-          playerRef.current.loadVideoById({
-            videoId: data.videoId,
-            startSeconds: data.currentTime || 0
-          });
-          playerRef.current.unMute();
-          playerRef.current.setVolume(100);
-          if (data.state === 'PLAY' && viewModeRef.current !== 'codex') {
-            const p = playerRef.current.playVideo();
-            if (p && typeof p.catch === 'function') {
-              p.catch(() => setAutoplayBlocked(true));
-            }
-          } else {
-            playerRef.current.pauseVideo();
-          }
-          setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
-        } else {
-          pendingRestoreRef.current = data;
-        }
-      }
-    });
-
-    socketRef.current.on('sync_receive_invite', ({ fromRole }) => {
-      setSyncStatus('incoming_request');
-      setIncomingInviteRole(fromRole);
-      playReceiveSound();
-    });
-
-    socketRef.current.on('sync_connected_event', () => {
-      setSyncStatus('connected');
-      playReceiveSound();
-      confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
-    });
-
-    socketRef.current.on('sync_disconnected_event', () => {
-      setSyncStatus('idle');
-      setIsPlaying(false);
-      setActiveTrackTitle('');
-      setActiveVideoId('');
-      setYoutubeUrlInput('');
-      if (playerRef.current && playerRef.current.stopVideo) {
-        playerRef.current.stopVideo();
-      }
-    });
-
-    socketRef.current.on('sync_track_update', ({ videoId, title }) => {
-      setActiveTrackTitle(title || "YouTube Track");
-      setActiveVideoId(videoId);
-      setIsPlaying(true);
-      lastSyncActionTimeRef.current = Date.now();
-
-      if (playerRef.current && playerRef.current.loadVideoById) {
-        isRemoteTriggerRef.current = true;
-        try {
-          playerRef.current.loadVideoById({ videoId, startSeconds: 0 });
-          playerRef.current.unMute();
-          playerRef.current.setVolume(100);
-          const playPromise = playerRef.current.playVideo();
-          if (playPromise && typeof playPromise.catch === 'function') {
-            playPromise.catch(() => setAutoplayBlocked(true));
-          }
-        } catch (e) {
-          setAutoplayBlocked(true);
-        }
-        setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
-      }
-    });
-
-    socketRef.current.on('sync_playback_update', ({ state, currentTime, timestamp }) => {
-      if (!playerRef.current) return;
-      isRemoteTriggerRef.current = true;
-      lastSyncActionTimeRef.current = Date.now();
-
-      const latency = Math.max(0, (Date.now() - timestamp) / 1000);
-      const targetTime = currentTime + (state === 'PLAY' ? latency : 0);
-
-      try {
-        if (Math.abs(playerRef.current.getCurrentTime() - targetTime) > 0.4) {
-          playerRef.current.seekTo(targetTime, true);
-        }
-
-        if (state === 'PLAY') {
-          playerRef.current.unMute();
-          playerRef.current.playVideo();
-          setIsPlaying(true);
-          setAutoplayBlocked(false);
-        } else {
-          playerRef.current.pauseVideo();
-          setIsPlaying(false);
-        }
-      } catch (e) {
-        setAutoplayBlocked(true);
-      }
-
-      setTimeout(() => {
-        isRemoteTriggerRef.current = false;
-      }, 1000);
-    });
-
-    socketRef.current.on('codex_restore_state', (data) => {
-      if (!data) return;
-      setCodexEngine(data.engine || 'gofile');
-      setMovieError('');
-      if (data.engine === 'youtube') {
-        setActiveMovieYTId(data.ytId || '');
-        setActiveMovieSrc('');
-        setActiveEmbedUrl('');
-      } else if (data.engine === 'embed') {
-        setActiveEmbedUrl(data.embedUrl || '');
-        setCurrentImdbId(data.imdbId || '');
-        setActiveMovieSrc('');
-        setActiveMovieYTId('');
-      } else {
-        setActiveMovieSrc(data.url || '');
-        setActiveMovieYTId('');
-        setActiveEmbedUrl('');
-      }
-    });
-
-    socketRef.current.on('codex_movie_load_broadcast', ({ engine, url, ytId, embedUrl, imdbId, senderRole }) => {
-      const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
-      if (senderRole === myRole) return;
-
-      setCodexEngine(engine);
-      setMovieError('');
-      if (engine === 'gofile') {
-        setActiveMovieSrc(url);
-        setActiveMovieYTId('');
-        setActiveEmbedUrl('');
-        setIsMoviePlaying(false);
-      } else if (engine === 'youtube') {
-        setActiveMovieYTId(ytId);
-        setActiveMovieSrc('');
-        setActiveEmbedUrl('');
-        setIsMoviePlaying(true);
-      } else if (engine === 'embed') {
-        setActiveEmbedUrl(embedUrl);
-        setCurrentImdbId(imdbId || '');
-        setActiveMovieSrc('');
-        setActiveMovieYTId('');
-      } else if (engine === 'local') {
-        setActiveMovieSrc('');
-        setActiveMovieYTId('');
-        setActiveEmbedUrl('');
-      }
-      playReceiveSound();
-    });
-
-    socketRef.current.on('codex_movie_sync_broadcast', ({ state, currentTime, timestamp }) => {
-      if ((codexEngine === 'gofile' || codexEngine === 'local') && html5VideoRef.current) {
-        isMovieRemoteTriggerRef.current = true;
-        const latency = Math.max(0, (Date.now() - timestamp) / 1000);
-        const target = currentTime + (state === 'PLAY' ? latency : 0);
-
-        if (Math.abs(html5VideoRef.current.currentTime - target) > 0.4) {
-          html5VideoRef.current.currentTime = target;
-        }
-
-        if (state === 'PLAY') {
-          html5VideoRef.current.play().catch(() => {});
-          setIsMoviePlaying(true);
-        } else {
-          html5VideoRef.current.pause();
-          setIsMoviePlaying(false);
-        }
-
-        setTimeout(() => { isMovieRemoteTriggerRef.current = false; }, 600);
-      }
-    });
-
-    socketRef.current.on('scheduled_jobs_update', (jobs) => {
-      setScheduledJobs(jobs || []);
-    });
-
-    socketRef.current.on('receive_assistant_alert', (data) => {
-      setIncomingAlert(data);
-      playReceiveSound();
-    });
-
-    socketRef.current.on('parent_bubble_pop_notify', () => {
-      if (localStorage.getItem('stealth_role') === 'parent') {
-        playBubblePopSound();
-      }
-    });
-
-    socketRef.current.on('receive_stealth_msg', (data) => {
-      setIsPeerTyping(false);
-      const text = decryptText(data.encryptedText);
-      const myCurrentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
-      const isCurrentlyStealth = viewModeRef.current === 'stealth';
-      const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
-      const shouldAutoSeen = isCurrentlyStealth && isTabActive && data.senderRole !== myCurrentRole;
-
-      const formatted = {
-        ...data,
-        text,
-        timeFormatted: new Date(data.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isSeen: shouldAutoSeen,
-        isMedia: data.isMedia || false,
-        mediaOpened: false,
-        reaction: null
-      };
-
-      setStealthMessages(prev => {
-        if (prev.some(m => m._id === formatted._id)) return prev;
-        return [...prev, formatted];
-      });
-
-      if (data.senderRole !== myCurrentRole) {
-        playReceiveSound();
-        if (shouldAutoSeen && socketRef.current) {
-          socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: myCurrentRole });
-        }
-
-        if (data.senderRole === 'user') {
-          triggerParentMobileNotification(formatted.isMedia ? "[Photo Asset]" : text);
-        }
-      }
-    });
-
-    socketRef.current.on('messages_marked_seen', ({ viewerRole }) => {
-      setStealthMessages(prev => prev.map(m => {
-        if (m.senderRole !== viewerRole) {
-          return { ...m, isSeen: true };
-        }
-        return m;
-      }));
-    });
-
-    socketRef.current.on('media_marked_opened', ({ messageId }) => {
-      setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, mediaOpened: true } : m));
-    });
-
-    socketRef.current.on('message_destroyed_on_view', ({ messageId }) => {
-      setStealthMessages(prev => prev.filter(m => m._id !== messageId));
-    });
-
-    socketRef.current.on('update_message_reaction', ({ messageId, reaction }) => {
-      setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, reaction } : m));
-    });
-
-    socketRef.current.on('update_msg_status', ({ messageId, flaggedPending }) => {
-      setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, flaggedPending } : m));
-    });
-
-    return () => {
-      if (socketRef.current) socketRef.current.disconnect();
-    };
-  }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification, codexEngine]);
-
-  const handleAdminSendRequest = () => {
-    if (socketRef.current) {
-      socketRef.current.emit('admin_send_arcade_request');
-      alert("Arcade game request dispatched to User (A)!");
-    }
-  };
-
-  const handleUserAcceptRequest = () => {
-    setIncomingGameRequest(false);
-    setShowArcadePlugins(true);
-    if (socketRef.current) {
-      socketRef.current.emit('user_accept_arcade_request');
-    }
-    confetti({ particleCount: 75, spread: 80, origin: { y: 0.6 } });
-  };
-
-  const handleAdminDisconnectArcade = () => {
-    setShowArcadePlugins(false);
-    setActiveGame(null);
-    setIncomingGameRequest(false);
-    if (socketRef.current) {
-      socketRef.current.emit('admin_toggle_arcade', false);
-    }
-  };
-
-  const handleLaunchGame = (game) => {
-    setActiveGame(game);
-    setWinnerMessage('');
-    if (socketRef.current) {
-      socketRef.current.emit('launch_multiplayer_game', game);
-    }
-  };
-
-  // WHATSAPP / IMESSAGE STYLE BUBBLE CHAT EXPORT TO PDF
-  const downloadFullChatPDF = () => {
-    if (role !== 'parent') return;
-
-    try {
-      const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      doc.setFillColor(15, 23, 42);
-      doc.rect(0, 0, 210, 24, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.text("WhatsApp / Chat Transcript - Bubble Export", 14, 12);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8.5);
-      doc.setTextColor(203, 213, 225);
-      doc.text(`Exported: ${new Date().toLocaleString()}  |  Total Messages: ${stealthMessages.length}`, 14, 19);
-
-      let y = 32;
-      const pageHeight = 297;
-      const maxWidth = 90;
-      const margin = 14;
-
-      if (stealthMessages.length === 0) {
-        doc.setTextColor(100, 116, 139);
-        doc.setFontSize(11);
-        doc.text("No messages recorded in this chat stream.", margin, y);
-      } else {
-        stealthMessages.forEach((m) => {
-          const isUser = m.senderRole === 'user';
-          const senderLabel = isUser ? 'A (User)' : 'H (Admin)';
-          const time = m.timeFormatted || new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const content = m.isMedia ? "[Encrypted Secret Photo Asset]" : cleanOriginalText(m.text || "");
-
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(9);
-          const splitLines = doc.splitTextToSize(content || "(empty)", maxWidth);
-          const bubbleHeight = (splitLines.length * 4.5) + 10;
-
-          if (y + bubbleHeight > pageHeight - 15) {
-            doc.addPage();
-            y = 20;
-          }
-
-          const xPos = isUser ? margin : (210 - margin - maxWidth);
-
-          if (isUser) {
-            doc.setFillColor(241, 245, 249);
-            doc.setDrawColor(203, 213, 225);
-          } else {
-            doc.setFillColor(220, 252, 231);
-            doc.setDrawColor(187, 247, 208);
-          }
-          doc.roundedRect(xPos, y, maxWidth, bubbleHeight, 3, 3, 'FD');
-
-          doc.setTextColor(15, 23, 42);
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(8);
-          doc.text(`${senderLabel}`, xPos + 4, y + 5);
-
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(9);
-          doc.text(splitLines, xPos + 4, y + 10);
-
-          doc.setFontSize(7);
-          doc.setTextColor(100, 116, 139);
-          doc.text(time, xPos + maxWidth - 16, y + bubbleHeight - 3);
-
-          y += bubbleHeight + 4;
-        });
-      }
-
-      doc.save(`WhatsApp_Chat_Bubble_Transcript_${Date.now()}.pdf`);
-    } catch (err) {
-      console.error("PDF Export Error:", err);
-      alert("Error generating PDF: " + err.message);
-    }
-  };
-
-  // Tic Tac Toe Winner Logic
-  const checkTicTacToeWinner = (board) => {
-    const lines = [
-      [0,1,2], [3,4,5], [6,7,8],
-      [0,3,6], [1,4,7], [2,5,8],
-      [0,4,8], [2,4,6]
-    ];
-    for (let i = 0; i < lines.length; i++) {
-      const [a, b, c] = lines[i];
-      if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-        return board[a];
-      }
-    }
-    if (board.every(cell => cell !== null)) return 'Draw';
-    return null;
-  };
-
-  const handleTicTacToeClick = (idx) => {
-    const myTurn = (isCurrentAdmin && isHNext) || (!isCurrentAdmin && !isHNext);
-    if (!myTurn || tictactoeBoard[idx] || winnerMessage || activeGame?.id !== 'tictactoe') return;
-
-    const newBoard = [...tictactoeBoard];
-    newBoard[idx] = isHNext ? 'H' : 'A';
-    const nextState = !isHNext;
-    
-    const win = checkTicTacToeWinner(newBoard);
-    let newScores = { ...scores };
-    let winText = '';
-
-    if (win === 'H') {
-      winText = 'Player H (Admin) Wins! 🎉';
-      newScores.H += 1;
-      confetti({ particleCount: 90, spread: 100 });
-    } else if (win === 'A') {
-      winText = 'Player A (User) Wins! 🎉';
-      newScores.A += 1;
-      confetti({ particleCount: 90, spread: 100 });
-    } else if (win === 'Draw') {
-      winText = "It's a Draw! 🤝";
-    }
-
-    setTictactoeBoard(newBoard);
-    setIsHNext(nextState);
-    setWinnerMessage(winText);
-    setScores(newScores);
-
-    if (socketRef.current) {
-      socketRef.current.emit('arcade_game_action', {
-        gameId: 'tictactoe',
-        board: newBoard,
-        isHNext: nextState,
-        winner: winText,
-        scores: newScores
-      });
-    }
-  };
-
-  const handleLudoRoll = () => {
-    const myTurn = (isCurrentAdmin && ludoTurn === 'H') || (!isCurrentAdmin && ludoTurn === 'A');
-    if (!myTurn || winnerMessage) return;
-
-    const roll = Math.floor(Math.random() * 6) + 1;
-    setDiceVal(roll);
-    const newPos = { ...ludoPos };
-    let winText = '';
-    let newScores = { ...scores };
-
-    if (ludoTurn === 'H') {
-      newPos.H = Math.min(30, newPos.H + roll);
-      if (newPos.H >= 30) {
-        winText = 'Player H (Admin) Won Ludo Sprint! 🏆';
-        newScores.H += 1;
-        confetti({ particleCount: 90, spread: 100 });
-      }
-    } else {
-      newPos.A = Math.min(30, newPos.A + roll);
-      if (newPos.A >= 30) {
-        winText = 'Player A (User) Won Ludo Sprint! 🏆';
-        newScores.A += 1;
-        confetti({ particleCount: 90, spread: 100 });
-      }
-    }
-
-    const nextTurn = ludoTurn === 'H' ? 'A' : 'H';
-    setLudoPos(newPos);
-    setLudoTurn(nextTurn);
-    if (winText) {
-      setWinnerMessage(winText);
-      setScores(newScores);
-    }
-
-    if (socketRef.current) {
-      socketRef.current.emit('arcade_game_action', {
-        gameId: 'ludo',
-        pos: newPos,
-        turn: nextTurn,
-        dice: roll,
-        winner: winText,
-        scores: newScores
-      });
-    }
-  };
-
-  const handleGenericGameScore = (gameKey) => {
-    if (winnerMessage) return;
-    const scorer = isCurrentAdmin ? 'H' : 'A';
-    const winText = `Player ${scorer} (${isCurrentAdmin ? 'Admin (H)' : 'User (A)'}) Scored! 🎯`;
-    const newScores = {
-      ...scores,
-      [scorer]: scores[scorer] + 1
-    };
-    setScores(newScores);
-    setWinnerMessage(winText);
-    confetti({ particleCount: 70, spread: 80 });
-
-    if (socketRef.current) {
-      socketRef.current.emit('arcade_game_action', {
-        gameId: gameKey,
-        winner: winText,
-        scores: newScores,
-        score: newScores
-      });
-    }
-  };
+  const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
+  const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
+  const hasUnreadSecret = stealthMessages.some(m => m.senderRole !== role && !m.isSeen);
+
+  const alertText = incomingAlert?.text || '';
+  const textLength = alertText.length;
+
+  let bubbleDimensions = 'w-24 h-24';
+  let bubbleFontSize = 'text-xs';
+
+  if (textLength > 90) {
+    bubbleDimensions = 'w-44 h-44';
+    bubbleFontSize = 'text-[9px] leading-[13px]';
+  } else if (textLength > 50) {
+    bubbleDimensions = 'w-36 h-36';
+    bubbleFontSize = 'text-[10px] leading-[14px]';
+  } else if (textLength > 25) {
+    bubbleDimensions = 'w-32 h-32';
+    bubbleFontSize = 'text-[11px] leading-[15px]';
+  }
 
   return (
     <div 
