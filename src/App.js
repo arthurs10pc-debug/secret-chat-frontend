@@ -672,9 +672,9 @@ export default function App() {
           playerRef.current.unMute();
           playerRef.current.setVolume(100);
           if (data.state === 'PLAY' && viewModeRef.current !== 'codex') {
-            const p = playerRef.current.playVideo();
-            if (p && typeof p.catch === 'function') {
-              p.catch(() => setAutoplayBlocked(true));
+            const playPromise = playerRef.current.playVideo();
+            if (playPromise && typeof playPromise.catch === 'function') {
+              playPromise.catch(() => setAutoplayBlocked(true));
             }
           } else {
             playerRef.current.pauseVideo();
@@ -1583,6 +1583,98 @@ export default function App() {
     setReplyTarget(null);
   };
 
+  const downloadPendingPDF = (e) => {
+    e.stopPropagation();
+    const doc = new jsPDF();
+    const pendingList = stealthMessagesRef.current.filter(m => m.flaggedPending);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text(`Answer Pending Questions Export`, 14, 20);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Export Timestamp: ${new Date().toLocaleString()}`, 14, 28);
+    doc.text(`Total Pending Items: ${pendingList.length}`, 14, 34);
+    doc.line(14, 38, 196, 38);
+
+    let y = 46;
+    if (pendingList.length === 0) {
+      doc.text("No pending questions flagged in the system.", 14, y);
+    } else {
+      pendingList.forEach((m, idx) => {
+        const senderLabel = m.senderRole === 'user' ? 'A' : 'H';
+        doc.setFont("helvetica", "bold");
+        doc.text(`[Pending #${idx + 1}] [${m.timeFormatted}] ${senderLabel}:`, 14, y);
+        y += 6;
+
+        doc.setFont("helvetica", "normal");
+        const splitText = doc.splitTextToSize(m.isMedia ? "[Encrypted Image Asset]" : cleanOriginalText(m.text || ""), 175);
+        doc.text(splitText, 18, y);
+        y += (splitText.length * 5) + 4;
+
+        if (y > 270) {
+          doc.addPage();
+          y = 20;
+        }
+      });
+    }
+
+    doc.save(`pending_answers_${Date.now()}.pdf`);
+  };
+
+  const handleBubbleDismiss = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (rect.left + rect.width / 2) / window.innerWidth;
+    const y = (rect.top + rect.height / 2) / window.innerHeight;
+
+    confetti({
+      particleCount: 45,
+      spread: 70,
+      startVelocity: 25,
+      origin: { x, y },
+      colors: ['#ffffff', '#e0f2fe', '#93c5fd', '#bfdbfe']
+    });
+
+    if (socketRef.current) {
+      socketRef.current.emit('bubble_popped', { room: GLOBAL_ROOM });
+    }
+
+    setIncomingAlert(null);
+  };
+
+  const togglePendingFlag = (e, msg) => {
+    e.stopPropagation();
+    if (role !== 'parent') return;
+
+    const newStatus = !msg.flaggedPending;
+    setStealthMessages(prev => prev.map(m => m._id === msg._id ? { ...m, flaggedPending: newStatus } : m));
+
+    if (socketRef.current) {
+      socketRef.current.emit('toggle_pending', { 
+        messageId: msg._id, 
+        status: newStatus, 
+        room: GLOBAL_ROOM 
+      });
+    }
+  };
+
+  const handleEmojiClick = (emoji) => {
+    setInput(prev => prev + emoji);
+    setShowMiniEmojiBar(false);
+    if (inputRef.current) inputRef.current.focus();
+  };
+
+  const handleStartReply = (msg) => {
+    const pureText = msg.isMedia ? "[Photo]" : cleanOriginalText(msg.text);
+    setReplyTarget({
+      id: msg._id,
+      text: pureText,
+      senderRole: msg.senderRole === 'user' ? 'A' : 'H'
+    });
+    if (inputRef.current) inputRef.current.focus();
+  };
+
   const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
   const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
   const hasUnreadSecret = stealthMessages.some(m => m.senderRole !== role && !m.isSeen);
@@ -1984,21 +2076,21 @@ export default function App() {
                 </div>
                 <button 
                   onClick={() => setActiveGame(null)} 
-                  className="bg-zinc-800 hover:bg-zinc-700 text-gray-200 hover:text-white px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all"
+                  className="bg-zinc-800 hover:bg-zinc-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all"
                 >
                   Close Game
                 </button>
               </div>
 
               {/* LIVE SCOREBOARD */}
-              <div className="flex items-center justify-between bg-[#0a0a0a] border border-[#222] px-4 py-2.5 rounded-2xl text-xs font-mono font-semibold">
-                <span className="text-blue-400">Admin (H): {scores.H}</span>
-                <span className="text-emerald-400 animate-pulse">LIVE SCOREBOARD</span>
-                <span className="text-rose-400">User (A): {scores.A}</span>
+              <div className="flex items-center justify-between bg-[#0a0a0a] border border-[#222] px-4 py-2.5 rounded-2xl text-xs font-mono">
+                <span className="text-blue-400 font-bold">Admin (H): {scores.H}</span>
+                <span className="text-emerald-400 animate-pulse font-bold">LIVE SCOREBOARD</span>
+                <span className="text-rose-400 font-bold">User (A): {scores.A}</span>
               </div>
 
               {winnerMessage && (
-                <div className="bg-amber-500/20 border border-amber-500 text-amber-300 py-3 px-4 rounded-xl text-xs font-bold animate-bounce">
+                <div className="bg-amber-500/20 border border-amber-500 text-amber-300 py-2.5 px-4 rounded-xl text-xs font-bold animate-bounce">
                   {winnerMessage}
                 </div>
               )}
@@ -2007,7 +2099,7 @@ export default function App() {
               {activeGame.id === 'tictactoe' && (
                 <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto shadow-inner">
                   <div className="text-xs font-bold text-gray-200">
-                    Turn: <span className={`px-3 py-1 rounded-lg text-white font-mono ${isHNext ? 'bg-blue-600' : 'bg-rose-600'}`}>{isHNext ? 'Player H (Admin)' : 'Player A (User)'}</span>
+                    Turn: <span className={`px-2.5 py-1 rounded-lg text-white font-mono ${isHNext ? 'bg-blue-600' : 'bg-rose-600'}`}>{isHNext ? 'Player H (Admin)' : 'Player A (User)'}</span>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     {tictactoeBoard.map((val, idx) => (
@@ -2015,7 +2107,7 @@ export default function App() {
                         key={idx}
                         onClick={() => handleTicTacToeClick(idx)}
                         className={`h-24 rounded-2xl text-3xl font-black flex items-center justify-center transition-all cursor-pointer shadow-xl transform active:scale-95 ${
-                          val === 'H' ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-blue-500/30' : val === 'A' ? 'bg-gradient-to-br from-rose-600 to-pink-600 text-white shadow-rose-500/30' : 'bg-[#1a1a1a] hover:bg-[#252525] text-gray-600 border border-[#333]'
+                          val === 'H' ? 'bg-blue-600 text-white' : val === 'A' ? 'bg-rose-600 text-white' : 'bg-[#1a1a1a] text-gray-600 border border-[#333]'
                         }`}
                       >
                         {val}
@@ -2027,9 +2119,8 @@ export default function App() {
                       setTictactoeBoard(Array(9).fill(null));
                       setIsHNext(true);
                       setWinnerMessage('');
-                      if (socketRef.current) socketRef.current.emit('arcade_game_action', { gameId: 'tictactoe', board: Array(9).fill(null), isHNext: true, winner: '' });
                     }}
-                    className="text-xs text-amber-400 hover:underline flex items-center gap-1 mx-auto pt-2 cursor-pointer font-semibold"
+                    className="text-xs text-amber-400 hover:underline flex items-center gap-1 mx-auto pt-2 cursor-pointer"
                   >
                     <RotateCcw size={13} /> Reset Board
                   </button>
@@ -2040,183 +2131,31 @@ export default function App() {
               {activeGame.id === 'ludo' && (
                 <div className="space-y-5 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-md mx-auto">
                   <div className="grid grid-cols-2 gap-3">
-                    <div className={`p-3 rounded-2xl border flex flex-col items-center justify-center gap-1 ${ludoTurn === 'H' ? 'bg-blue-600/30 border-blue-500 text-white animate-pulse shadow-lg shadow-blue-500/20' : 'bg-[#1a1a1a] border-[#333] text-gray-400'}`}>
+                    <div className={`p-3 rounded-2xl border flex flex-col items-center justify-center gap-1 ${ludoTurn === 'H' ? 'bg-blue-600/30 border-blue-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333] text-gray-400'}`}>
                       <span className="w-3 h-3 rounded-full bg-red-500 inline-block" />
-                      <span className="text-xs font-bold">Player H (Admin)</span>
-                      <span className="text-xs font-mono font-black text-amber-300">Pos: {ludoPos.H} / 30</span>
+                      <span className="text-xs font-bold">Player H</span>
+                      <span className="text-xs font-mono font-black text-amber-300">Pos: {ludoPos.H}/30</span>
                     </div>
 
-                    <div className={`p-3 rounded-2xl border flex flex-col items-center justify-center gap-1 ${ludoTurn === 'A' ? 'bg-rose-600/30 border-rose-500 text-white animate-pulse shadow-lg shadow-rose-500/20' : 'bg-[#1a1a1a] border-[#333] text-gray-400'}`}>
+                    <div className={`p-3 rounded-2xl border flex flex-col items-center justify-center gap-1 ${ludoTurn === 'A' ? 'bg-rose-600/30 border-rose-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333] text-gray-400'}`}>
                       <span className="w-3 h-3 rounded-full bg-green-500 inline-block" />
-                      <span className="text-xs font-bold">Player A (User)</span>
-                      <span className="text-xs font-mono font-black text-amber-300">Pos: {ludoPos.A} / 30</span>
+                      <span className="text-xs font-bold">Player A</span>
+                      <span className="text-xs font-mono font-black text-amber-300">Pos: {ludoPos.A}/30</span>
                     </div>
                   </div>
 
                   <div className="bg-[#141414] border border-[#262626] p-4 rounded-2xl flex items-center justify-between shadow-inner">
                     <div className="text-sm font-extrabold text-amber-400 flex items-center gap-3">
                       <Dice5 size={24} className="text-amber-500 animate-spin" />
-                      <span>Dice Roll:</span>
                       <span className="w-12 h-12 rounded-2xl bg-amber-500 text-black font-black text-2xl flex items-center justify-center shadow-lg">{diceVal}</span>
                     </div>
                     <button
                       onClick={handleLudoRoll}
-                      className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-6 py-3 rounded-2xl text-xs font-black shadow-lg cursor-pointer active:scale-95 transition-all"
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-2xl text-xs font-black shadow-lg cursor-pointer active:scale-95 transition-all"
                     >
-                      Roll ({ludoTurn === 'H' ? 'Admin Turn' : 'User Turn'})
+                      Roll Dice
                     </button>
                   </div>
-                </div>
-              )}
-
-              {/* 3. PONG RETRO ARCADE */}
-              {activeGame.id === 'pong' && (
-                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
-                  <p className="text-xs text-gray-300">Pong Rally Score: <strong className="text-blue-400">H: {pongScore.H}</strong> | <strong className="text-rose-400">A: {pongScore.A}</strong></p>
-                  <div className="h-32 bg-black border border-[#333] rounded-xl flex items-center justify-center relative overflow-hidden shadow-inner">
-                    <div className="absolute w-3 h-3 bg-emerald-400 rounded-full animate-ping" />
-                    <span className="text-xs text-gray-400 font-mono">Ball in live rally...</span>
-                  </div>
-                  <button
-                    onClick={() => handleGenericGameScore('pong')}
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
-                  >
-                    Hit Ball / Score Point 🏓
-                  </button>
-                </div>
-              )}
-
-              {/* 4. AIR HOCKEY */}
-              {activeGame.id === 'airhockey' && (
-                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
-                  <p className="text-xs text-gray-300">Goals: <strong className="text-blue-400">H: {hockeyScore.H}</strong> | <strong className="text-rose-400">A: {hockeyScore.A}</strong></p>
-                  <div className="h-32 bg-gradient-to-b from-indigo-950 to-blue-950 border border-blue-500/40 rounded-xl flex items-center justify-center shadow-inner">
-                    <span className="text-xs text-cyan-300 font-bold">Neon Ice Arena Active</span>
-                  </div>
-                  <button
-                    onClick={() => handleGenericGameScore('airhockey')}
-                    className="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
-                  >
-                    Shoot Puck & Goal! ⚡
-                  </button>
-                </div>
-              )}
-
-              {/* 5. BATTLESHIP */}
-              {activeGame.id === 'battleship' && (
-                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
-                  <p className="text-xs text-gray-300">Hits: <strong className="text-blue-400">H: {battleshipHits.H}</strong> | <strong className="text-rose-400">A: {battleshipHits.A}</strong> (Target 3)</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {battleshipGrid.map((st, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => {
-                          if (winnerMessage || battleshipGrid[idx] !== 'empty') return;
-                          const newGrid = [...battleshipGrid];
-                          const isHit = idx === 2 || idx === 5 || idx === 7;
-                          newGrid[idx] = isHit ? 'hit' : 'miss';
-                          const currentHits = { ...battleshipHits };
-                          const activeP = isCurrentAdmin ? 'H' : 'A';
-                          let winText = '';
-                          let newScores = { ...scores };
-
-                          if (isHit) {
-                            currentHits[activeP] += 1;
-                            if (currentHits[activeP] >= 3) {
-                              winText = `Player ${activeP} Sunk All Battleships! ⚓`;
-                              newScores[activeP] += 1;
-                              confetti({ particleCount: 90, spread: 100 });
-                            }
-                          }
-                          setBattleshipGrid(newGrid);
-                          setBattleshipHits(currentHits);
-                          if (winText) {
-                            setWinnerMessage(winText);
-                            setScores(newScores);
-                          }
-                          if (socketRef.current) {
-                            socketRef.current.emit('arcade_game_action', { gameId: 'battleship', grid: newGrid, hits: currentHits, winner: winText, scores: newScores });
-                          }
-                        }}
-                        className={`h-16 rounded-xl font-bold text-xs flex items-center justify-center cursor-pointer transition-all ${
-                          st === 'hit' ? 'bg-rose-600 text-white' : st === 'miss' ? 'bg-zinc-700 text-gray-300' : 'bg-[#1e1e1e] hover:bg-[#282828] text-gray-400 border border-[#333]'
-                        }`}
-                      >
-                        {st === 'empty' ? `Grid #${idx+1}` : st.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 6. POOL 8-BALL */}
-              {activeGame.id === 'pool' && (
-                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
-                  <p className="text-xs text-gray-300">Pocketed Balls: <strong className="text-blue-400">H: {poolBalls.H}</strong> | <strong className="text-rose-400">A: {poolBalls.A}</strong></p>
-                  <div className="h-28 bg-[#064e3b] border-4 border-[#1e293b] rounded-xl flex items-center justify-center shadow-inner">
-                    <span className="text-xs text-emerald-300 font-bold">🎱 Billiards Table Ready</span>
-                  </div>
-                  <button
-                    onClick={() => handleGenericGameScore('pool')}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
-                  >
-                    Take Cue Shot & Pocket Ball 🎱
-                  </button>
-                </div>
-              )}
-
-              {/* 7. SNAKE & LADDER */}
-              {activeGame.id === 'snakeladder' && (
-                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
-                  <p className="text-xs text-gray-300">Position -> Admin (H): <strong className="text-blue-400">{snakePos.H}</strong> | User (A): <strong className="text-rose-400">{snakePos.A}</strong> / 30</p>
-                  <button
-                    onClick={() => {
-                      if (winnerMessage) return;
-                      const activeP = isCurrentAdmin ? 'H' : 'A';
-                      const roll = Math.floor(Math.random() * 6) + 1;
-                      const newPos = { ...snakePos };
-                      let winText = '';
-                      let newScores = { ...scores };
-
-                      let pos = newPos[activeP] + roll;
-                      if (pos === 14) pos = 28;
-                      if (pos === 22) pos = 8;
-                      if (pos >= 30) {
-                        pos = 30;
-                        winText = `Player ${activeP} Reached Top First! 🐍`;
-                        newScores[activeP] += 1;
-                        confetti({ particleCount: 90, spread: 100 });
-                      }
-                      newPos[activeP] = pos;
-                      setSnakePos(newPos);
-                      if (winText) {
-                        setWinnerMessage(winText);
-                        setScores(newScores);
-                      }
-                      if (socketRef.current) {
-                        socketRef.current.emit('arcade_game_action', { gameId: 'snakeladder', pos: newPos, winner: winText, scores: newScores });
-                      }
-                    }}
-                    className="w-full bg-purple-600 hover:bg-purple-500 text-white py-3 rounded-xl text-xs font-bold cursor-pointer shadow"
-                  >
-                    Roll Speed Sprint Dice 🎲
-                  </button>
-                </div>
-              )}
-
-              {/* 8. DRAW & GUESS */}
-              {activeGame.id === 'drawguess' && (
-                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
-                  <p className="text-xs text-amber-400 font-mono">Secret Prompt: <strong>{drawGuessWord}</strong></p>
-                  <div className="h-32 bg-white rounded-xl flex items-center justify-center text-black font-bold text-sm shadow-inner">
-                    🎨 Sketch Canvas Active
-                  </div>
-                  <button
-                    onClick={() => handleGenericGameScore('drawguess')}
-                    className="w-full bg-pink-600 hover:bg-pink-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
-                  >
-                    Guess Correct & Score Point! ✨
-                  </button>
                 </div>
               )}
             </div>
@@ -2252,14 +2191,6 @@ export default function App() {
                             {msg.text}
                           </div>
                         </div>
-
-                        <div className="flex items-center gap-3.5 text-[#737373] px-2 pt-2 text-xs">
-                          <button className="hover:text-white cursor-pointer"><Copy size={15} /></button>
-                          <button className="hover:text-white cursor-pointer"><ThumbsUp size={15} /></button>
-                          <button className="hover:text-white cursor-pointer"><ThumbsDown size={15} /></button>
-                          <button className="hover:text-white cursor-pointer"><Share size={15} /></button>
-                          <button className="hover:text-white cursor-pointer"><RotateCw size={15} /></button>
-                        </div>
                       </div>
                     )}
                   </div>
@@ -2291,218 +2222,79 @@ export default function App() {
                       <Code size={15} className="text-[#888]" />
                       <span className="text-xs md:text-[13px] font-medium text-[#dedede]">JSON Schema</span>
                     </div>
-                    <div className="flex items-center gap-2.5">
-                      <button className="hover:text-white cursor-pointer p-1">
-                        <Copy size={14} />
-                      </button>
-                      <button className="flex items-center gap-1.5 bg-[#2c2c2c] hover:bg-[#383838] text-white px-2.5 py-1 rounded-md cursor-pointer text-xs font-medium">
-                        <Play size={11} fill="currentColor" />
-                        <span>Run</span>
-                      </button>
-                    </div>
                   </div>
 
-                  <div className="p-4 sm:p-6 text-[#d4d4d4] space-y-2 overflow-x-hidden leading-relaxed text-[12px] md:text-[12.5px]">
-                    <div><span className="text-[#c586c0]">import</span> <span className="text-[#9cdcfe]">random</span></div>
-                    <br />
-                    <div>
-                      <span className="text-[#569cd6]">def</span> <span className="text-[#dcdcaa]">generate_random_data</span>(<span className="text-[#9cdcfe]">size</span>=<span className="text-[#b5cea8]">10</span>):
-                    </div>
-                    <div className="pl-3 sm:pl-4"><span className="text-[#9cdcfe]">data</span> = []</div>
-                    <div className="pl-3 sm:pl-4">
-                      <span className="text-[#c586c0]">for</span> <span className="text-[#9cdcfe]">_</span> <span className="text-[#c586c0]">in</span> <span className="text-[#dcdcaa]">range</span>(<span className="text-[#9cdcfe]">size</span>):
-                    </div>
-                    <div className="pl-6 sm:pl-8">
-                      <span className="text-[#9cdcfe]">number</span> = <span className="text-[#9cdcfe]">random</span>.<span className="text-[#dcdcaa]">randint</span>(<span className="text-[#b5cea8]">1</span>, <span className="text-[#b5cea8]">100</span>)
-                    </div>
-                    <div className="pl-6 sm:pl-8">
-                      <span className="text-[#9cdcfe]">data</span>.<span className="text-[#dcdcaa]">append</span>(<span className="text-[#9cdcfe]">number</span>)
-                    </div>
-                    <div className="pl-3 sm:pl-4">
-                      <span className="text-[#c586c0]">return</span> <span className="text-[#9cdcfe]">data</span>
-                    </div>
-                    <br />
-
-                    <div className="border-y border-[#2a2a2a] py-2.5 my-2 bg-[#121212]/80 rounded-xl px-2.5 md:px-3.5">
-                      <div className="text-[#6a9955] mb-1.5 flex items-center justify-between flex-wrap gap-2 text-xs">
-                        <span className="flex items-center gap-2">
-                          <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'A' : 'H'})`}</span>
-                          {isPeerTyping && (
-                            <span className="text-[#38bdf8] font-mono animate-pulse flex items-center gap-1.5 font-semibold">
-                              <span className="w-1.5 h-1.5 rounded-full bg-[#38bdf8] animate-ping" />
-                              {role === 'user' ? 'H' : 'A'} is typing...
-                            </span>
-                          )}
-                        </span>
-                        <span className="text-[11px] text-gray-500 font-sans">
-                          {role === 'parent' 
-                            ? `Total (${displayedStealthMessages.length}) records [Permanent View]` 
-                            : `Showing last (${displayedStealthMessages.length}) records`}
-                        </span>
+                  <div className="p-4 sm:p-6 text-[#d4d4d4] space-y-2 overflow-x-hidden leading-relaxed text-xs">
+                    <div className="border-y border-[#2a2a2a] py-2.5 my-2 bg-[#121212]/80 rounded-xl px-2.5">
+                      <div className="text-[#6a9955] mb-1.5 flex items-center justify-between flex-wrap gap-2">
+                        <span>{`# Active Schema Stream (Identity: ${role === 'user' ? 'A' : 'H'})`}</span>
                       </div>
 
                       <div 
                         ref={streamContainerRef}
                         className="space-y-1 max-h-60 sm:max-h-64 overflow-y-auto pr-1 scrollbar-none flex flex-col"
                       >
-                        {displayedStealthMessages.length === 0 ? (
-                          <div className="text-[#6a9955] pl-2">{`# Waiting for execution runtime data...`}</div>
-                        ) : (
-                          displayedStealthMessages.map((m, idx) => {
-                            const displayName = m.senderRole === 'user' ? 'A' : 'H';
-                            const showStatusReceipt = m.senderRole === role;
-                            const isSeen = Boolean(m.isSeen);
-                            const isReactionOpen = activeReactionMsgId === m._id;
-                            const isHighlighted = highlightedMsgId === m._id;
+                        {displayedStealthMessages.map((m, idx) => (
+                          <div 
+                            key={idx} 
+                            id={`stealth-msg-${m._id}`}
+                            className={`group relative flex items-start justify-between px-2 py-1 rounded-lg gap-2 ${
+                              highlightedMsgId === m._id ? 'bg-emerald-950/70' : 'hover:bg-[#202020]'
+                            }`}
+                          >
+                            <div className="flex-1 break-words text-left flex flex-wrap items-center text-xs">
+                              <span className="text-[#9cdcfe] shrink-0 font-bold">{m.senderRole === 'user' ? 'A' : 'H'}</span>
+                              <span className="mx-1 text-[#d4d4d4]">=</span>
 
-                            const hasReplyTag = m.text && m.text.startsWith('[⤴');
-                            let replySnippet = "";
-                            let cleanBody = m.text;
+                              {m.isMedia ? (
+                                <button 
+                                  type="button"
+                                  onClick={() => handleOpenViewOnce(m)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer border bg-[#252525] text-amber-300"
+                                >
+                                  {m.mediaOpened ? <Eye size={12} className="text-emerald-400" /> : <EyeOff size={12} className="text-amber-400 animate-pulse" />}
+                                  <span>{m.mediaOpened ? '[Opened]' : '[View Once]'}</span>
+                                </button>
+                              ) : (
+                                <span className="text-[#ce9178] break-all">"{cleanOriginalText(m.text)}"</span>
+                              )}
+                              
+                              <button 
+                                type="button"
+                                onClick={() => handleStartReply(m)}
+                                className="text-gray-400 hover:text-emerald-400 px-1 ml-1 cursor-pointer font-bold text-xs"
+                              >
+                                ⤴
+                              </button>
+                              
+                              <span className="text-[#6a9955] text-[10px] ml-1">
+                                {`[${m.timeFormatted}]`}
+                              </span>
+                            </div>
 
-                            if (hasReplyTag) {
-                              const closingIndex = m.text.indexOf(']');
-                              if (closingIndex !== -1) {
-                                replySnippet = m.text.substring(1, closingIndex);
-                                cleanBody = m.text.substring(closingIndex + 1).trim();
-                              }
-                            }
-
-                            return (
-                              <div 
-                                key={idx} 
-                                id={`stealth-msg-${m._id}`}
-                                className={`group relative flex items-start justify-between px-2 py-1 rounded-lg transition-all gap-2 ${
-                                  isHighlighted ? 'bg-emerald-950/70 border border-emerald-500/50' : 'hover:bg-[#202020]'
+                            {role === 'parent' && (
+                              <button 
+                                type="button"
+                                onClick={(e) => togglePendingFlag(e, m)}
+                                className={`px-2 py-0.5 text-xs font-bold rounded ${
+                                  m.flaggedPending ? 'bg-amber-500 text-black' : 'bg-[#2a2a2a] text-gray-400'
                                 }`}
                               >
-                                <div className="flex-1 break-words overflow-wrap-anywhere text-left flex flex-wrap items-center text-xs">
-                                  <span className="text-[#9cdcfe] shrink-0 font-bold">{displayName}</span>
-                                  <span className="mx-1 text-[#d4d4d4]">=</span>
-
-                                  {hasReplyTag && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleScrollToMessage(m.replyRefId)}
-                                      className="inline-flex items-center text-[10px] bg-[#222] hover:bg-[#2d2d2d] text-emerald-400 px-1.5 py-0.5 rounded border border-[#333] mr-1.5 cursor-pointer font-medium"
-                                      title="Jump to quoted message"
-                                    >
-                                      {replySnippet}
-                                    </button>
-                                  )}
-
-                                  {m.isMedia ? (
-                                    <button 
-                                      type="button"
-                                      onClick={() => handleOpenViewOnce(m)}
-                                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer transition-all border ${
-                                        m.mediaOpened 
-                                          ? 'bg-[#18261e] border-emerald-700 text-emerald-300' 
-                                          : 'bg-[#252525] hover:bg-[#333] border-[#3d3d3d] text-amber-300'
-                                      }`}
-                                      title={m.mediaOpened ? "Asset viewed" : "Click to view once"}
-                                    >
-                                      {m.mediaOpened ? <Eye size={12} className="text-emerald-400" /> : <EyeOff size={12} className="text-amber-400 animate-pulse" />}
-                                      <span>{m.mediaOpened ? '[Opened: binary_raw]' : '[View Once: payload_locked]'}</span>
-                                    </button>
-                                  ) : (
-                                    <span className="text-[#ce9178] break-all">{`"${cleanBody}"`}</span>
-                                  )}
-                                  
-                                  <button 
-                                    type="button"
-                                    onClick={() => handleStartReply(m)}
-                                    title="Reply to this message"
-                                    className="inline-flex items-center text-gray-400 hover:text-emerald-400 hover:scale-125 transition-transform px-1 ml-1 cursor-pointer font-bold text-xs"
-                                  >
-                                    ⤴
-                                  </button>
-                                  
-                                  <div 
-                                    className="relative inline-flex items-center ml-1 py-0.5"
-                                    onMouseEnter={() => setActiveReactionMsgId(m._id)}
-                                    onMouseLeave={() => setActiveReactionMsgId(null)}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setActiveReactionMsgId(activeReactionMsgId === m._id ? null : m._id);
-                                    }}
-                                  >
-                                    <span className="text-[#6a9955] text-[10px] shrink-0 font-mono cursor-pointer hover:text-emerald-400 transition-colors">
-                                      {`[${m.timeFormatted}]`}
-                                    </span>
-
-                                    {isReactionOpen && (
-                                      <div 
-                                        className="absolute left-0 -top-8 z-30 bg-[#1e1e1e] border border-[#3a3a3a] px-2 py-1 rounded-full shadow-2xl flex items-center gap-1.5 backdrop-blur-md"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        {HOVER_REACTIONS.map((emoji, eIdx) => (
-                                          <button
-                                            key={eIdx}
-                                            type="button"
-                                            onClick={() => handleSelectReaction(m._id, emoji)}
-                                            className="text-sm p-0.5 hover:scale-125 transition-transform cursor-pointer"
-                                          >
-                                            {emoji}
-                                          </button>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  {m.reaction && (
-                                    <span className="ml-1 inline-flex items-center bg-[#252525] border border-[#383838] px-1.5 py-0.2 rounded-full text-[10px] shadow">
-                                      {m.reaction}
-                                    </span>
-                                  )}
-                                  
-                                  {showStatusReceipt && (
-                                    <span 
-                                      className={`text-[12px] font-mono tracking-tighter shrink-0 ml-1 font-bold transition-colors duration-100 ${
-                                        isSeen ? 'text-[#38bdf8]' : 'text-gray-500'
-                                      }`}
-                                      title={isSeen ? "Seen by counterpart" : "Sent"}
-                                    >
-                                      {isSeen ? '..' : '.'}
-                                    </span>
-                                  )}
-                                </div>
-
-                                {role === 'parent' && (
-                                  <button 
-                                    type="button"
-                                    onClick={(e) => togglePendingFlag(e, m)}
-                                    title={m.flaggedPending ? "Mark as Resolved" : "Add to Answer Pending"}
-                                    className={`px-2 py-0.5 text-xs font-bold rounded cursor-pointer transition-all shrink-0 ${
-                                      m.flaggedPending 
-                                        ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-105' 
-                                        : 'bg-[#2a2a2a] text-gray-400 hover:text-white hover:bg-[#383838]'
-                                    }`}
-                                  >
-                                    !
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })
-                        )}
+                                !
+                              </button>
+                            )}
+                          </div>
+                        ))}
                         <div ref={messageEndRef} />
                       </div>
                     </div>
-
-                    <div><span className="text-[#9cdcfe]">numbers</span> = <span className="text-[#dcdcaa]">generate_random_data</span>(<span className="text-[#b5cea8]">20</span>)</div>
-                    <div><span className="text-[#dcdcaa]">print</span>(<span className="text-[#ce9178]">"Generated numbers:"</span>, <span className="text-[#9cdcfe]">numbers</span>)</div>
-                    <br />
-                    <div><span className="text-[#9cdcfe]">total</span> = <span className="text-[#dcdcaa]">sum</span>(<span className="text-[#9cdcfe]">numbers</span>)</div>
-                    <div><span className="text-[#9cdcfe]">average</span> = <span className="text-[#9cdcfe]">total</span> / <span className="text-[#dcdcaa]">len</span>(<span className="text-[#9cdcfe]">numbers</span>)</div>
-                    <div><span className="text-[#9cdcfe]">maximum</span> = <span className="text-[#dcdcaa]">max</span>(<span className="text-[#9cdcfe]">numbers</span>)</div>
-                    <div><span className="text-[#9cdcfe]">minimum</span> = <span className="text-[#dcdcaa]">min</span>(<span className="text-[#9cdcfe]">numbers</span>)</div>
                   </div>
                 </div>
               </section>
             )}
 
             {viewMode === 'images_archive' && (
-              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-3 scrollbar-none font-sans">
+              <section className="flex-1 overflow-y-auto px-3 py-3 max-w-4xl w-full mx-auto space-y-3 scrollbar-none font-sans">
                 <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
                   <div className="flex items-center gap-2">
                     <ImageIcon className="text-blue-400" size={18} />
@@ -2510,49 +2302,41 @@ export default function App() {
                   </div>
                   <span className="text-[11px] text-gray-400 font-mono">{archivedImages.length} items</span>
                 </div>
-
-                {archivedImages.length === 0 ? (
-                  <div className="text-center py-16 text-gray-500 text-xs">
-                    No images archived yet.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-3">
-                    {archivedImages.map((item, idx) => (
-                      <div key={idx} className="bg-[#171717] border border-[#2a2a2a] rounded-xl overflow-hidden shadow-lg group relative">
-                        <img 
-                          src={item.data} 
-                          alt="Archived" 
-                          className="w-full h-32 sm:h-36 object-cover cursor-pointer hover:scale-105 transition-transform"
-                          onClick={() => window.open(item.data, '_blank')}
-                        />
-                        <div className="p-2 bg-[#121212] flex items-center justify-between text-[10px] text-gray-400 font-mono">
-                          <span className="font-bold text-blue-400">{item.sender}</span>
-                          <span>{item.time}</span>
-                        </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                  {archivedImages.map((item, idx) => (
+                    <div key={idx} className="bg-[#171717] border border-[#2a2a2a] rounded-xl overflow-hidden shadow-lg">
+                      <img 
+                        src={item.data} 
+                        alt="Archived" 
+                        className="w-full h-32 object-cover cursor-pointer"
+                        onClick={() => window.open(item.data, '_blank')}
+                      />
+                      <div className="p-2 bg-[#121212] flex items-center justify-between text-[10px] text-gray-400 font-mono">
+                        <span className="text-blue-400 font-bold">{item.sender}</span>
+                        <span>{item.time}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    </div>
+                  ))}
+                </div>
               </section>
             )}
 
             {viewMode === 'scheduled' && (
-              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-4 scrollbar-none font-sans">
+              <section className="flex-1 overflow-y-auto px-3 py-3 max-w-4xl w-full mx-auto space-y-4 scrollbar-none font-sans">
                 <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-400">
                       <Music size={18} />
                     </div>
                     <div>
                       <h2 className="text-sm font-bold text-white">Synced Music Lounge</h2>
-                      <p className="text-[11px] text-gray-400">Continuous background audio synchronization</p>
                     </div>
                   </div>
 
                   {syncStatus === 'connected' && (
                     <button
                       onClick={handleDisconnectSync}
-                      className="flex items-center gap-1 bg-rose-950 border border-rose-800 text-rose-300 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer"
+                      className="flex items-center gap-1 bg-rose-950 text-rose-300 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer"
                     >
                       <Unlink size={12} /> Disconnect
                     </button>
@@ -2560,304 +2344,79 @@ export default function App() {
                 </div>
 
                 {syncStatus !== 'connected' ? (
-                  <div className="bg-[#141414] border border-[#262626] rounded-2xl p-6 sm:p-8 text-center space-y-4 shadow-xl">
-                    <div className="w-14 h-14 rounded-full bg-[#1e1e1e] border border-[#333] flex items-center justify-center text-amber-400 mx-auto">
-                      <Radio size={26} className={syncStatus === 'requested' ? 'animate-pulse text-blue-400' : ''} />
-                    </div>
-
-                    <div>
-                      <h3 className="text-base font-bold text-white">Two-Way Handshake</h3>
-                      <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
-                        Both sides must authorize the synchronized audio stream.
-                      </p>
-                    </div>
-
+                  <div className="bg-[#141414] border border-[#262626] rounded-2xl p-6 text-center space-y-4 shadow-xl">
+                    <Radio size={26} className={`mx-auto ${syncStatus === 'requested' ? 'animate-pulse text-blue-400' : 'text-amber-400'}`} />
+                    <h3 className="text-base font-bold text-white">Two-Way Handshake</h3>
                     {syncStatus === 'idle' && (
                       <button
                         onClick={handleSendSyncInvite}
-                        className="w-full sm:w-auto bg-[#1c3a6b] text-white px-6 py-3 rounded-xl text-xs font-bold cursor-pointer inline-flex items-center justify-center gap-2 active:scale-95"
+                        className="bg-[#1c3a6b] text-white px-6 py-3 rounded-xl text-xs font-bold cursor-pointer inline-flex items-center gap-2"
                       >
-                        <Link2 size={15} />
-                        <span>Send Connection Request ({role === 'parent' ? 'Admin' : 'User'})</span>
+                        <Link2 size={15} /> Send Connection Request
                       </button>
                     )}
-
-                    {syncStatus === 'requested' && (
-                      <div className="inline-flex items-center gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-4 py-2.5 rounded-xl">
-                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                        <span>Invitation sent! Waiting for counterpart...</span>
-                      </div>
-                    )}
-
+                    {syncStatus === 'requested' && <p className="text-xs text-amber-300">Waiting for counterpart...</p>}
                     {syncStatus === 'incoming_request' && (
-                      <div className="bg-emerald-950/40 border border-emerald-500/40 p-4 rounded-2xl max-w-sm mx-auto space-y-3">
-                        <p className="text-xs text-emerald-300 font-medium">
-                          Incoming lounge invitation from <strong className="text-white uppercase">{incomingInviteRole}</strong>!
-                        </p>
-                        <button
-                          onClick={handleAcceptSyncInvite}
-                          className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-                        >
-                          <Check size={16} /> Accept & Join Synced Lounge
-                        </button>
-                      </div>
+                      <button onClick={handleAcceptSyncInvite} className="bg-emerald-600 text-white font-bold py-3 px-6 rounded-xl text-xs">
+                        Accept & Join
+                      </button>
                     )}
                   </div>
                 ) : (
-                  <div className="space-y-3 sm:space-y-4">
-                    <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3 flex items-center justify-between shadow-lg">
-                      <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold font-mono">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                        <span>LINKED (Persists across refresh)</span>
-                      </div>
-                      <span className="text-[11px] text-gray-400 font-mono">Exact Sync</span>
+                  <div className="space-y-4">
+                    <form onSubmit={(e) => { e.preventDefault(); handleTriggerSong(youtubeUrlInput); }} className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={youtubeUrlInput}
+                        onChange={(e) => handleQueryChange(e.target.value)}
+                        placeholder="Type song name or YouTube link..."
+                        className="flex-1 bg-[#171717] border border-[#2c2c2c] rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                      />
+                      <button type="submit" disabled={isLoadingTrack} className="bg-[#1c3a6b] text-white px-5 py-2.5 rounded-xl text-xs font-bold">
+                        {isLoadingTrack ? <Loader2 size={14} className="animate-spin" /> : 'Play'}
+                      </button>
+                    </form>
+
+                    <div className="bg-[#121212] border border-[#242424] rounded-2xl p-6 text-center space-y-2.5">
+                      <Volume2 size={24} className={`mx-auto text-emerald-400 ${isPlaying ? 'animate-bounce' : ''}`} />
+                      <h3 className="text-sm font-bold text-white">{activeTrackTitle || "No track playing"}</h3>
                     </div>
-
-                    <div className="relative">
-                      <form onSubmit={(e) => { e.preventDefault(); handleTriggerSong(youtubeUrlInput); }} className="flex gap-2">
-                        <input 
-                          type="text" 
-                          value={youtubeUrlInput}
-                          onChange={(e) => handleQueryChange(e.target.value)}
-                          onFocus={() => { if (ytSuggestions.length > 0) setShowSuggestions(true); }}
-                          placeholder="Paste YouTube link or type song name..."
-                          className="flex-1 bg-[#171717] border border-[#2c2c2c] rounded-xl px-3.5 py-2.5 text-sm sm:text-xs text-white placeholder-gray-500 outline-none"
-                        />
-                        <button
-                          type="submit"
-                          disabled={isLoadingTrack}
-                          className="bg-[#1c3a6b] text-white px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold shrink-0 cursor-pointer flex items-center gap-1"
-                        >
-                          {isLoadingTrack ? <Loader2 size={14} className="animate-spin" /> : null}
-                          <span>{isLoadingTrack ? 'Syncing...' : 'Play'}</span>
-                        </button>
-                      </form>
-
-                      {activeVideoId && (
-                        <div className="mt-2.5 px-1 flex items-center gap-3">
-                          <input
-                            type="range"
-                            min={0}
-                            max={trackDuration || 100}
-                            value={trackProgress}
-                            onChange={handleSeekSlider}
-                            className="w-full accent-emerald-400 bg-[#2a2a2a] h-1.5 rounded-lg cursor-pointer outline-none"
-                          />
-                        </div>
-                      )}
-
-                      {showSuggestions && ytSuggestions.length > 0 && (
-                        <div className="absolute left-0 right-16 top-full mt-1.5 bg-[#171717] border border-[#333] rounded-xl shadow-2xl z-30 max-h-48 overflow-y-auto py-1">
-                          {ytSuggestions.map((sugg, sIdx) => (
-                            <div
-                              key={sIdx}
-                              onClick={() => handleSelectSuggestion(sugg)}
-                              className="px-4 py-2.5 text-xs text-gray-200 hover:bg-[#252525] cursor-pointer flex items-center gap-2 border-b border-[#222]/50 last:border-none"
-                            >
-                              <Search size={13} className="text-gray-500" />
-                              <span>{sugg}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="w-full bg-[#121212] border border-[#242424] rounded-2xl p-5 sm:p-6 text-center space-y-2.5 shadow-xl">
-                      <div className="w-14 h-14 rounded-full bg-[#1c1c1c] border border-[#2e2e2e] flex items-center justify-center text-emerald-400 mx-auto">
-                        <Volume2 size={24} className={isPlaying ? 'animate-bounce' : ''} />
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-gray-500 font-mono uppercase tracking-wider block">Live Synchronized</span>
-                        <h3 className="text-sm sm:text-base font-bold text-white mt-1 break-words">
-                          {activeTrackTitle || "No track playing. Search or paste link above."}
-                        </h3>
-                      </div>
-                    </div>
-
-                    {activeVideoId && (
-                      <div className="bg-[#171717] border border-[#292929] rounded-2xl p-2.5 sm:p-3 flex items-center justify-between">
-                        <button
-                          onClick={handleTogglePlayPause}
-                          className="bg-[#242424] text-white p-2.5 px-4 rounded-xl cursor-pointer flex items-center gap-2 text-xs font-semibold"
-                        >
-                          {isPlaying ? <Pause size={15} /> : <Play size={15} />}
-                          <span>{isPlaying ? 'Pause for Both' : 'Play for Both'}</span>
-                        </button>
-
-                        <button
-                          onClick={handleDisconnectSync}
-                          className="text-xs text-rose-400 px-3 py-2 rounded-lg border border-rose-900/50 cursor-pointer"
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    )}
                   </div>
                 )}
               </section>
             )}
 
             {viewMode === 'codex' && (
-              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-3 sm:space-y-4 scrollbar-none font-sans">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#222] pb-2.5 gap-2">
+              <section className="flex-1 overflow-y-auto px-3 py-3 max-w-5xl w-full mx-auto space-y-3 font-sans">
+                <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                      <TerminalSquare size={18} />
-                    </div>
-                    <div>
-                      <h2 className="text-sm font-bold text-white">Codex</h2>
-                      <p className="text-[11px] text-gray-400">Watch Together (Dual Cloud & Local)</p>
-                    </div>
+                    <TerminalSquare size={18} className="text-emerald-400" />
+                    <h2 className="text-sm font-bold text-white">Codex</h2>
                   </div>
-
                   {role === 'parent' && (
-                    <div className="flex overflow-x-auto scrollbar-none bg-[#181818] p-1 rounded-xl border border-[#2c2c2c] gap-1 text-xs shrink-0 max-w-full">
-                      <button
-                        type="button"
-                        onClick={() => { setCodexEngine('gofile'); setMovieError(''); }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer shrink-0 ${
-                          codexEngine === 'gofile' ? 'bg-[#252525] text-emerald-400 shadow' : 'text-gray-400 hover:text-white'
-                        }`}
-                      >
-                        <Tv size={13} />
-                        <span>Stream</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setCodexEngine('youtube'); setMovieError(''); }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer shrink-0 ${
-                          codexEngine === 'youtube' ? 'bg-[#252525] text-blue-400 shadow' : 'text-gray-400 hover:text-white'
-                        }`}
-                      >
-                        <Video size={13} />
-                        <span>YouTube</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setCodexEngine('embed'); setMovieError(''); }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer shrink-0 ${
-                          codexEngine === 'embed' ? 'bg-[#252525] text-purple-400 shadow' : 'text-gray-400 hover:text-white'
-                        }`}
-                      >
-                        <Globe size={13} />
-                        <span>Embed API</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setCodexEngine('local'); setMovieError(''); }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer shrink-0 ${
-                          codexEngine === 'local' ? 'bg-[#252525] text-amber-400 shadow' : 'text-gray-400 hover:text-white'
-                        }`}
-                      >
-                        <HardDrive size={13} />
-                        <span>Local File</span>
-                      </button>
+                    <div className="flex bg-[#181818] p-1 rounded-xl border border-[#2c2c2c] gap-1 text-xs">
+                      <button type="button" onClick={() => { setCodexEngine('gofile'); setMovieError(''); }} className={`px-3 py-1.5 rounded-lg ${codexEngine === 'gofile' ? 'bg-[#252525] text-emerald-400' : 'text-gray-400'}`}>Stream</button>
+                      <button type="button" onClick={() => { setCodexEngine('youtube'); setMovieError(''); }} className={`px-3 py-1.5 rounded-lg ${codexEngine === 'youtube' ? 'bg-[#252525] text-blue-400' : 'text-gray-400'}`}>YouTube</button>
                     </div>
                   )}
                 </div>
 
                 {role === 'parent' && (
-                  <div className="space-y-2">
-                    {codexEngine !== 'local' ? (
-                      <form onSubmit={handleLoadMovie} className="flex gap-2">
-                        <input 
-                          type="text"
-                          value={movieInputUrl}
-                          onChange={(e) => setMovieInputUrl(e.target.value)}
-                          placeholder={
-                            codexEngine === 'gofile'
-                              ? "Direct stream link (GoFile / Pixeldrain MP4)..."
-                              : codexEngine === 'youtube'
-                              ? "YouTube watch link..."
-                              : "Enter IMDb ID (e.g. tt0499549)..."
-                          }
-                          className="flex-1 bg-[#171717] border border-[#2c2c2c] rounded-xl px-3.5 py-2.5 text-sm sm:text-xs text-white placeholder-gray-500 outline-none"
-                        />
-                        <button
-                          type="submit"
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold cursor-pointer shrink-0 shadow active:scale-95"
-                        >
-                          Broadcast
-                        </button>
-                      </form>
-                    ) : (
-                      <div className="bg-[#141414] border border-[#2c2c2c] p-3 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                        <div>
-                          <span className="text-xs font-bold text-amber-400 block">Local File Zero-Data Mode Active</span>
-                          <span className="text-[11px] text-gray-400">Play/pause will be synced locally with zero internet consumption!</span>
-                        </div>
-                        <div className="flex gap-2 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => localVideoInputRef.current && localVideoInputRef.current.click()}
-                            className="bg-[#242424] text-white px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer border border-[#333]"
-                          >
-                            {localFileName ? `Change: ${localFileName.substring(0, 12)}...` : "📁 Pick Movie"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleLoadMovie}
-                            className="bg-amber-600 text-black px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
-                          >
-                            Broadcast
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {codexEngine === 'embed' && (
-                      <div className="flex items-center justify-between bg-[#141414] border border-[#252525] px-3 py-2 rounded-xl text-xs gap-2 overflow-x-auto scrollbar-none">
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-gray-400 text-[11px] font-semibold">Mirror:</span>
-                          <div className="flex gap-1">
-                            <button
-                              type="button"
-                              onClick={() => handleSwitchEmbedServer('vidlink')}
-                              className={`px-2 py-1 rounded text-[11px] font-medium cursor-pointer ${embedServer === 'vidlink' ? 'bg-purple-600 text-white' : 'bg-[#222] text-gray-400'}`}
-                            >
-                              Server 1
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleSwitchEmbedServer('autoembed')}
-                              className={`px-2 py-1 rounded text-[11px] font-medium cursor-pointer ${embedServer === 'autoembed' ? 'bg-purple-600 text-white' : 'bg-[#222] text-gray-400'}`}
-                            >
-                              Server 2
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleSwitchEmbedServer('vidsrc_xyz')}
-                              className={`px-2 py-1 rounded text-[11px] font-medium cursor-pointer ${embedServer === 'vidsrc_xyz' ? 'bg-purple-600 text-white' : 'bg-[#222] text-gray-400'}`}
-                            >
-                              Server 3
-                            </button>
-                          </div>
-                        </div>
-
-                        {activeEmbedUrl && (
-                          <a 
-                            href={activeEmbedUrl} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="text-purple-400 text-[11px] flex items-center gap-1 font-medium underline shrink-0"
-                          >
-                            <ExternalLink size={12} />
-                            <span>Direct</span>
-                          </a>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  <form onSubmit={handleLoadMovie} className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={movieInputUrl}
+                      onChange={(e) => setMovieInputUrl(e.target.value)}
+                      placeholder="Direct MP4 link or YouTube watch link..."
+                      className="flex-1 bg-[#171717] border border-[#2c2c2c] rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                    />
+                    <button type="submit" className="bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer">
+                      Broadcast
+                    </button>
+                  </form>
                 )}
 
-                {movieError && (
-                  <div className="bg-amber-950/40 border border-amber-600/40 text-amber-300 p-2.5 rounded-xl text-xs flex items-center gap-2">
-                    <AlertTriangle size={16} className="shrink-0 text-amber-400" />
-                    <span>{movieError}</span>
-                  </div>
-                )}
-
-                <div className="w-full bg-[#0a0a0a] border border-[#242424] rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center min-h-[220px] sm:min-h-[380px]">
+                <div className="w-full bg-[#0a0a0a] border border-[#242424] rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center min-h-[300px]">
                   {codexEngine === 'gofile' ? (
                     activeMovieSrc ? (
                       <video 
@@ -2865,154 +2424,49 @@ export default function App() {
                         src={activeMovieSrc}
                         controls
                         playsInline
-                        referrerPolicy="no-referrer"
-                        crossOrigin="anonymous"
                         onPlay={handleHtml5Play}
                         onPause={handleHtml5Pause}
                         onSeeked={handleHtml5Seeked}
-                        onError={() => {
-                          setMovieError("Cannot decode video. Web browsers (Chrome/Safari) do NOT support .MKV files. Please use standard .MP4 (H.264/AAC) format.");
-                        }}
-                        className="w-full max-h-[55vh] sm:max-h-[72vh] object-contain rounded-2xl bg-black"
+                        className="w-full max-h-[65vh] object-contain rounded-2xl bg-black"
                       />
                     ) : (
-                      <div className="text-center p-6 space-y-2 text-gray-500">
-                        <Tv size={36} className="mx-auto opacity-30 text-emerald-400" />
-                        <p className="text-xs">
-                          {role === 'parent' ? "Paste direct MP4 link above and click Broadcast" : "Waiting for Admin to broadcast stream..."}
-                        </p>
-                      </div>
-                    )
-                  ) : codexEngine === 'youtube' ? (
-                    activeMovieYTId ? (
-                      <iframe 
-                        src={`https://www.youtube.com/embed/${activeMovieYTId}?autoplay=1&controls=1&modestbranding=1&rel=0`}
-                        title="Codex YouTube"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        className="w-full h-[45vh] sm:h-[65vh] rounded-2xl border-none"
-                      />
-                    ) : (
-                      <div className="text-center p-6 space-y-2 text-gray-500">
-                        <Film size={36} className="mx-auto opacity-30 text-blue-400" />
-                        <p className="text-xs">
-                          {role === 'parent' ? "Paste YouTube watch link above to stream." : "Waiting for Admin to broadcast video..."}
-                        </p>
-                      </div>
-                    )
-                  ) : codexEngine === 'embed' ? (
-                    activeEmbedUrl ? (
-                      <iframe 
-                        key={activeEmbedUrl}
-                        src={activeEmbedUrl}
-                        title="Codex Embed API"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        allowFullScreen
-                        referrerPolicy="origin"
-                        className="w-full h-[50vh] sm:h-[68vh] rounded-2xl border-none bg-black"
-                      />
-                    ) : (
-                      <div className="text-center p-6 space-y-2 text-gray-500">
-                        <Globe size={36} className="mx-auto opacity-30 text-purple-400" />
-                        <p className="text-xs">
-                          {role === 'parent' ? "Enter IMDb ID (e.g. tt0499549) to stream movies." : "Waiting for Admin to load Embed API..."}
-                        </p>
-                      </div>
+                      <p className="text-xs text-gray-500">Waiting for Admin stream...</p>
                     )
                   ) : (
-                    localVideoSrc ? (
-                      <div className="w-full relative flex flex-col items-center">
-                        <video 
-                          ref={html5VideoRef}
-                          src={localVideoSrc}
-                          controls
-                          playsInline
-                          onPlay={handleHtml5Play}
-                          onPause={handleHtml5Pause}
-                          onSeeked={handleHtml5Seeked}
-                          className="w-full max-h-[50vh] sm:max-h-[70vh] object-contain rounded-2xl bg-black"
-                        />
-                        <div className="w-full bg-[#111] p-2 flex items-center justify-between text-[11px] text-gray-400 px-3 font-mono">
-                          <span className="truncate max-w-[200px]">📁 {localFileName}</span>
-                          <button 
-                            onClick={() => localVideoInputRef.current && localVideoInputRef.current.click()}
-                            className="text-amber-400 underline cursor-pointer"
-                          >
-                            Change
-                          </button>
-                        </div>
-                      </div>
+                    activeMovieYTId ? (
+                      <iframe 
+                        src={`https://www.youtube.com/embed/${activeMovieYTId}?autoplay=1&controls=1`}
+                        title="YouTube"
+                        allowFullScreen
+                        className="w-full h-[60vh] rounded-2xl border-none"
+                      />
                     ) : (
-                      <div className="text-center p-6 space-y-2.5 text-gray-400">
-                        <HardDrive size={36} className="mx-auto opacity-40 text-amber-400" />
-                        <p className="text-xs font-semibold text-white">Local File Sync (Offline)</p>
-                        <p className="text-[11px] text-gray-400 max-w-xs mx-auto">
-                          Select downloaded movie from your device. Both sides will be millisecond frame synced!
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => localVideoInputRef.current && localVideoInputRef.current.click()}
-                          className="bg-[#242424] text-white px-4 py-2.5 rounded-xl text-xs font-semibold cursor-pointer border border-[#333]"
-                        >
-                          Select Movie File
-                        </button>
-                      </div>
+                      <p className="text-xs text-gray-500">Waiting for YouTube link...</p>
                     )
                   )}
                 </div>
               </section>
             )}
 
-            <div className="px-3 sm:px-6 lg:px-8 pb-3 sm:pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
+            <div className="px-3 pb-3 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
               {replyTarget && (
-                <div className="mb-2 bg-[#1a1a1a] border border-[#333] px-3.5 py-1.5 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-150">
-                  <div className="flex items-center gap-2 overflow-hidden">
+                <div className="mb-2 bg-[#1a1a1a] border border-[#333] px-3.5 py-1.5 rounded-xl flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
                     <span className="text-emerald-400 font-bold">⤴ {replyTarget.senderRole}:</span>
-                    <span className="text-gray-300 truncate italic">"{replyTarget.text}"</span>
+                    <span className="text-gray-300 italic">"{replyTarget.text}"</span>
                   </div>
-                  <button 
-                    type="button" 
-                    onClick={() => setReplyTarget(null)}
-                    className="text-gray-400 hover:text-white p-0.5 rounded cursor-pointer"
-                  >
+                  <button type="button" onClick={() => setReplyTarget(null)} className="text-gray-400 hover:text-white cursor-pointer">
                     <X size={15} />
                   </button>
                 </div>
               )}
 
-              {viewMode === 'stealth' && isPeerTyping && (
-                <div className="mb-1.5 px-3 flex items-center gap-2 text-[11px] font-mono text-[#38bdf8] select-none animate-pulse">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#38bdf8] animate-ping" />
-                  <span>{role === 'user' ? 'H' : 'A'} is typing...</span>
-                </div>
-              )}
-
-              {showMiniEmojiBar && (
-                <div className="absolute right-12 bottom-16 z-30 bg-[#1e1e1e]/95 backdrop-blur-md border border-[#333] px-2 py-1 rounded-full shadow-2xl flex items-center gap-1.5 animate-in fade-in duration-150">
-                  {QUICK_EMOJIS.map((emoji, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleEmojiClick(emoji)}
-                      className="text-base sm:text-lg p-1 hover:scale-125 active:scale-95 transition-transform cursor-pointer"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              )}
-
               <form onSubmit={handleSubmit} className="w-full relative">
-                <div className="w-full bg-[#212121] rounded-full border border-[#2e2e2e] focus-within:border-[#444] px-3 sm:px-4 py-2 sm:py-2.5 flex items-center gap-2 sm:gap-3 shadow-2xl min-h-[48px]">
+                <div className="w-full bg-[#212121] rounded-full border border-[#2e2e2e] px-3 py-2 flex items-center gap-2 shadow-2xl min-h-[48px]">
                   <button 
                     type="button" 
-                    onClick={() => {
-                      if (viewMode === 'stealth' && fileInputRef.current) {
-                        fileInputRef.current.click();
-                      }
-                    }}
-                    className="text-[#9b9b9b] hover:text-white p-1 rounded-full cursor-pointer shrink-0"
-                    title={viewMode === 'stealth' ? "Send Photo" : "Options"}
+                    onClick={() => { if (viewMode === 'stealth' && fileInputRef.current) fileInputRef.current.click(); }} 
+                    className="text-[#9b9b9b] hover:text-white p-1 rounded-full cursor-pointer"
                   >
                     <Plus size={20} />
                   </button>
@@ -3022,67 +2476,23 @@ export default function App() {
                     type="text"
                     value={input}
                     onChange={handleInputChange}
-                    placeholder={
-                      viewMode === 'stealth' 
-                        ? (replyTarget ? `Reply to ${replyTarget.senderRole}...` : "Schema entry... (/gpt to exit)") 
-                        : "Ask anything"
-                    }
-                    className="flex-1 bg-transparent text-base sm:text-[13.5px] text-white placeholder-[#8e8e8e] outline-none min-w-0"
+                    placeholder={viewMode === 'stealth' ? (replyTarget ? `Reply to ${replyTarget.senderRole}...` : "Schema entry...") : "Ask anything"}
+                    className="flex-1 bg-transparent text-sm text-white placeholder-[#8e8e8e] outline-none min-w-0"
                   />
 
                   <button 
                     type="button"
                     onClick={() => setShowMiniEmojiBar(!showMiniEmojiBar)}
-                    className={`p-1.5 rounded-full cursor-pointer shrink-0 ${showMiniEmojiBar ? 'text-amber-400' : 'text-[#8e8e8e] hover:text-white'}`}
-                    title="Reactions"
+                    className="p-1.5 rounded-full text-[#8e8e8e] hover:text-white cursor-pointer"
                   >
                     <Smile size={19} />
                   </button>
 
                   <button 
-                    type="button" 
-                    onContextMenu={(e) => {
-                      if (role === 'parent') {
-                        e.preventDefault();
-                        setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
-                      }
-                    }}
-                    onMouseDown={() => {
-                      if (role === 'parent') {
-                        window.thinkLongPressTimer = setTimeout(() => {
-                          setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
-                        }, 500);
-                      }
-                    }}
-                    onMouseUp={() => {
-                      if (window.thinkLongPressTimer) clearTimeout(window.thinkLongPressTimer);
-                    }}
-                    onTouchStart={() => {
-                      if (role === 'parent') {
-                        window.thinkLongPressTimer = setTimeout(() => {
-                          setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
-                        }, 500);
-                      }
-                    }}
-                    onTouchEnd={() => {
-                      if (window.thinkLongPressTimer) clearTimeout(window.thinkLongPressTimer);
-                    }}
-                    title={role === 'parent' ? "Hold to open secret chat" : "Think"}
-                    className="flex items-center gap-1 text-xs text-[#9b9b9b] hover:text-white px-2 py-1 rounded-full hover:bg-[#2c2c2c] cursor-pointer shrink-0 select-none"
-                  >
-                    <Sparkles size={13} className="text-blue-400" />
-                    <span className="hidden sm:inline">Think</span>
-                  </button>
-
-                  <button type="button" className="text-[#9b9b9b] hover:text-white p-1 cursor-pointer shrink-0">
-                    <Mic size={19} />
-                  </button>
-
-                  <button 
                     type="submit" 
-                    className="bg-[#1c3a6b] hover:bg-[#254d8f] text-white w-8 h-8 rounded-full cursor-pointer flex items-center justify-center shadow shrink-0 active:scale-95 transition-transform"
+                    className="bg-[#1c3a6b] hover:bg-[#254d8f] text-white w-8 h-8 rounded-full cursor-pointer flex items-center justify-center shadow shrink-0"
                   >
-                    {input.trim() ? <ArrowUp size={16} /> : <AudioLines size={16} />}
+                    <ArrowUp size={16} />
                   </button>
                 </div>
               </form>
@@ -3094,26 +2504,14 @@ export default function App() {
           <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4">
             <div className="bg-[#141414] border border-[#2e2e2e] rounded-2xl max-w-xl w-full p-4 flex flex-col items-center space-y-4 shadow-2xl">
               <div className="w-full flex items-center justify-between text-xs text-gray-400 border-b border-[#222] pb-2 font-mono">
-                <span className="text-emerald-400 font-bold flex items-center gap-1">
-                  <Eye size={13} /> View Once Photo ({activeViewImage.sender})
-                </span>
+                <span className="text-emerald-400 font-bold"><Eye size={13} /> View Once Photo</span>
                 <span>{activeViewImage.time}</span>
               </div>
-              
               <div className="max-h-[65vh] overflow-hidden rounded-xl">
-                <img 
-                  src={activeViewImage.data} 
-                  alt="Secret View Once" 
-                  className="max-h-[60vh] object-contain rounded-lg"
-                />
+                <img src={activeViewImage.data} alt="Secret View Once" className="max-h-[60vh] object-contain rounded-lg" />
               </div>
-
-              <button 
-                type="button" 
-                onClick={handleCloseViewOnce}
-                className="w-full bg-[#1c3a6b] hover:bg-[#254d8f] text-white text-xs py-3 rounded-xl font-medium cursor-pointer"
-              >
-                Done (Save to Images)
+              <button type="button" onClick={handleCloseViewOnce} className="w-full bg-[#1c3a6b] text-white text-xs py-3 rounded-xl font-medium cursor-pointer">
+                Done
               </button>
             </div>
           </div>
@@ -3127,44 +2525,20 @@ export default function App() {
                   <AlertCircle size={18} />
                   <span>Answer Pending ({pendingMessages.length})</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={downloadPendingPDF}
-                    title="Export to PDF"
-                    className="text-gray-400 hover:text-amber-400 p-1 cursor-pointer"
-                  >
-                    <Download size={16} />
-                  </button>
-                  <button onClick={() => setShowPendingModal(false)} className="text-gray-400 hover:text-white cursor-pointer">
-                    <X size={18} />
-                  </button>
-                </div>
+                <button onClick={() => setShowPendingModal(false)} className="text-gray-400 hover:text-white cursor-pointer"><X size={18} /></button>
               </div>
 
               <div className="max-h-72 overflow-y-auto space-y-2 pr-1 scrollbar-none">
                 {pendingMessages.length === 0 ? (
-                  <div className="text-center text-xs text-gray-500 py-8">
-                    No pending questions bookmarked.
-                  </div>
+                  <div className="text-center text-xs text-gray-500 py-8">No pending questions.</div>
                 ) : (
                   pendingMessages.map((m, idx) => (
                     <div key={idx} className="bg-[#212121] border border-[#2d2d2d] p-3 rounded-xl flex items-start justify-between gap-3">
                       <div className="space-y-1 text-xs">
-                        <div className="flex items-center gap-2 text-[11px] text-gray-400 font-mono">
-                          <span className="text-blue-400">{m.senderRole === 'user' ? 'A' : 'H'}</span>
-                          <span>•</span>
-                          <span>{m.timeFormatted}</span>
-                        </div>
-                        <p className="text-gray-200 font-mono select-text line-clamp-3 break-words">
-                          {m.isMedia ? "[Encrypted Photo]" : cleanOriginalText(m.text)}
-                        </p>
+                        <div className="text-[11px] text-gray-400 font-mono"><span>{m.senderRole}</span> • <span>{m.timeFormatted}</span></div>
+                        <p className="text-gray-200 font-mono line-clamp-3">{cleanOriginalText(m.text)}</p>
                       </div>
-                      <button 
-                        onClick={(e) => togglePendingFlag(e, m)}
-                        className="bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-300 text-xs px-2.5 py-1.5 rounded-lg cursor-pointer flex items-center gap-1 shrink-0"
-                      >
-                        <Check size={13} /> Done
-                      </button>
+                      <button onClick={(e) => togglePendingFlag(e, m)} className="bg-emerald-950 text-emerald-300 text-xs px-2.5 py-1.5 rounded-lg font-bold">Done</button>
                     </div>
                   ))
                 )}
@@ -3172,121 +2546,7 @@ export default function App() {
             </div>
           </div>
         )}
-
-        {incomingAlert && (
-          <div 
-            onClick={handleBubbleDismiss}
-            className={`absolute bottom-20 right-6 ${bubbleDimensions} rounded-full cursor-pointer z-50 flex items-center justify-center p-3 text-center transition-all duration-300 transform active:scale-95 animate-bounce shadow-2xl backdrop-blur-md overflow-hidden`}
-            style={{
-              background: 'radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.1) 60%, rgba(255, 255, 255, 0.25) 100%)',
-              border: '1px solid rgba(255, 255, 255, 0.6)',
-              boxShadow: '0 8px 32px 0 rgba(255, 255, 255, 0.2), inset 0 2px 10px 0 rgba(255, 255, 255, 0.7), inset 0 -4px 10px 0 rgba(0, 0, 0, 0.2)'
-            }}
-          >
-            <div className="absolute top-3 left-4 w-5 h-2.5 bg-white/80 rounded-full blur-[0.5px] transform -rotate-45 pointer-events-none" />
-            <p className={`${bubbleFontSize} font-medium text-white tracking-tight drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)] px-1 overflow-y-auto max-h-[85%] select-none scrollbar-none break-words`}>
-              {incomingAlert.text}
-            </p>
-          </div>
-        )}
-
-        {role === 'parent' && (
-          <div className="absolute bottom-16 right-4 sm:bottom-6 sm:right-6 z-40">
-            <button 
-              onClick={() => setIsBotOpen(!isBotOpen)}
-              className="bg-[#212121] hover:bg-[#2c2c2c] border border-[#333] p-3.5 rounded-full shadow-2xl text-emerald-400 cursor-pointer active:scale-90 transition-transform"
-            >
-              <Bot size={20} />
-            </button>
-
-            {isBotOpen && (
-              <div className="absolute bottom-14 right-0 w-80 max-w-[90vw] bg-[#121212] border border-[#282828] rounded-2xl p-4 shadow-2xl space-y-3 font-sans animate-in zoom-in-95 duration-150">
-                <div className="flex justify-between items-center text-xs font-semibold text-white pb-1 border-b border-[#222]">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setBotTab('instant')}
-                      className={`px-2 py-0.5 rounded ${botTab === 'instant' ? 'bg-[#252525] text-emerald-400' : 'text-gray-400'}`}
-                    >
-                      Instant Alert
-                    </button>
-                    <button
-                      onClick={() => setBotTab('schedule')}
-                      className={`px-2 py-0.5 rounded ${botTab === 'schedule' ? 'bg-[#252525] text-amber-400' : 'text-gray-400'}`}
-                    >
-                      Schedule
-                    </button>
-                  </div>
-                  <button onClick={() => setIsBotOpen(false)} className="text-gray-400 hover:text-white p-1"><X size={15} /></button>
-                </div>
-
-                {botTab === 'instant' ? (
-                  <div className="space-y-2.5">
-                    <textarea 
-                      rows={3}
-                      value={customMsg}
-                      onChange={(e) => setCustomMsg(e.target.value)}
-                      placeholder="Type instant bubble message..."
-                      className="w-full bg-[#1e1e1e] text-xs p-2.5 rounded-lg outline-none border border-[#333] text-white resize-none"
-                    />
-                    <button 
-                      onClick={() => {
-                        if (customMsg && socketRef.current) {
-                          socketRef.current.emit('send_assistant_alert', { room: GLOBAL_ROOM, text: customMsg });
-                          setCustomMsg('');
-                          setIsBotOpen(false);
-                        }
-                      }}
-                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs py-2.5 rounded-lg font-medium cursor-pointer transition-colors"
-                    >
-                      Broadcast Now
-                    </button>
-                  </div>
-                ) : (
-                  <form onSubmit={handleScheduleAlertSubmit} className="space-y-2.5 text-xs text-left">
-                    <textarea 
-                      rows={2}
-                      required
-                      value={schedMsg}
-                      onChange={(e) => setSchedMsg(e.target.value)}
-                      placeholder="Message for bubble alarm..."
-                      className="w-full bg-[#1e1e1e] text-xs p-2.5 rounded-lg outline-none border border-[#333] text-white resize-none"
-                    />
-
-                    <div>
-                      <label className="text-[10px] text-gray-400 block mb-1">Time Slot 1 (Required)</label>
-                      <input 
-                        type="datetime-local" 
-                        required
-                        value={schedTime1}
-                        onChange={(e) => setSchedTime1(e.target.value)}
-                        className="w-full bg-[#1e1e1e] border border-[#333] text-white p-2 rounded text-xs outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] text-gray-400 block mb-1">Time Slot 2 (Optional Second Alarm)</label>
-                      <input 
-                        type="datetime-local" 
-                        value={schedTime2}
-                        onChange={(e) => setSchedTime2(e.target.value)}
-                        className="w-full bg-[#1e1e1e] border border-[#333] text-white p-2 rounded text-xs outline-none"
-                      />
-                    </div>
-
-                    <button 
-                      type="submit"
-                      className="w-full bg-amber-600 hover:bg-amber-500 text-black font-bold text-xs py-2.5 rounded-lg cursor-pointer"
-                    >
-                      Schedule Alert
-                    </button>
-                  </form>
-                )}
-              </div>
-            )}
-          </div>
-        )}
       </main>
-
     </div>
   );
 }
