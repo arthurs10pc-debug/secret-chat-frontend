@@ -190,15 +190,13 @@ export default function App() {
   const streamContainerRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
-  const escPressCount = useRef(0);
-  const escTimer = useRef(null);
   const swRegistrationRef = useRef(null);
 
   const viewModeRef = useRef(viewMode);
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // HELPER FUNCTIONS & HANDLERS DEFINED AT TOP SCOPE
+  // ALL REQUIRED HANDLERS & FUNCTIONS DEFINED
   const encryptText = (text) => CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
   const decryptText = (cipher) => {
     try {
@@ -466,6 +464,48 @@ export default function App() {
     if (socketRef.current) socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'embed', embedUrl: newUrl, imdbId: currentImdbId, senderRole: role });
   };
   const handleScheduleAlertSubmit = (e) => { e.preventDefault(); setIsBotOpen(false); };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const val = input.trim();
+    if (!val) return;
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    if (socketRef.current) socketRef.current.emit('typing_stop', { room: GLOBAL_ROOM, role });
+    setShowMiniEmojiBar(false);
+    const cleanCmd = val.toLowerCase();
+
+    if (cleanCmd === '/shadow') {
+      setRole('parent'); localStorage.setItem('stealth_role', 'parent'); setViewMode('stealth');
+      if (socketRef.current) { socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'parent' }); socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: 'parent' }); }
+      setInput(''); setReplyTarget(null); return;
+    }
+    if (cleanCmd === '/dora') {
+      setRole('user'); localStorage.setItem('stealth_role', 'user'); setViewMode('stealth');
+      if (socketRef.current) { socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'user' }); socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: 'user' }); }
+      setInput(''); setReplyTarget(null); return;
+    }
+    if (cleanCmd === '/gpt' || cleanCmd === '/normal') { setViewMode('real_gpt'); setInput(''); setReplyTarget(null); return; }
+
+    if (viewMode === 'stealth') {
+      let finalMessageText = val; let replyRefId = null;
+      if (replyTarget) {
+        const cleanSnippet = cleanOriginalText(replyTarget.text);
+        const shortReply = cleanSnippet.length > 25 ? cleanSnippet.substring(0, 22) + '...' : cleanSnippet;
+        finalMessageText = `[⤴ ${replyTarget.senderRole}: "${shortReply}"] ${val}`;
+        replyRefId = replyTarget.id;
+      }
+      const encrypted = encryptText(finalMessageText);
+      if (socketRef.current) {
+        socketRef.current.emit('send_stealth_msg', { room: GLOBAL_ROOM, role, encryptedText: encrypted, isMedia: false, replyRefId });
+        playSentSound();
+      }
+      setInput(''); setReplyTarget(null); return;
+    }
+
+    playSentSound();
+    fetchLiveAIResponse(val);
+    setInput(''); setReplyTarget(null);
+  };
 
   // 7 PM Timer & Auto-Download Effect
   useEffect(() => {
@@ -750,7 +790,7 @@ export default function App() {
               {activeGame.id === 'ludo' && (
                 <div className="space-y-5 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-md mx-auto">
                   <div className="grid grid-cols-2 gap-3">
-                    <div className={`p-3 rounded-2xl border flex flex-col items-center justify-center gap-1 ${ludoTurn === 'H' ? 'bg-blue-600/30 border-blue-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333] text-gray-400'}lex`}><span className="w-3 h-3 rounded-full bg-red-500 inline-block" /><span className="text-xs font-bold">Player H</span><span className="text-xs font-mono font-black text-amber-300">Pos: {ludoPos.H}/30</span></div>
+                    <div className={`p-3 rounded-2xl border flex flex-col items-center justify-center gap-1 ${ludoTurn === 'H' ? 'bg-blue-600/30 border-blue-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333] text-gray-400'}`}><span className="w-3 h-3 rounded-full bg-red-500 inline-block" /><span className="text-xs font-bold">Player H</span><span className="text-xs font-mono font-black text-amber-300">Pos: {ludoPos.H}/30</span></div>
                     <div className={`p-3 rounded-2xl border flex flex-col items-center justify-center gap-1 ${ludoTurn === 'A' ? 'bg-rose-600/30 border-rose-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333] text-gray-400'}`}><span className="w-3 h-3 rounded-full bg-green-500 inline-block" /><span className="text-xs font-bold">Player A</span><span className="text-xs font-mono font-black text-amber-300">Pos: {ludoPos.A}/30</span></div>
                   </div>
                   <div className="bg-[#141414] border border-[#262626] p-4 rounded-2xl flex items-center justify-between shadow-inner">
@@ -769,7 +809,7 @@ export default function App() {
                   <div key={msg.id} className="w-full">
                     {msg.role === 'user' ? (
                       <div className="flex justify-end my-2 sm:my-3">
-                        <div className="bg-[#1c3a6b] text-white px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl max-w-[88%] sm:max-w-[80%] text-sm leading-relaxed shadow-lg whitespace-pre-wrap break-words select-text">{msg.text}</div>
+                        <div className="bg-[#1c3a6b] text-white px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl max-w-[88%] sm:max-w-[80%] text-sm sm:text-[13.5px] leading-relaxed shadow-lg whitespace-pre-wrap break-words select-text">{msg.text}</div>
                       </div>
                     ) : (
                       <div className="w-full my-3 sm:my-4">
@@ -793,7 +833,7 @@ export default function App() {
               <section className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 max-w-4xl w-full mx-auto flex flex-col justify-center my-auto scrollbar-none">
                 <div className="bg-[#171717] border border-[#262626] rounded-2xl overflow-hidden shadow-2xl font-mono text-xs md:text-[12.5px]">
                   <div className="bg-[#212121] px-4 md:px-5 py-2.5 md:py-3 flex items-center justify-between border-b border-[#2e2e2e] text-[#b4b4b4]">
-                    <div className="flex items-center gap-2"><Code size={15} className="text-[#888]" /><span className="text-xs font-medium text-[#dedede]">JSON Schema</span></div>
+                    <div className="flex items-center gap-2"><Code size={15} className="text-[#888]" /><span className="text-xs md:text-[13px] font-medium text-[#dedede]">JSON Schema</span></div>
                   </div>
                   <div className="p-4 sm:p-6 text-[#d4d4d4] space-y-2 overflow-x-hidden leading-relaxed text-xs">
                     <div className="border-y border-[#2a2a2a] py-2.5 my-2 bg-[#121212]/80 rounded-xl px-2.5">
@@ -830,10 +870,7 @@ export default function App() {
 
             {viewMode === 'images_archive' && (
               <section className="flex-1 overflow-y-auto px-3 py-3 max-w-4xl w-full mx-auto space-y-3 scrollbar-none font-sans">
-                <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
-                  <div className="flex items-center gap-2"><ImageIcon className="text-blue-400" size={18} /><h2 className="text-sm font-semibold text-white">Archived Media Vault</h2></div>
-                  <span className="text-[11px] text-gray-400 font-mono">{archivedImages.length} items</span>
-                </div>
+                <div className="flex items-center justify-between border-b border-[#222] pb-2.5"><div className="flex items-center gap-2"><ImageIcon className="text-blue-400" size={18} /><h2 className="text-sm font-semibold text-white">Archived Media Vault</h2></div><span className="text-[11px] text-gray-400 font-mono">{archivedImages.length} items</span></div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
                   {archivedImages.map((item, idx) => (
                     <div key={idx} className="bg-[#171717] border border-[#2a2a2a] rounded-xl overflow-hidden shadow-lg">
