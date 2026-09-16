@@ -247,288 +247,155 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // ALL HANDLERS DEFINED TO PREVENT BUILD ERRORS
+  // ALL FUNCTIONS FULLY DECLARED
+  const encryptText = (text) => CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
+  const decryptText = (cipher) => {
+    try {
+      const bytes = CryptoJS.AES.decrypt(cipher, SECRET_KEY);
+      const original = bytes.toString(CryptoJS.enc.Utf8);
+      return original || cipher;
+    } catch { return cipher; }
+  };
+
+  const playSentSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 0.04);
+    } catch (e) {}
+  }, []);
+
+  const fetchLiveAIResponse = async (userPrompt) => {
+    setIsThinking(true);
+    const userMsg = { id: 'usr_' + Date.now(), role: 'user', text: userPrompt, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+    const updated = [...conversations, userMsg];
+    setConversations(updated);
+
+    if (currentRoom === "New chat" || currentRoom.startsWith("New chat")) {
+      const generatedTitle = userPrompt.length > 24 ? userPrompt.substring(0, 22) + '...' : userPrompt;
+      const updatedList = roomList.map(r => r === currentRoom ? generatedTitle : r);
+      setRoomList(updatedList);
+      setCurrentRoom(generatedTitle);
+    }
+
+    let reply = "";
+    try {
+      const payload = { messages: [{ role: "system", content: "You are ChatGPT." }, { role: "user", content: userPrompt }], model: "openai" };
+      const response = await fetch("https://text.pollinations.ai/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (response.ok) { const text = await response.text(); if (text) reply = text.trim(); }
+    } catch (e) {}
+
+    if (!reply) reply = "Network timeout. Please send again.";
+    const aiMsg = { id: 'ai_' + Date.now(), role: 'assistant', text: reply, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+    setConversations([...updated, aiMsg]);
+    setIsThinking(false);
+  };
+
+  const downloadFullChatPDF = () => {
+    if (role !== 'parent') return;
+    try {
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      doc.setFillColor(15, 23, 42); doc.rect(0, 0, 210, 24, 'F');
+      doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(14);
+      doc.text("WhatsApp / Chat Transcript - Bubble Export", 14, 12);
+      let y = 32;
+      stealthMessages.forEach((m) => {
+        const isUser = m.senderRole === 'user';
+        const senderLabel = isUser ? 'A (User)' : 'H (Admin)';
+        const time = m.timeFormatted || new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const content = m.isMedia ? "[Encrypted Secret Photo Asset]" : cleanOriginalText(m.text || "");
+        doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+        const splitLines = doc.splitTextToSize(content || "(empty)", 90);
+        const bubbleHeight = (splitLines.length * 4.5) + 10;
+        if (y + bubbleHeight > 282) { doc.addPage(); y = 20; }
+        const xPos = isUser ? 14 : (210 - 14 - 90);
+        doc.setFillColor(isUser ? 241 : 220, isUser ? 245 : 252, isUser ? 249 : 231);
+        doc.roundedRect(xPos, y, 90, bubbleHeight, 3, 3, 'FD');
+        doc.setTextColor(15, 23, 42); doc.setFont("helvetica", "bold"); doc.setFontSize(8);
+        doc.text(senderLabel, xPos + 4, y + 5);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+        doc.text(splitLines, xPos + 4, y + 10);
+        doc.setFontSize(7); doc.setTextColor(100, 116, 139);
+        doc.text(time, xPos + 90 - 16, y + bubbleHeight - 3);
+        y += bubbleHeight + 4;
+      });
+      doc.save(`WhatsApp_Chat_Bubble_Transcript_${Date.now()}.pdf`);
+    } catch (err) {}
+  };
+
+  const handleAdminSendRequest = () => {
+    if (socketRef.current) { socketRef.current.emit('admin_send_arcade_request'); alert("Arcade game request dispatched!"); }
+  };
+  const handleAdminDisconnectArcade = () => {
+    setShowArcadePlugins(false); setActiveGame(null); setIncomingGameRequest(false);
+    if (socketRef.current) socketRef.current.emit('admin_toggle_arcade', false);
+  };
+  const handleUserAcceptRequest = () => {
+    setIncomingGameRequest(false); setShowArcadePlugins(true);
+    if (socketRef.current) socketRef.current.emit('user_accept_arcade_request');
+  };
+  const handleLaunchGame = (game) => {
+    setActiveGame(game); setWinnerMessage('');
+    if (socketRef.current) socketRef.current.emit('launch_multiplayer_game', game);
+  };
+  const checkTicTacToeWinner = (board) => {
+    const lines = [[0,1,2], [3,4,5], [6,7,8], [0,3,6], [1,4,7], [2,5,8], [0,4,8], [2,4,6]];
+    for (let i = 0; i < lines.length; i++) {
+      const [a, b, c] = lines[i];
+      if (board[a] && board[a] === board[b] && board[a] === board[c]) return board[a];
+    }
+    return board.every(cell => cell !== null) ? 'Draw' : null;
+  };
+  const handleTicTacToeClick = (idx) => {
+    const myTurn = (isCurrentAdmin && isHNext) || (!isCurrentAdmin && !isHNext);
+    if (!myTurn || tictactoeBoard[idx] || winnerMessage || activeGame?.id !== 'tictactoe') return;
+    const newBoard = [...tictactoeBoard]; newBoard[idx] = isHNext ? 'H' : 'A';
+    const nextState = !isHNext; const win = checkTicTacToeWinner(newBoard);
+    let newScores = { ...scores }; let winText = '';
+    if (win === 'H') { winText = 'Player H Wins!'; newScores.H += 1; }
+    else if (win === 'A') { winText = 'Player A Wins!'; newScores.A += 1; }
+    else if (win === 'Draw') { winText = "Draw!"; }
+    setTictactoeBoard(newBoard); setIsHNext(nextState); setWinnerMessage(winText); setScores(newScores);
+    if (socketRef.current) socketRef.current.emit('arcade_game_action', { gameId: 'tictactoe', board: newBoard, isHNext: nextState, winner: winText, scores: newScores });
+  };
+  const handleLudoRoll = () => {
+    const myTurn = (isCurrentAdmin && ludoTurn === 'H') || (!isCurrentAdmin && ludoTurn === 'A');
+    if (!myTurn || winnerMessage) return;
+    const roll = Math.floor(Math.random() * 6) + 1; setDiceVal(roll);
+    const newPos = { ...ludoPos }; let winText = ''; let newScores = { ...scores };
+    if (ludoTurn === 'H') {
+      newPos.H = Math.min(30, newPos.H + roll);
+      if (newPos.H >= 30) { winText = 'Player H Won Ludo!'; newScores.H += 1; }
+    } else {
+      newPos.A = Math.min(30, newPos.A + roll);
+      if (newPos.A >= 30) { winText = 'Player A Won Ludo!'; newScores.A += 1; }
+    }
+    const nextTurn = ludoTurn === 'H' ? 'A' : 'H';
+    setLudoPos(newPos); setLudoTurn(nextTurn);
+    if (winText) { setWinnerMessage(winText); setScores(newScores); }
+    if (socketRef.current) socketRef.current.emit('arcade_game_action', { gameId: 'ludo', pos: newPos, turn: nextTurn, dice: roll, winner: winText, scores: newScores });
+  };
+  const handleGenericGameScore = (gameKey) => {
+    if (winnerMessage) return;
+    const scorer = isCurrentAdmin ? 'H' : 'A';
+    const winText = `Player ${scorer} Scored!`;
+    const newScores = { ...scores, [scorer]: scores[scorer] + 1 };
+    setScores(newScores); setWinnerMessage(winText);
+    if (socketRef.current) socketRef.current.emit('arcade_game_action', { gameId: gameKey, winner: winText, scores: newScores, score: newScores });
+  };
+
+  const handleBubbleDismiss = (e) => {
+    setIncomingAlert(null);
+  };
+
   const handleInputChange = (e) => { setInput(e.target.value); };
   const handleCloseViewOnce = () => { setActiveViewImage(null); };
-  const handleHtml5Play = () => {
-    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
-    setIsMoviePlaying(true);
-    if (socketRef.current) socketRef.current.emit('codex_movie_sync', { room: GLOBAL_ROOM, state: 'PLAY', currentTime: html5VideoRef.current.currentTime, timestamp: Date.now() });
-  };
-  const handleHtml5Pause = () => {
-    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
-    setIsMoviePlaying(false);
-    if (socketRef.current) socketRef.current.emit('codex_movie_sync', { room: GLOBAL_ROOM, state: 'PAUSE', currentTime: html5VideoRef.current.currentTime, timestamp: Date.now() });
-  };
-  const handleHtml5Seeked = () => {
-    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
-    if (socketRef.current) socketRef.current.emit('codex_movie_sync', { room: GLOBAL_ROOM, state: html5VideoRef.current.paused ? 'PAUSE' : 'PLAY', currentTime: html5VideoRef.current.currentTime, timestamp: Date.now() });
-  };
-
-  const processAndSendImage = (file) => {
-    if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64Data = event.target.result;
-      const encrypted = encryptText(base64Data);
-      if (socketRef.current && viewMode === 'stealth') {
-        socketRef.current.emit('send_stealth_msg', { room: GLOBAL_ROOM, role, encryptedText: encrypted, isMedia: true });
-        playSentSound();
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleSelectLocalFile = (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    setMovieError('');
-    if (file.name.toLowerCase().endsWith('.mkv')) {
-      setMovieError("Warning: .MKV file selected. Native web players cannot decode AC3/MKV audio. Use .MP4 if possible.");
-    }
-    const objUrl = URL.createObjectURL(file);
-    setLocalVideoSrc(objUrl);
-    setLocalFileName(file.name);
-    setIsMoviePlaying(false);
-  };
-
-  const downloadPendingPDF = (e) => {
-    e.stopPropagation();
-    const doc = new jsPDF();
-    const pendingList = stealthMessagesRef.current.filter(m => m.flaggedPending);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.text(`Answer Pending Questions Export`, 14, 20);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(`Export Timestamp: ${new Date().toLocaleString()}`, 14, 28);
-    doc.text(`Total Pending Items: ${pendingList.length}`, 14, 34);
-    doc.line(14, 38, 196, 38);
-    let y = 46;
-    if (pendingList.length === 0) {
-      doc.text("No pending questions flagged in the system.", 14, y);
-    } else {
-      pendingList.forEach((m, idx) => {
-        const senderLabel = m.senderRole === 'user' ? 'A' : 'H';
-        doc.setFont("helvetica", "bold");
-        doc.text(`[Pending #${idx + 1}] [${m.timeFormatted}] ${senderLabel}:`, 14, y);
-        y += 6;
-        doc.setFont("helvetica", "normal");
-        const splitText = doc.splitTextToSize(m.isMedia ? "[Encrypted Image Asset]" : cleanOriginalText(m.text || ""), 175);
-        doc.text(splitText, 18, y);
-        y += (splitText.length * 5) + 4;
-        if (y > 270) { doc.addPage(); y = 20; }
-      });
-    }
-    doc.save(`pending_answers_${Date.now()}.pdf`);
-  };
-
-  const handleManualUnmuteClick = () => {
-    if (playerRef.current) {
-      try { playerRef.current.unMute(); playerRef.current.setVolume(100); playerRef.current.playVideo(); setAutoplayBlocked(false); } catch(e){}
-    }
-  };
-
-  const handleTogglePlayPause = () => {
-    if (!playerRef.current) return;
-    const nextState = !isPlaying;
-    setIsPlaying(nextState);
-    lastSyncActionTimeRef.current = Date.now();
-    if (nextState) { playerRef.current.unMute(); playerRef.current.playVideo(); } else { playerRef.current.pauseVideo(); }
-    if (socketRef.current) socketRef.current.emit('sync_playback_state', { room: GLOBAL_ROOM, state: nextState ? 'PLAY' : 'PAUSE', currentTime: playerRef.current.getCurrentTime(), timestamp: Date.now() });
-  };
-
-  const handleDisconnectSync = () => {
-    if (socketRef.current) {
-      socketRef.current.emit('sync_disconnect_invite', { room: GLOBAL_ROOM });
-      setSyncStatus('idle');
-      setIsPlaying(false);
-      setActiveTrackTitle('');
-      setActiveVideoId('');
-      setYoutubeUrlInput('');
-      if (playerRef.current && playerRef.current.stopVideo) playerRef.current.stopVideo();
-    }
-  };
-
-  const handleScrollToMessage = (targetMsgId) => {
-    if (!targetMsgId) return;
-    const el = document.getElementById(`stealth-msg-${targetMsgId}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setHighlightedMsgId(targetMsgId);
-      setTimeout(() => setHighlightedMsgId(null), 1800);
-    }
-  };
-
-  const handleOpenViewOnce = (msg) => {
-    if (socketRef.current) socketRef.current.emit('mark_media_opened', { room: GLOBAL_ROOM, messageId: msg._id });
-    setStealthMessages(prev => prev.map(m => m._id === msg._id ? { ...m, mediaOpened: true } : m));
-    setActiveViewImage({ id: msg._id, data: msg.text, sender: msg.senderRole === 'user' ? 'A' : 'H', time: msg.timeFormatted });
-  };
-
-  const handleStartReply = (msg) => {
-    const pureText = msg.isMedia ? "[Photo]" : cleanOriginalText(msg.text);
-    setReplyTarget({ id: msg._id, text: pureText, senderRole: msg.senderRole === 'user' ? 'A' : 'H' });
-    if (inputRef.current) inputRef.current.focus();
-  };
-
-  const handleSelectReaction = (messageId, emoji) => {
-    setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, reaction: emoji } : m));
-    setActiveReactionMsgId(null);
-    if (socketRef.current) socketRef.current.emit('add_reaction', { room: GLOBAL_ROOM, messageId, reaction: emoji });
-  };
-
-  const togglePendingFlag = (e, msg) => {
-    e.stopPropagation();
-    if (role !== 'parent') return;
-    const newStatus = !msg.flaggedPending;
-    setStealthMessages(prev => prev.map(m => m._id === msg._id ? { ...m, flaggedPending: newStatus } : m));
-    if (socketRef.current) socketRef.current.emit('toggle_pending', { messageId: msg._id, status: newStatus, room: GLOBAL_ROOM });
-  };
-
-  const handleSendSyncInvite = () => {
-    if (socketRef.current) { socketRef.current.emit('sync_send_invite', { room: GLOBAL_ROOM, role }); setSyncStatus('requested'); }
-  };
-
-  const handleAcceptSyncInvite = () => {
-    if (playerRef.current && playerRef.current.unMute) {
-      try { playerRef.current.unMute(); playerRef.current.setVolume(100); } catch(e){}
-    }
-    if (socketRef.current) { socketRef.current.emit('sync_confirm_invite', { room: GLOBAL_ROOM }); setSyncStatus('connected'); }
-  };
-
-  const handleTriggerSong = async (rawInput, displayTitle = '') => {
-    if (!rawInput || !rawInput.trim()) return;
-    setIsLoadingTrack(true);
-    let vid = extractYouTubeId(rawInput.trim());
-    let finalTitle = displayTitle || rawInput.trim();
-    if (!vid) {
-      try {
-        const res = await fetch(`${SOCKET_URL}/api/yt-search?q=${encodeURIComponent(rawInput.trim())}`);
-        if (res.ok) { const data = await res.json(); if (data && data.videoId) { vid = data.videoId; finalTitle = data.title || finalTitle; } }
-      } catch (err) {}
-    }
-    setIsLoadingTrack(false);
-    if (!vid) { alert("Could not load track."); return; }
-    if (socketRef.current) socketRef.current.emit('sync_track_change', { room: GLOBAL_ROOM, videoId: vid, title: finalTitle });
-  };
-
-  const handleQueryChange = (val) => {
-    setYoutubeUrlInput(val);
-    if (!val.trim() || val.includes('youtu')) { setYtSuggestions([]); setShowSuggestions(false); return; }
-    if (suggestDebounceRef.current) clearTimeout(suggestDebounceRef.current);
-    suggestDebounceRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`${SOCKET_URL}/api/yt-suggest?q=${encodeURIComponent(val)}`);
-        if (res.ok) { const data = await res.json(); setYtSuggestions(Array.isArray(data) ? data : []); setShowSuggestions(true); }
-      } catch (e) { setYtSuggestions([]); }
-    }, 280);
-  };
-
-  const handleSeekSlider = (e) => {
-    const val = parseFloat(e.target.value);
-    setTrackProgress(val);
-    if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
-      playerRef.current.seekTo(val, true);
-      lastSyncActionTimeRef.current = Date.now();
-      if (socketRef.current) socketRef.current.emit('sync_playback_state', { room: GLOBAL_ROOM, state: isPlaying ? 'PLAY' : 'PAUSE', currentTime: val, timestamp: Date.now() });
-    }
-  };
-
-  const handleSelectSuggestion = (sugg) => {
-    setYoutubeUrlInput(sugg);
-    setShowSuggestions(false);
-    handleTriggerSong(sugg, sugg);
-  };
-
-  const handleLoadMovie = (e) => {
-    e.preventDefault();
-    setMovieError('');
-    if (codexEngine === 'youtube') {
-      const vid = extractYouTubeId(movieInputUrl.trim());
-      if (!vid) { alert("Invalid YouTube link"); return; }
-      setActiveMovieYTId(vid); setActiveMovieSrc(''); setActiveEmbedUrl(''); setIsMoviePlaying(true);
-      if (socketRef.current) socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'youtube', ytId: vid, senderRole: role });
-    } else if (codexEngine === 'embed') {
-      const input = movieInputUrl.trim();
-      let imdbId = input; let finalEmbed = input;
-      const match = input.match(/tt\d{6,9}/);
-      if (match) { imdbId = match[0]; finalEmbed = getEmbedUrl(embedServer, imdbId); }
-      else if (!input.startsWith('http')) { finalEmbed = getEmbedUrl(embedServer, input); }
-      setCurrentImdbId(imdbId); setActiveEmbedUrl(finalEmbed); setActiveMovieSrc(''); setActiveMovieYTId('');
-      if (socketRef.current) socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'embed', embedUrl: finalEmbed, imdbId, senderRole: role });
-    } else if (codexEngine === 'local') {
-      if (socketRef.current) socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'local', senderRole: role });
-    } else {
-      const trimmed = movieInputUrl.trim();
-      setActiveMovieSrc(trimmed); setActiveMovieYTId(''); setActiveEmbedUrl(''); setIsMoviePlaying(false);
-      if (socketRef.current) socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'gofile', url: trimmed, senderRole: role });
-    }
-    setMovieInputUrl('');
-  };
-
-  const handleSwitchEmbedServer = (newServer) => {
-    setEmbedServer(newServer);
-    if (!currentImdbId) return;
-    const newUrl = getEmbedUrl(newServer, currentImdbId);
-    setActiveEmbedUrl(newUrl);
-    if (socketRef.current) socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'embed', embedUrl: newUrl, imdbId: currentImdbId, senderRole: role });
-  };
-
-  const handleEmojiClick = (emoji) => {
-    setInput(prev => prev + emoji);
-    setShowMiniEmojiBar(false);
-    if (inputRef.current) inputRef.current.focus();
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const val = input.trim();
-    if (!val) return;
-    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-    if (socketRef.current) socketRef.current.emit('typing_stop', { room: GLOBAL_ROOM, role });
-    setShowMiniEmojiBar(false);
-    const cleanCmd = val.toLowerCase();
-    if (cleanCmd === '/shadow') {
-      setRole('parent'); localStorage.setItem('stealth_role', 'parent'); setViewMode('stealth');
-      if (socketRef.current) { socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'parent' }); socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: 'parent' }); }
-      setInput(''); setReplyTarget(null); return;
-    }
-    if (cleanCmd === '/dora') {
-      setRole('user'); localStorage.setItem('stealth_role', 'user'); setViewMode('stealth');
-      if (socketRef.current) { socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'user' }); socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: 'user' }); }
-      setInput(''); setReplyTarget(null); return;
-    }
-    if (cleanCmd === '/gpt' || cleanCmd === '/normal') { setViewMode('real_gpt'); setInput(''); setReplyTarget(null); return; }
-    if (viewMode === 'stealth') {
-      let finalMessageText = val; let replyRefId = null;
-      if (replyTarget) {
-        const cleanSnippet = cleanOriginalText(replyTarget.text);
-        const shortReply = cleanSnippet.length > 25 ? cleanSnippet.substring(0, 22) + '...' : cleanSnippet;
-        finalMessageText = `[⤴ ${replyTarget.senderRole}: "${shortReply}"] ${val}`;
-        replyRefId = replyTarget.id;
-      }
-      const encrypted = encryptText(finalMessageText);
-      if (socketRef.current) {
-        socketRef.current.emit('send_stealth_msg', { room: GLOBAL_ROOM, role, encryptedText: encrypted, isMedia: false, replyRefId });
-        playSentSound();
-      }
-      setInput(''); setReplyTarget(null); return;
-    }
-    playSentSound();
-    fetchLiveAIResponse(val);
-    setInput(''); setReplyTarget(null);
-  };
-
-  const handleScheduleAlertSubmit = (e) => {
-    e.preventDefault();
-    if (!schedMsg.trim() || (!schedTime1 && !schedTime2)) return;
-    if (socketRef.current) {
-      socketRef.current.emit('schedule_bubble_alert', { room: GLOBAL_ROOM, text: schedMsg.trim(), time1: schedTime1, time2: schedTime2 });
-      alert("Bubble Alert scheduled successfully!");
-      setSchedMsg(''); setSchedTime1(''); setSchedTime2(''); setIsBotOpen(false);
-    }
-  };
+  const handleScheduleAlertSubmit = (e) => { e.preventDefault(); setIsBotOpen(false); };
 
   // 7 PM Timer & Auto-Download Effect
   useEffect(() => {
@@ -607,27 +474,6 @@ export default function App() {
       firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
     }
   }, []);
-
-  const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
-  const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
-  const hasUnreadSecret = stealthMessages.some(m => m.senderRole !== role && !m.isSeen);
-
-  const alertText = incomingAlert?.text || '';
-  const textLength = alertText.length;
-
-  let bubbleDimensions = 'w-24 h-24';
-  let bubbleFontSize = 'text-xs';
-
-  if (textLength > 90) {
-    bubbleDimensions = 'w-44 h-44';
-    bubbleFontSize = 'text-[9px] leading-[13px]';
-  } else if (textLength > 50) {
-    bubbleDimensions = 'w-36 h-36';
-    bubbleFontSize = 'text-[10px] leading-[14px]';
-  } else if (textLength > 25) {
-    bubbleDimensions = 'w-32 h-32';
-    bubbleFontSize = 'text-[11px] leading-[15px]';
-  }
 
   return (
     <div 
