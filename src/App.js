@@ -196,7 +196,13 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // COMPLETE HANDLERS BLOCK
+  // FIX: Added handleEmojiClick and all required original handlers
+  const handleEmojiClick = (emoji) => {
+    setInput(prev => prev + emoji);
+    setShowMiniEmojiBar(false);
+    if (inputRef.current) inputRef.current.focus();
+  };
+
   const encryptText = (text) => CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
   const decryptText = (cipher) => {
     try {
