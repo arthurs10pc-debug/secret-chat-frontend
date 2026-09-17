@@ -258,7 +258,7 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // --- ALL DEFINED HANDLERS & HELPERS (FIXING ALL NO-UNDEF ERRORS) ---
+  // --- ALL HELPER FUNCTIONS DEFINED PROPERLY ---
   const encryptText = (text) => CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
   const decryptText = (cipher) => {
     try {
@@ -320,6 +320,26 @@ export default function App() {
     if (window.innerWidth < 768) {
       setSidebarOpen(false);
     }
+  };
+
+  const markMessagesAsSeen = useCallback(() => {
+    const isCurrentlyStealth = viewModeRef.current === 'stealth';
+    const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
+
+    if (isCurrentlyStealth && isTabActive && socketRef.current) {
+      const currentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
+      socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: currentRole });
+    }
+  }, []);
+
+  const handleStartReply = (msg) => {
+    const pureText = msg.isMedia ? "[Photo]" : cleanOriginalText(msg.text);
+    setReplyTarget({
+      id: msg._id,
+      text: pureText,
+      senderRole: msg.senderRole === 'user' ? 'A' : 'H'
+    });
+    if (inputRef.current) inputRef.current.focus();
   };
 
   const fetchLiveAIResponse = async (userPrompt) => {
@@ -1718,154 +1738,10 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    const handlePaste = (e) => {
-      if (viewMode !== 'stealth') return;
-      const items = (e.clipboardData || window.clipboardData).items;
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
-          const file = items[i].getAsFile();
-          processAndSendImage(file);
-          e.preventDefault();
-          break;
-        }
-      }
-    };
-    window.addEventListener('paste', handlePaste);
-    return () => window.removeEventListener('paste', handlePaste);
-  }, [viewMode, role]);
-
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        escPressCount.current += 1;
-        if (escPressCount.current === 1) {
-          escTimer.current = setTimeout(() => { escPressCount.current = 0; }, 400);
-        } else if (escPressCount.current === 2) {
-          clearTimeout(escTimer.current);
-          escPressCount.current = 0;
-          setViewMode('real_gpt');
-          setShowPendingModal(false);
-          setShowMiniEmojiBar(false);
-          setIncomingAlert(null);
-          setIsBotOpen(false);
-          setActiveViewImage(null);
-          setActiveReactionMsgId(null);
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
   const handleEmojiClick = (emoji) => {
     setInput(prev => prev + emoji);
     setShowMiniEmojiBar(false);
     if (inputRef.current) inputRef.current.focus();
-  };
-
-  const handleInputChange = (e) => {
-    const val = e.target.value;
-    setInput(val);
-
-    if (socketRef.current && viewMode === 'stealth') {
-      const activeRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
-      if (val.trim().length > 0) {
-        socketRef.current.emit('typing_start', { room: GLOBAL_ROOM, role: activeRole });
-
-        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-        typingTimerRef.current = setTimeout(() => {
-          if (socketRef.current) {
-            socketRef.current.emit('typing_stop', { room: GLOBAL_ROOM, role: activeRole });
-          }
-        }, 1800);
-      } else {
-        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-        socketRef.current.emit('typing_stop', { room: GLOBAL_ROOM, role: activeRole });
-      }
-    }
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const val = input.trim();
-    if (!val) return;
-
-    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-    if (socketRef.current) {
-      socketRef.current.emit('typing_stop', { room: GLOBAL_ROOM, role });
-    }
-
-    setShowMiniEmojiBar(false);
-    const cleanCmd = val.toLowerCase();
-
-    if (cleanCmd === '/shadow') {
-      setRole('parent');
-      localStorage.setItem('stealth_role', 'parent');
-      setViewMode('stealth');
-      if (socketRef.current) {
-        socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'parent' });
-        socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: 'parent' });
-      }
-      if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
-      setInput('');
-      setReplyTarget(null);
-      return;
-    }
-
-    if (cleanCmd === '/dora') {
-      setRole('user');
-      localStorage.setItem('stealth_role', 'user');
-      setViewMode('stealth');
-      if (socketRef.current) {
-        socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'user' });
-        socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: 'user' });
-      }
-      setInput('');
-      setReplyTarget(null);
-      return;
-    }
-
-    if (cleanCmd === '/gpt' || cleanCmd === '/normal') {
-      setViewMode('real_gpt');
-      setInput('');
-      setReplyTarget(null);
-      return;
-    }
-
-    if (viewMode === 'stealth') {
-      let finalMessageText = val;
-      let replyRefId = null;
-
-      if (replyTarget) {
-        const cleanSnippet = cleanOriginalText(replyTarget.text);
-        const shortReply = cleanSnippet.length > 25 ? cleanSnippet.substring(0, 22) + '...' : cleanSnippet;
-        finalMessageText = `[⤴ ${replyTarget.senderRole}: "${shortReply}"] ${val}`;
-        replyRefId = replyTarget.id;
-      }
-
-      const encrypted = encryptText(finalMessageText);
-      if (socketRef.current) {
-        socketRef.current.emit('send_stealth_msg', {
-          room: GLOBAL_ROOM,
-          role,
-          encryptedText: encrypted,
-          isMedia: false,
-          replyRefId
-        });
-        playSentSound();
-      }
-      setInput('');
-      setReplyTarget(null);
-      return;
-    }
-
-    playSentSound();
-    fetchLiveAIResponse(val);
-    setInput('');
-    setReplyTarget(null);
   };
 
   const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
