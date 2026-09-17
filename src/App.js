@@ -730,19 +730,29 @@ export default function App() {
     playSentSound();
   };
 
-  // --- UNIVERSAL WHITE DOT SYNC HANDLER ---
+  // --- UNIVERSAL WHITE DOT SYNC HANDLER (YOUTUBE & ALL 4 ENGINES) ---
   const handleUniversalSyncRealign = () => {
     if (socketRef.current) {
       if (codexEngine === 'youtube' && activeMovieYTId) {
         socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'youtube', ytId: activeMovieYTId, senderRole: role });
+        if (playerRef.current && typeof playerRef.current.playVideo === 'function') {
+          playerRef.current.unMute();
+          playerRef.current.playVideo();
+        }
       } else if (codexEngine === 'gofile' && activeMovieSrc) {
         socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'gofile', url: activeMovieSrc, senderRole: role });
+        if (html5VideoRef.current) {
+          html5VideoRef.current.play().catch(() => {});
+        }
       } else if (codexEngine === 'embed' && activeEmbedUrl) {
         socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'embed', embedUrl: activeEmbedUrl, imdbId: currentImdbId, senderRole: role });
       } else if (codexEngine === 'local') {
         socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'local', senderRole: role });
+        if (html5VideoRef.current) {
+          html5VideoRef.current.play().catch(() => {});
+        }
       }
-      alert("✨ Re-synced successfully! Both sides are now aligned.");
+      alert("✨ Force-synced! Playback state and timeline re-aligned on both sides.");
     }
   };
 
@@ -3214,7 +3224,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={handleUniversalSyncRealign}
-                    className="absolute top-3 left-3 z-[99999] w-3 h-3 rounded-full bg-white/70 hover:bg-white shadow-[0_0_8px_rgba(255,255,255,0.9)] cursor-pointer active:scale-90 transition-all border border-black/60"
+                    className="absolute top-3 left-3 z-[99999] w-3 h-3 rounded-full bg-white/80 hover:bg-white shadow-[0_0_10px_rgba(255,255,255,0.9)] cursor-pointer active:scale-90 transition-all border border-black/60"
                     title="Click to force re-sync and align playback!"
                   />
 
@@ -3323,7 +3333,7 @@ export default function App() {
                   {/* --- ABSOLUTE BOTTOM-RIGHT TOGEPI WIDGET (STAYS ON FULLSCREEN) --- */}
                   <div className="absolute bottom-4 right-4 z-[999999] flex flex-col items-end pointer-events-auto">
                     {showTogepiMenu && (
-                      <div className="w-64 sm:w-72 bg-[#121212]/95 border border-amber-400/50 rounded-2xl p-3 shadow-2xl backdrop-blur-md mb-2 space-y-2.5 text-left animate-in zoom-in-95 duration-150">
+                      <div className="w-68 sm:w-76 bg-[#121212]/95 border border-amber-400/50 rounded-2xl p-3 shadow-2xl backdrop-blur-md mb-2 space-y-2.5 text-left animate-in zoom-in-95 duration-150">
                         <div className="flex items-center justify-between border-b border-[#262626] pb-1.5">
                           <div className="flex items-center gap-1.5">
                             <span className="text-sm">🐣</span>
