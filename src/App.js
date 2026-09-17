@@ -264,7 +264,7 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // --- HELPER FUNCTIONS ---
+  // --- HELPER FUNCTIONS & HANDLE EMOJI CLICK ---
   const encryptText = (text) => CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
   const decryptText = (cipher) => {
     try {
@@ -544,7 +544,7 @@ export default function App() {
     setMovieError('');
 
     if (file.name.toLowerCase().endsWith('.mkv')) {
-      setMovieError("Warning: .MKV file selected. Native web players cannot decode AC3/MKV audio. If no sound plays, use an .MP4 format.");
+      setMovieError("Warning: .MKV file selected. Native web players cannot decode AC3/MKV audio. If no sound plays, use an .MP4 file.");
     }
 
     const objUrl = URL.createObjectURL(file);
@@ -1896,6 +1896,12 @@ export default function App() {
         reaction: emoji
       });
     }
+  };
+
+  const handleEmojiClick = (emoji) => {
+    setInput(prev => prev + emoji);
+    setShowMiniEmojiBar(false);
+    if (inputRef.current) inputRef.current.focus();
   };
 
   const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
@@ -3295,12 +3301,14 @@ export default function App() {
 
                         <div className="grid grid-cols-2 gap-1 pt-1">
                           <button 
+                            type="button"
                             onClick={() => handleSendTogepiMessage("જાગે છે?")}
                             className="bg-[#1a1a1a] hover:bg-[#252525] text-amber-300 text-[10px] font-bold py-1.5 px-2 rounded-lg border border-amber-500/30 cursor-pointer active:scale-95 truncate"
                           >
                             જાગે છે? 👁️
                           </button>
                           <button 
+                            type="button"
                             onClick={() => handleSendTogepiMessage("ઊંઘ આવે છે?")}
                             className="bg-[#1a1a1a] hover:bg-[#252525] text-rose-300 text-[10px] font-bold py-1.5 px-2 rounded-lg border border-rose-500/30 cursor-pointer active:scale-95 truncate"
                           >
@@ -3318,6 +3326,7 @@ export default function App() {
                             className="flex-1 bg-[#181818] border border-[#333] text-white px-2.5 py-1.5 rounded-lg text-[11px] outline-none focus:border-amber-400"
                           />
                           <button 
+                            type="button"
                             onClick={() => handleSendTogepiMessage(togepiInput)}
                             className="bg-amber-500 hover:bg-amber-400 text-black px-2.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center justify-center shrink-0 active:scale-95"
                           >
@@ -3328,6 +3337,7 @@ export default function App() {
                     )}
 
                     <button
+                      type="button"
                       onClick={() => setShowTogepiMenu(!showTogepiMenu)}
                       className="w-10 h-10 rounded-full hover:scale-110 active:scale-95 transition-all cursor-pointer flex items-center justify-center relative group drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
                       title="Togepi Movie Chat"
