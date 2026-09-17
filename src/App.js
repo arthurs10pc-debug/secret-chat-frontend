@@ -1898,6 +1898,12 @@ export default function App() {
     }
   };
 
+  const handleEmojiClick = (emoji) => {
+    setInput(prev => prev + emoji);
+    setShowMiniEmojiBar(false);
+    if (inputRef.current) inputRef.current.focus();
+  };
+
   const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
   const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
   const hasUnreadSecret = stealthMessages.some(m => m.senderRole !== role && !m.isSeen);
