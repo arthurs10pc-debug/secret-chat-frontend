@@ -258,7 +258,7 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // --- DEFINED MISSING FUNCTIONS (HANDLESUBMIT & HANDLEINPUTCHANGE) ---
+  // --- DEFINED ALL REQUIRED HELPER FUNCTIONS ---
   const encryptText = (text) => CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
   const decryptText = (cipher) => {
     try {
@@ -340,6 +340,14 @@ export default function App() {
       senderRole: msg.senderRole === 'user' ? 'A' : 'H'
     });
     if (inputRef.current) inputRef.current.focus();
+  };
+
+  const handleNewChat = () => {
+    setConversations([]);
+    setCurrentRoom("New chat");
+    setViewMode('real_gpt');
+    setReplyTarget(null);
+    closeSidebarOnMobile();
   };
 
   const handleInputChange = (e) => {
