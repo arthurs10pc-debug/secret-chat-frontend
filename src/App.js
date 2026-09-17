@@ -70,11 +70,16 @@ const extractYouTubeId = (url) => {
 const getEmbedUrl = (server, imdbId) => {
   const cleanId = imdbId.trim();
   switch (server) {
-    case 'vidlink': return `https://vidlink.pro/movie/${cleanId}`;
-    case 'autoembed': return `https://player.autoembed.cc/embed/movie/${cleanId}`;
-    case 'vidsrc_xyz': return `https://vidsrc.xyz/embed/movie/${cleanId}`;
-    case 'smashy': return `https://embed.smashystream.com/playere.php?imdb=${cleanId}`;
-    default: return `https://vidlink.pro/movie/${cleanId}`;
+    case 'vidlink':
+      return `https://vidlink.pro/movie/${cleanId}`;
+    case 'autoembed':
+      return `https://player.autoembed.cc/embed/movie/${cleanId}`;
+    case 'vidsrc_xyz':
+      return `https://vidsrc.xyz/embed/movie/${cleanId}`;
+    case 'smashy':
+      return `https://embed.smashystream.com/playere.php?imdb=${cleanId}`;
+    default:
+      return `https://vidlink.pro/movie/${cleanId}`;
   }
 };
 
@@ -258,334 +263,6 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // --- ENCRYPTION & SOUND HELPERS ---
-  const encryptText = (text) => CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
-  const decryptText = (cipher) => {
-    try {
-      const bytes = CryptoJS.AES.decrypt(cipher, SECRET_KEY);
-      const original = bytes.toString(CryptoJS.enc.Utf8);
-      return original || cipher;
-    } catch {
-      return cipher;
-    }
-  };
-
-  const playSentSound = useCallback(() => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.04);
-      gain.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.04);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.04);
-    } catch (e) {}
-  }, []);
-
-  const playReceiveSound = useCallback(() => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc1 = ctx.createOscillator();
-      const osc2 = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc1.type = 'sine'; osc2.type = 'sine';
-      osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
-      osc2.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08);
-      gain.gain.setValueAtTime(0.09, ctx.currentTime);
-      osc1.connect(gain); osc2.connect(gain); gain.connect(ctx.destination);
-      osc1.start(ctx.currentTime); osc1.stop(ctx.currentTime + 0.08);
-      osc2.start(ctx.currentTime + 0.08); osc2.stop(ctx.currentTime + 0.28);
-    } catch (e) {}
-  }, []);
-
-  const playBubblePopSound = useCallback(() => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(800, ctx.currentTime);
-      gain.gain.setValueAtTime(0.06, ctx.currentTime);
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.start(); osc.stop(ctx.currentTime + 0.08);
-    } catch (e) {}
-  }, []);
-
-  // --- ALL ESSENTIAL HANDLERS & METHODS ---
-  const closeSidebarOnMobile = () => {
-    if (window.innerWidth < 768) {
-      setSidebarOpen(false);
-    }
-  };
-
-  const fetchLiveAIResponse = async (userPrompt) => {
-    setIsThinking(true);
-    const userMsg = {
-      id: 'usr_' + Date.now(),
-      role: 'user',
-      text: userPrompt,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    
-    const updated = [...conversations, userMsg];
-    setConversations(updated);
-
-    if (currentRoom === "New chat" || currentRoom.startsWith("New chat")) {
-      const generatedTitle = userPrompt.length > 24 ? userPrompt.substring(0, 22) + '...' : userPrompt;
-      const updatedList = roomList.map(r => r === currentRoom ? generatedTitle : r);
-      setRoomList(updatedList);
-      setCurrentRoom(generatedTitle);
-    }
-
-    let reply = "";
-    try {
-      const payload = {
-        messages: [
-          { role: "system", content: "You are ChatGPT, an AI assistant created by OpenAI. Provide authentic, highly intelligent, detailed, and directly useful answers with clean markdown formatting, proper paragraphs, and bullet points." },
-          { role: "user", content: userPrompt }
-        ],
-        model: "openai",
-        seed: Math.floor(Math.random() * 99999)
-      };
-
-      const response = await fetch("https://text.pollinations.ai/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      if (response.ok) {
-        const text = await response.text();
-        if (text && text.trim().length > 15 && !text.includes("402 Payment Required")) {
-          reply = text.trim();
-        }
-      }
-    } catch (e) {}
-
-    if (!reply) {
-      reply = `Network connection timed out while reaching the inference cluster. Please send your query again.`;
-    }
-
-    const aiMsg = {
-      id: 'ai_' + Date.now(),
-      role: 'assistant',
-      text: reply,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    setConversations([...updated, aiMsg]);
-    setIsThinking(false);
-  };
-
-  const processAndSendImage = (file) => {
-    if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64Data = event.target.result;
-      const encrypted = encryptText(base64Data);
-
-      if (socketRef.current && viewMode === 'stealth') {
-        socketRef.current.emit('send_stealth_msg', {
-          room: GLOBAL_ROOM,
-          role,
-          encryptedText: encrypted,
-          isMedia: true
-        });
-        playSentSound();
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleSelectLocalFile = (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    setMovieError('');
-
-    if (file.name.toLowerCase().endsWith('.mkv')) {
-      setMovieError("Warning: .MKV file selected. Native web players cannot decode AC3/MKV audio. If no sound plays, use an .MP4 file.");
-    }
-
-    const objUrl = URL.createObjectURL(file);
-    setLocalVideoSrc(objUrl);
-    setLocalFileName(file.name);
-    setIsMoviePlaying(false);
-  };
-
-  const handleNewChat = () => {
-    setConversations([]);
-    setCurrentRoom("New chat");
-    setViewMode('real_gpt');
-    setReplyTarget(null);
-    closeSidebarOnMobile();
-  };
-
-  const downloadPendingPDF = (e) => {
-    e.stopPropagation();
-    const doc = new jsPDF();
-    const pendingList = stealthMessagesRef.current.filter(m => m.flaggedPending);
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.text(`Answer Pending Questions Export`, 14, 20);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(`Export Timestamp: ${new Date().toLocaleString()}`, 14, 28);
-    doc.text(`Total Pending Items: ${pendingList.length}`, 14, 34);
-    doc.line(14, 38, 196, 38);
-
-    let y = 46;
-    if (pendingList.length === 0) {
-      doc.text("No pending questions flagged in the system.", 14, y);
-    } else {
-      pendingList.forEach((m, idx) => {
-        const senderLabel = m.senderRole === 'user' ? 'A' : 'H';
-        doc.setFont("helvetica", "bold");
-        doc.text(`[Pending #${idx + 1}] [${m.timeFormatted}] ${senderLabel}:`, 14, y);
-        y += 6;
-
-        doc.setFont("helvetica", "normal");
-        const splitText = doc.splitTextToSize(m.isMedia ? "[Encrypted Image Asset]" : cleanOriginalText(m.text || ""), 175);
-        doc.text(splitText, 18, y);
-        y += (splitText.length * 5) + 4;
-
-        if (y > 270) {
-          doc.addPage();
-          y = 20;
-        }
-      });
-    }
-
-    doc.save(`pending_answers_${Date.now()}.pdf`);
-  };
-
-  const handleScrollToMessage = (targetMsgId) => {
-    if (!targetMsgId) return;
-    const el = document.getElementById(`stealth-msg-${targetMsgId}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setHighlightedMsgId(targetMsgId);
-      setTimeout(() => setHighlightedMsgId(null), 1800);
-    }
-  };
-
-  const handleOpenViewOnce = (msg) => {
-    if (socketRef.current) {
-      socketRef.current.emit('mark_media_opened', { room: GLOBAL_ROOM, messageId: msg._id });
-    }
-
-    setStealthMessages(prev => prev.map(m => m._id === msg._id ? { ...m, mediaOpened: true } : m));
-
-    setActiveViewImage({
-      id: msg._id,
-      data: msg.text,
-      sender: msg.senderRole === 'user' ? 'A' : 'H',
-      time: msg.timeFormatted
-    });
-  };
-
-  const togglePendingFlag = (e, msg) => {
-    e.stopPropagation();
-    if (role !== 'parent') return;
-
-    const newStatus = !msg.flaggedPending;
-    setStealthMessages(prev => prev.map(m => m._id === msg._id ? { ...m, flaggedPending: newStatus } : m));
-
-    if (socketRef.current) {
-      socketRef.current.emit('toggle_pending', { 
-        messageId: msg._id, 
-        status: newStatus, 
-        room: GLOBAL_ROOM 
-      });
-    }
-  };
-
-  const handleHtml5Play = () => {
-    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
-    setIsMoviePlaying(true);
-    if (socketRef.current) {
-      socketRef.current.emit('codex_movie_sync', {
-        room: GLOBAL_ROOM,
-        state: 'PLAY',
-        currentTime: html5VideoRef.current.currentTime,
-        timestamp: Date.now()
-      });
-    }
-  };
-
-  const handleHtml5Pause = () => {
-    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
-    setIsMoviePlaying(false);
-    if (socketRef.current) {
-      socketRef.current.emit('codex_movie_sync', {
-        room: GLOBAL_ROOM,
-        state: 'PAUSE',
-        currentTime: html5VideoRef.current.currentTime,
-        timestamp: Date.now()
-      });
-    }
-  };
-
-  const handleHtml5Seeked = () => {
-    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
-    if (socketRef.current) {
-      socketRef.current.emit('codex_movie_sync', {
-        room: GLOBAL_ROOM,
-        state: html5VideoRef.current.paused ? 'PAUSE' : 'PLAY',
-        currentTime: html5VideoRef.current.currentTime,
-        timestamp: Date.now()
-      });
-    }
-  };
-
-  const handleCloseViewOnce = () => {
-    if (!activeViewImage) return;
-
-    const archiveItem = {
-      id: activeViewImage.id,
-      data: activeViewImage.data,
-      sender: activeViewImage.sender,
-      time: activeViewImage.time,
-      archivedAt: Date.now()
-    };
-    setArchivedImages(prev => [archiveItem, ...prev]);
-    setStealthMessages(prev => prev.filter(m => m._id !== activeViewImage.id));
-
-    if (socketRef.current) {
-      socketRef.current.emit('destroy_view_once', {
-        room: GLOBAL_ROOM,
-        messageId: activeViewImage.id
-      });
-    }
-
-    setActiveViewImage(null);
-  };
-
-  const handleBubbleDismiss = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = (rect.left + rect.width / 2) / window.innerWidth;
-    const y = (rect.top + rect.height / 2) / window.innerHeight;
-
-    confetti({
-      particleCount: 45,
-      spread: 70,
-      startVelocity: 25,
-      origin: { x, y },
-      colors: ['#ffffff', '#e0f2fe', '#93c5fd', '#bfdbfe']
-    });
-
-    if (socketRef.current) {
-      socketRef.current.emit('bubble_popped', { room: GLOBAL_ROOM });
-    }
-
-    setIncomingAlert(null);
-  };
-
   // --- 7 PM Auto-Download Countdown Timer Effect ---
   useEffect(() => {
     const timerInterval = setInterval(() => {
@@ -614,6 +291,673 @@ export default function App() {
 
     return () => clearInterval(timerInterval);
   }, [role, stealthMessages]);
+
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+    if (viewMode === 'codex' && playerRef.current && isPlaying) {
+      playerRef.current.pauseVideo();
+      setIsPlaying(false);
+    }
+  }, [viewMode, isPlaying]);
+
+  useEffect(() => {
+    roleRef.current = role;
+  }, [role]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && isPlaying) {
+        const current = playerRef.current.getCurrentTime() || 0;
+        const duration = playerRef.current.getDuration() || 100;
+        setTrackProgress(current);
+        setTrackDuration(duration);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isPlaying]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768 && sidebarOpen) {
+        setSidebarOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [sidebarOpen]);
+
+  const closeSidebarOnMobile = () => {
+    if (window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!window.YT) {
+      const tag = document.createElement('script');
+      tag.src = "https://www.youtube.com/iframe_api";
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    }
+  }, []);
+
+  const initGlobalPlayer = useCallback((initialVideoId = '') => {
+    if (window.YT && window.YT.Player && !playerRef.current) {
+      try {
+        playerRef.current = new window.YT.Player('persistent-sync-iframe', {
+          height: '100%',
+          width: '100%',
+          videoId: initialVideoId,
+          playerVars: {
+            autoplay: 1,
+            controls: 1,
+            modestbranding: 1,
+            rel: 0,
+            enablejsapi: 1,
+            origin: window.location.origin
+          },
+          events: {
+            onReady: () => {
+              if (pendingRestoreRef.current) {
+                const playerInst = pendingRestoreRef.current;
+                pendingRestoreRef.current = null;
+                isRemoteTriggerRef.current = true;
+                playerRef.current.loadVideoById({
+                  videoId: playerInst.videoId,
+                  startSeconds: playerInst.currentTime || 0
+                });
+                playerRef.current.unMute();
+                playerRef.current.setVolume(100);
+                if (playerInst.state === 'PLAY' && viewModeRef.current !== 'codex') {
+                  const playPromise = playerRef.current.playVideo();
+                  if (playPromise && typeof playPromise.catch === 'function') {
+                    playPromise.catch(() => setAutoplayBlocked(true));
+                  }
+                } else {
+                  playerRef.current.pauseVideo();
+                }
+                setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
+              }
+            },
+            onStateChange: (event) => {
+              if (isRemoteTriggerRef.current) return;
+              if (Date.now() - lastSyncActionTimeRef.current < 2500) return;
+
+              if (event.data === window.YT.PlayerState.PLAYING) {
+                setIsPlaying(true);
+                setAutoplayBlocked(false);
+                if (socketRef.current) {
+                  socketRef.current.emit('sync_playback_state', {
+                    room: GLOBAL_ROOM,
+                    state: 'PLAY',
+                    currentTime: playerRef.current.getCurrentTime(),
+                    timestamp: Date.now()
+                  });
+                }
+              } else if (event.data === window.YT.PlayerState.PAUSED) {
+                setIsPlaying(false);
+                if (socketRef.current) {
+                  socketRef.current.emit('sync_playback_state', {
+                    room: GLOBAL_ROOM,
+                    state: 'PAUSE',
+                    currentTime: playerRef.current.getCurrentTime(),
+                    timestamp: Date.now()
+                  });
+                }
+              }
+            }
+          }
+        });
+      } catch (e) {}
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (window.YT && window.YT.Player && !playerRef.current) {
+        initGlobalPlayer();
+        clearInterval(timer);
+      }
+    }, 400);
+    return () => clearInterval(timer);
+  }, [initGlobalPlayer]);
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      navigator.serviceWorker.register('/sw.js').then(async (reg) => {
+        swRegistrationRef.current = reg;
+        try {
+          let subscription = await reg.pushManager.getSubscription();
+          if (!subscription) {
+            subscription = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
+            });
+          }
+          await fetch(`${SOCKET_URL}/api/save-subscription`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(subscription)
+          });
+        } catch (e) {}
+      }).catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    if (role === 'parent' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+    }
+  }, [role]);
+
+  const triggerParentMobileNotification = useCallback((incomingText) => {
+    const isParent = (roleRef.current || localStorage.getItem('stealth_role')) === 'parent';
+    if (!isParent || !('Notification' in window) || Notification.permission !== 'granted') return;
+
+    const userMsgs = stealthMessagesRef.current
+      .filter(m => m.senderRole === 'user')
+      .map(m => m.isMedia ? "[Photo Asset]" : m.text);
+
+    if (incomingText) {
+      userMsgs.push(incomingText);
+    }
+
+    const last3 = userMsgs.slice(-3);
+    const bodyFormatted = last3.length > 0 
+      ? last3.map(t => `• ${t.length > 40 ? t.substring(0, 37) + '...' : t}`).join('\n')
+      : "• New incoming message";
+
+    const title = `ChatGPT • (A)`;
+    const options = {
+      body: bodyFormatted,
+      icon: 'https://chat.openai.com/favicon.ico',
+      badge: 'https://chat.openai.com/favicon.ico',
+      tag: 'stealth_parent_stream',
+      renotify: true,
+      vibrate: [200, 100, 200]
+    };
+
+    if (swRegistrationRef.current && 'showNotification' in swRegistrationRef.current) {
+      swRegistrationRef.current.showNotification(title, options);
+    } else {
+      try {
+        new Notification(title, options);
+      } catch (e) {}
+    }
+  }, []);
+
+  useEffect(() => {
+    stealthMessagesRef.current = stealthMessages;
+    if (streamContainerRef.current) {
+      streamContainerRef.current.scrollTop = streamContainerRef.current.scrollHeight;
+    }
+  }, [stealthMessages.length, isPeerTyping]);
+
+  useEffect(() => {
+    localStorage.setItem('stealth_conversations', JSON.stringify(conversations));
+  }, [conversations]);
+
+  useEffect(() => {
+    localStorage.setItem('stealth_rooms', JSON.stringify(roomList));
+  }, [roomList]);
+
+  useEffect(() => {
+    localStorage.setItem('stealth_image_vault', JSON.stringify(archivedImages));
+  }, [archivedImages]);
+
+  const playSentSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.04);
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.04);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.04);
+    } catch (e) {}
+  }, []);
+
+  const playReceiveSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc1.type = 'sine';
+      osc2.type = 'sine';
+
+      osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
+      osc2.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08);
+
+      gain.gain.setValueAtTime(0.09, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc1.start(ctx.currentTime);
+      osc1.stop(ctx.currentTime + 0.08);
+      osc2.start(ctx.currentTime + 0.08);
+      osc2.stop(ctx.currentTime + 0.28);
+    } catch (e) {}
+  }, []);
+
+  const playBubblePopSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(800, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(220, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.08);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.08);
+    } catch (e) {}
+  }, []);
+
+  const encryptText = (text) => CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
+  const decryptText = (cipher) => {
+    try {
+      const bytes = CryptoJS.AES.decrypt(cipher, SECRET_KEY);
+      const original = bytes.toString(CryptoJS.enc.Utf8);
+      return original || cipher;
+    } catch {
+      return cipher;
+    }
+  };
+
+  const markMessagesAsSeen = useCallback(() => {
+    const isCurrentlyStealth = viewModeRef.current === 'stealth';
+    const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
+
+    if (isCurrentlyStealth && isTabActive && socketRef.current) {
+      const currentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
+      socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: currentRole });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (viewMode === 'stealth') {
+      markMessagesAsSeen();
+      const currentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
+      setStealthMessages(prev => prev.map(m => m.senderRole !== currentRole ? { ...m, isSeen: true } : m));
+    }
+  }, [viewMode, markMessagesAsSeen]);
+
+  // --- FULLY RESTORED SOCKET.IO CONNECTION & LISTENERS ---
+  useEffect(() => {
+    socketRef.current = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 30,
+      reconnectionDelay: 1000
+    });
+
+    socketRef.current.on('connect', () => {
+      setIsConnected(true);
+      const currentRole = localStorage.getItem('stealth_role') || 'user';
+      socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: currentRole });
+      markMessagesAsSeen();
+    });
+
+    socketRef.current.on('disconnect', () => {
+      setIsConnected(false);
+      setIsPeerTyping(false);
+    });
+
+    socketRef.current.on('load_history', (history) => {
+      const parsed = (history || []).map(m => ({
+        ...m,
+        text: decryptText(m.encryptedText),
+        timeFormatted: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isSeen: m.isSeen || false,
+        isMedia: m.isMedia || false,
+        mediaOpened: m.mediaOpened || false,
+        reaction: m.reaction || null
+      }));
+      setStealthMessages(parsed);
+      markMessagesAsSeen();
+    });
+
+    socketRef.current.on('peer_typing_status', (data) => {
+      if (typeof data === 'object' && data !== null) {
+        const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
+        if (data.senderRole && data.senderRole === myRole) return;
+        setIsPeerTyping(Boolean(data.isTyping));
+      } else {
+        setIsPeerTyping(Boolean(data));
+      }
+    });
+
+    socketRef.current.on('arcade_request_received', () => {
+      if (role !== 'parent') {
+        setIncomingGameRequest(true);
+        playReceiveSound();
+      }
+    });
+
+    socketRef.current.on('toggle_arcade_plugins', (status) => {
+      setShowArcadePlugins(status);
+      if (!status) {
+        setActiveGame(null);
+        setIncomingGameRequest(false);
+      }
+    });
+
+    socketRef.current.on('launch_game_session', (gameObj) => {
+      setActiveGame(gameObj);
+      setWinnerMessage('');
+      playReceiveSound();
+    });
+
+    socketRef.current.on('arcade_game_action_broadcast', (moveData) => {
+      if (moveData.gameId === 'tictactoe') {
+        setTictactoeBoard(moveData.board);
+        setIsHNext(moveData.isHNext);
+        setWinnerMessage(moveData.winner || '');
+        if (moveData.scores) setScores(moveData.scores);
+      } else if (moveData.gameId === 'ludo') {
+        setLudoPos(moveData.pos);
+        setLudoTurn(moveData.turn);
+        setDiceVal(moveData.dice);
+        setWinnerMessage(moveData.winner || '');
+        if (moveData.scores) setScores(moveData.scores);
+      } else if (moveData.gameId === 'pong') {
+        setPongScore(moveData.score);
+        if (moveData.winner) setWinnerMessage(moveData.winner);
+        if (moveData.scores) setScores(moveData.scores);
+      } else if (moveData.gameId === 'airhockey') {
+        setHockeyScore(moveData.score);
+        if (moveData.winner) setWinnerMessage(moveData.winner);
+        if (moveData.scores) setScores(moveData.scores);
+      } else if (moveData.gameId === 'battleship') {
+        setBattleshipGrid(moveData.grid);
+        setBattleshipHits(moveData.hits);
+        if (moveData.winner) setWinnerMessage(moveData.winner);
+        if (moveData.scores) setScores(moveData.scores);
+      } else if (moveData.gameId === 'pool') {
+        setPoolBalls(moveData.balls);
+        if (moveData.winner) setWinnerMessage(moveData.winner);
+        if (moveData.scores) setScores(moveData.scores);
+      } else if (moveData.gameId === 'snakeladder') {
+        setSnakePos(moveData.pos);
+        if (moveData.winner) setWinnerMessage(moveData.winner);
+        if (moveData.scores) setScores(moveData.scores);
+      }
+    });
+
+    socketRef.current.on('sync_restore_state', (data) => {
+      if (!data || !data.connected) return;
+      setSyncStatus('connected');
+
+      if (data.videoId) {
+        setActiveVideoId(data.videoId);
+        setActiveTrackTitle(data.title || "YouTube Track");
+        setIsPlaying(data.state === 'PLAY');
+
+        if (playerRef.current && playerRef.current.loadVideoById) {
+          isRemoteTriggerRef.current = true;
+          playerRef.current.loadVideoById({
+            videoId: data.videoId,
+            startSeconds: data.currentTime || 0
+          });
+          playerRef.current.unMute();
+          playerRef.current.setVolume(100);
+          if (data.state === 'PLAY' && viewModeRef.current !== 'codex') {
+            const playPromise = playerRef.current.playVideo();
+            if (playPromise && typeof playPromise.catch === 'function') {
+              playPromise.catch(() => setAutoplayBlocked(true));
+            }
+          } else {
+            playerRef.current.pauseVideo();
+          }
+          setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
+        } else {
+          pendingRestoreRef.current = data;
+        }
+      }
+    });
+
+    socketRef.current.on('sync_receive_invite', ({ fromRole }) => {
+      setSyncStatus('incoming_request');
+      setIncomingInviteRole(fromRole);
+      playReceiveSound();
+    });
+
+    socketRef.current.on('sync_connected_event', () => {
+      setSyncStatus('connected');
+      playReceiveSound();
+      confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
+    });
+
+    socketRef.current.on('sync_disconnected_event', () => {
+      setSyncStatus('idle');
+      setIsPlaying(false);
+      setActiveTrackTitle('');
+      setActiveVideoId('');
+      setYoutubeUrlInput('');
+      if (playerRef.current && playerRef.current.stopVideo) {
+        playerRef.current.stopVideo();
+      }
+    });
+
+    socketRef.current.on('sync_track_update', ({ videoId, title }) => {
+      setActiveTrackTitle(title || "YouTube Track");
+      setActiveVideoId(videoId);
+      setIsPlaying(true);
+      lastSyncActionTimeRef.current = Date.now();
+
+      if (playerRef.current && playerRef.current.loadVideoById) {
+        isRemoteTriggerRef.current = true;
+        try {
+          playerRef.current.loadVideoById({ videoId, startSeconds: 0 });
+          playerRef.current.unMute();
+          playerRef.current.setVolume(100);
+          const playPromise = playerRef.current.playVideo();
+          if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(() => setAutoplayBlocked(true));
+          }
+        } catch (e) {
+          setAutoplayBlocked(true);
+        }
+        setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
+      }
+    });
+
+    socketRef.current.on('sync_playback_update', ({ state, currentTime, timestamp }) => {
+      if (!playerRef.current) return;
+      isRemoteTriggerRef.current = true;
+      lastSyncActionTimeRef.current = Date.now();
+
+      const latency = Math.max(0, (Date.now() - timestamp) / 1000);
+      const targetTime = currentTime + (state === 'PLAY' ? latency : 0);
+
+      try {
+        if (Math.abs(playerRef.current.getCurrentTime() - targetTime) > 0.4) {
+          playerRef.current.seekTo(targetTime, true);
+        }
+
+        if (state === 'PLAY') {
+          playerRef.current.unMute();
+          playerRef.current.playVideo();
+          setIsPlaying(true);
+          setAutoplayBlocked(false);
+        } else {
+          playerRef.current.pauseVideo();
+          setIsPlaying(false);
+        }
+      } catch (e) {
+        setAutoplayBlocked(true);
+      }
+
+      setTimeout(() => {
+        isRemoteTriggerRef.current = false;
+      }, 1000);
+    });
+
+    socketRef.current.on('codex_restore_state', (data) => {
+      if (!data) return;
+      setCodexEngine(data.engine || 'gofile');
+      setMovieError('');
+      if (data.engine === 'youtube') {
+        setActiveMovieYTId(data.ytId || '');
+        setActiveMovieSrc('');
+        setActiveEmbedUrl('');
+      } else if (data.engine === 'embed') {
+        setActiveEmbedUrl(data.embedUrl || '');
+        setCurrentImdbId(data.imdbId || '');
+        setActiveMovieSrc('');
+        setActiveMovieYTId('');
+      } else {
+        setActiveMovieSrc(data.url || '');
+        setActiveMovieYTId('');
+        setActiveEmbedUrl('');
+      }
+    });
+
+    socketRef.current.on('codex_movie_load_broadcast', ({ engine, url, ytId, embedUrl, imdbId, senderRole }) => {
+      const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
+      if (senderRole === myRole) return;
+
+      setCodexEngine(engine);
+      setMovieError('');
+      if (engine === 'gofile') {
+        setActiveMovieSrc(url);
+        setActiveMovieYTId('');
+        setActiveEmbedUrl('');
+        setIsMoviePlaying(false);
+      } else if (engine === 'youtube') {
+        setActiveMovieYTId(ytId);
+        setActiveMovieSrc('');
+        setActiveEmbedUrl('');
+        setIsMoviePlaying(true);
+      } else if (engine === 'embed') {
+        setActiveEmbedUrl(embedUrl);
+        setCurrentImdbId(imdbId || '');
+        setActiveMovieSrc('');
+        setActiveMovieYTId('');
+      } else if (engine === 'local') {
+        setActiveMovieSrc('');
+        setActiveMovieYTId('');
+        setActiveEmbedUrl('');
+      }
+      playReceiveSound();
+    });
+
+    socketRef.current.on('codex_movie_sync_broadcast', ({ state, currentTime, timestamp }) => {
+      if ((codexEngine === 'gofile' || codexEngine === 'local') && html5VideoRef.current) {
+        isMovieRemoteTriggerRef.current = true;
+        const latency = Math.max(0, (Date.now() - timestamp) / 1000);
+        const target = currentTime + (state === 'PLAY' ? latency : 0);
+
+        if (Math.abs(html5VideoRef.current.currentTime - target) > 0.4) {
+          html5VideoRef.current.currentTime = target;
+        }
+
+        if (state === 'PLAY') {
+          html5VideoRef.current.play().catch(() => {});
+          setIsMoviePlaying(true);
+        } else {
+          html5VideoRef.current.pause();
+          setIsMoviePlaying(false);
+        }
+
+        setTimeout(() => { isMovieRemoteTriggerRef.current = false; }, 600);
+      }
+    });
+
+    socketRef.current.on('scheduled_jobs_update', (jobs) => {
+      setScheduledJobs(jobs || []);
+    });
+
+    socketRef.current.on('receive_assistant_alert', (data) => {
+      setIncomingAlert(data);
+      playReceiveSound();
+    });
+
+    socketRef.current.on('parent_bubble_pop_notify', () => {
+      if (localStorage.getItem('stealth_role') === 'parent') {
+        playBubblePopSound();
+      }
+    });
+
+    socketRef.current.on('receive_stealth_msg', (data) => {
+      setIsPeerTyping(false);
+      const text = decryptText(data.encryptedText);
+      const myCurrentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
+      const isCurrentlyStealth = viewModeRef.current === 'stealth';
+      const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
+      const shouldAutoSeen = isCurrentlyStealth && isTabActive && data.senderRole !== myCurrentRole;
+
+      const formatted = {
+        ...data,
+        text,
+        timeFormatted: new Date(data.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isSeen: shouldAutoSeen,
+        isMedia: data.isMedia || false,
+        mediaOpened: false,
+        reaction: null
+      };
+
+      setStealthMessages(prev => {
+        if (prev.some(m => m._id === formatted._id)) return prev;
+        return [...prev, formatted];
+      });
+
+      if (data.senderRole !== myCurrentRole) {
+        playReceiveSound();
+        if (shouldAutoSeen && socketRef.current) {
+          socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: myCurrentRole });
+        }
+
+        if (data.senderRole === 'user') {
+          triggerParentMobileNotification(formatted.isMedia ? "[Photo Asset]" : text);
+        }
+      }
+    });
+
+    socketRef.current.on('messages_marked_seen', ({ viewerRole }) => {
+      setStealthMessages(prev => prev.map(m => {
+        if (m.senderRole !== viewerRole) {
+          return { ...m, isSeen: true };
+        }
+        return m;
+      }));
+    });
+
+    socketRef.current.on('media_marked_opened', ({ messageId }) => {
+      setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, mediaOpened: true } : m));
+    });
+
+    socketRef.current.on('message_destroyed_on_view', ({ messageId }) => {
+      setStealthMessages(prev => prev.filter(m => m._id !== messageId));
+    });
+
+    socketRef.current.on('update_message_reaction', ({ messageId, reaction }) => {
+      setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, reaction } : m));
+    });
+
+    socketRef.current.on('update_msg_status', ({ messageId, flaggedPending }) => {
+      setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, flaggedPending } : m));
+    });
+
+    return () => {
+      if (socketRef.current) socketRef.current.disconnect();
+    };
+  }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification, codexEngine]);
 
   const handleAdminSendRequest = () => {
     if (socketRef.current) {
@@ -1165,7 +1509,25 @@ export default function App() {
   };
 
   const handleInputChange = (e) => {
-    setInput(e.target.value);
+    const val = e.target.value;
+    setInput(val);
+
+    if (socketRef.current && viewMode === 'stealth') {
+      const activeRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
+      if (val.trim().length > 0) {
+        socketRef.current.emit('typing_start', { room: GLOBAL_ROOM, role: activeRole });
+
+        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = setTimeout(() => {
+          if (socketRef.current) {
+            socketRef.current.emit('typing_stop', { room: GLOBAL_ROOM, role: activeRole });
+          }
+        }, 1800);
+      } else {
+        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+        socketRef.current.emit('typing_stop', { room: GLOBAL_ROOM, role: activeRole });
+      }
+    }
   };
 
   const handleSubmit = (e) => {
@@ -1273,7 +1635,7 @@ export default function App() {
 
   return (
     <div 
-      className="flex h-[100dvh] w-screen overflow-hidden bg-[#000000] text-[#ececf1] font-sans antialiased select-none relative"
+      className="flex h-[100dvh] w-screen overflow-hidden bg-[#000000] text-[#ececf1] font-sans antialiased select-none relative text-sm md:text-[14.5px]"
       onClick={() => setActiveReactionMsgId(null)}
     >
       <input 
@@ -1318,61 +1680,62 @@ export default function App() {
         />
       )}
 
+      {/* COMPACT SIDEBAR MATCHING USER SCREENSHOT */}
       <aside 
         className={`
           fixed md:static inset-y-0 left-0 z-40
-          w-72 md:w-64 max-w-[85vw]
+          w-64 md:w-60 max-w-[85vw]
           transition-transform md:transition-[width] duration-250 ease-in-out
           bg-[#000000] flex flex-col border-r border-[#171717] overflow-hidden select-none shrink-0
-          ${sidebarOpen ? 'translate-x-0 md:w-64' : '-translate-x-full md:translate-x-0 md:w-0'}
+          ${sidebarOpen ? 'translate-x-0 md:w-60' : '-translate-x-full md:translate-x-0 md:w-0'}
         `}
       >
-        <div className="h-14 md:h-13 flex items-center justify-between px-4 md:px-3.5 pt-2 shrink-0">
-          <span className="font-semibold text-lg md:text-base tracking-tight text-white flex items-center gap-1.5">
+        <div className="h-14 flex items-center justify-between px-3.5 pt-1.5 shrink-0">
+          <span className="font-semibold text-base tracking-tight text-white flex items-center gap-1.5">
             ChatGPT
           </span>
-          <div className="flex items-center gap-3 text-[#9b9b9b]">
+          <div className="flex items-center gap-2.5 text-[#9b9b9b]">
             <Search size={18} className="cursor-pointer hover:text-white" />
             <button 
               onClick={() => setSidebarOpen(false)} 
-              className="p-1 rounded-lg hover:bg-[#1a1a1a] text-[#9b9b9b] hover:text-white cursor-pointer"
+              className="p-1.5 rounded-lg hover:bg-[#1a1a1a] text-[#9b9b9b] hover:text-white cursor-pointer"
             >
               <PanelLeft size={18} />
             </button>
           </div>
         </div>
 
-        <div className="px-3 md:px-2.5 py-2 md:py-1.5 space-y-1 md:space-y-0.5 shrink-0 text-sm md:text-[13px]">
-          <button 
+        <div className="px-2.5 py-1 space-y-1 shrink-0 text-xs md:text-[13px]">
+          <div 
             onClick={handleNewChat}
-            className="w-full flex items-center justify-between text-white hover:bg-[#1f1f1f] active:bg-[#252525] py-2.5 md:py-2 px-3 md:px-2.5 rounded-xl md:rounded-lg transition-colors cursor-pointer"
+            className="flex items-center justify-between py-2 px-3 rounded-xl text-[#ececf1] hover:bg-[#1a1a1a] transition-colors cursor-pointer font-medium"
           >
-            <span className="flex items-center gap-3 md:gap-2.5 font-medium">
-              <SquarePen size={17} /> New chat
+            <span className="flex items-center gap-2.5">
+              <SquarePen size={16} /> New chat
             </span>
-            {role === 'parent' && <ShieldCheck size={15} className="text-emerald-400" />}
-          </button>
+            {role === 'parent' && <ShieldCheck size={14} className="text-emerald-400" />}
+          </div>
 
           <div 
             onClick={() => { setViewMode('images_archive'); closeSidebarOnMobile(); }}
-            className={`flex items-center justify-between py-2.5 md:py-1.5 px-3 md:px-2.5 rounded-xl md:rounded-lg cursor-pointer transition-colors ${viewMode === 'images_archive' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
+            className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${viewMode === 'images_archive' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
           >
-            <span className="flex items-center gap-3 md:gap-2.5">
-              <ImageIcon size={17} className={viewMode === 'images_archive' ? 'text-blue-400' : 'text-[#9b9b9b]'} /> Images
+            <span className="flex items-center gap-2.5">
+              <ImageIcon size={16} className={viewMode === 'images_archive' ? 'text-blue-400' : 'text-[#9b9b9b]'} /> Images
             </span>
-            <span className="text-xs text-gray-500 font-mono">{archivedImages.length}</span>
+            <span className="text-[11px] text-gray-400 font-mono">{archivedImages.length}</span>
           </div>
 
-          <div className="flex items-center gap-3 md:gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-2.5 md:py-1.5 px-3 md:px-2.5 rounded-xl md:rounded-lg cursor-pointer transition-colors">
-            <BookOpen size={17} className="text-[#9b9b9b]" /> Library
+          <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-2 px-3 rounded-xl cursor-pointer transition-colors">
+            <BookOpen size={16} className="text-[#9b9b9b]" /> Library
           </div>
 
           <div 
             onClick={() => { setViewMode('scheduled'); closeSidebarOnMobile(); }}
-            className={`flex items-center justify-between py-2.5 md:py-1.5 px-3 md:px-2.5 rounded-xl md:rounded-lg cursor-pointer transition-colors ${viewMode === 'scheduled' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
+            className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${viewMode === 'scheduled' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
           >
-            <span className="flex items-center gap-3 md:gap-2.5">
-              <Clock size={17} className={viewMode === 'scheduled' ? 'text-amber-400' : 'text-[#9b9b9b]'} /> Scheduled
+            <span className="flex items-center gap-2.5">
+              <Clock size={16} className={viewMode === 'scheduled' ? 'text-amber-400' : 'text-[#9b9b9b]'} /> Scheduled
             </span>
             {syncStatus === 'connected' ? (
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" title="Joint Synced" />
@@ -1388,12 +1751,12 @@ export default function App() {
                 setShowArcadePlugins(!showArcadePlugins);
               }
             }}
-            className={`flex items-center justify-between py-2.5 md:py-1.5 px-3 md:px-2.5 rounded-xl md:rounded-lg cursor-pointer transition-colors ${
+            className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${
               incomingGameRequest ? 'bg-amber-500/20 border border-amber-500/50 animate-pulse' : (showArcadePlugins ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]')
             }`}
           >
-            <span className="flex items-center gap-3 md:gap-2.5">
-              <ToyBrick size={17} className={incomingGameRequest ? 'text-amber-400 animate-spin' : (showArcadePlugins ? 'text-emerald-400' : 'text-[#9b9b9b]')} /> 
+            <span className="flex items-center gap-2.5">
+              <ToyBrick size={16} className={incomingGameRequest ? 'text-amber-400 animate-spin' : (showArcadePlugins ? 'text-emerald-400' : 'text-[#9b9b9b]')} /> 
               <span>Plugins</span>
             </span>
             <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
@@ -1405,20 +1768,20 @@ export default function App() {
 
           {/* ADMIN (H) CONTROLS INSIDE PLUGINS MENU */}
           {showArcadePlugins && role === 'parent' && (
-            <div className="pl-3 pr-2 py-2 space-y-2 bg-[#0c0c0c] rounded-xl border border-[#222] my-1">
+            <div className="pl-2 pr-1.5 py-2 space-y-2 bg-[#0c0c0c] rounded-xl border border-[#222] my-1">
               <div className="flex items-center justify-between text-[11px] font-bold text-amber-400">
                 <span className="flex items-center gap-1"><Gamepad2 size={13} /> Arcade Master (H)</span>
               </div>
               <div className="grid grid-cols-2 gap-1.5">
                 <button
                   onClick={handleAdminSendRequest}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold py-1.5 rounded-lg cursor-pointer transition-all shadow"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold py-1.5 rounded-lg cursor-pointer transition-all shadow"
                 >
                   Send Request
                 </button>
                 <button
                   onClick={handleAdminDisconnectArcade}
-                  className="bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 text-[11px] font-bold py-1.5 rounded-lg cursor-pointer transition-all"
+                  className="bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 text-[10px] font-bold py-1.5 rounded-lg cursor-pointer transition-all"
                 >
                   Disconnect
                 </button>
@@ -1428,24 +1791,24 @@ export default function App() {
 
           {/* USER (A) ACCEPT HANDSHAKE BANNER INSIDE PLUGINS MENU */}
           {incomingGameRequest && role !== 'parent' && (
-            <div className="bg-amber-950/60 border border-amber-500/50 p-3 rounded-xl my-1 space-y-2 text-left animate-in fade-in duration-200">
-              <p className="text-[11px] text-amber-300 font-bold flex items-center gap-1.5">
-                <Radio size={14} className="animate-pulse" /> Admin (H) sent arcade games request!
+            <div className="bg-amber-950/60 border border-amber-500/50 p-2.5 rounded-xl my-1 space-y-2 text-left animate-in fade-in duration-200">
+              <p className="text-[11px] text-amber-300 font-bold flex items-center gap-1">
+                <Radio size={13} className="animate-pulse" /> Admin sent arcade request!
               </p>
               <button
                 onClick={handleUserAcceptRequest}
-                className="w-full bg-amber-500 hover:bg-amber-400 text-black text-xs font-black py-2 rounded-lg cursor-pointer flex items-center justify-center gap-1 shadow-lg active:scale-95 transition-all"
+                className="w-full bg-amber-500 hover:bg-amber-400 text-black text-[11px] font-black py-2 rounded-lg cursor-pointer flex items-center justify-center gap-1 shadow-lg active:scale-95 transition-all"
               >
-                <Check size={14} /> Accept & Unlock 8 Games
+                <Check size={13} /> Accept & Unlock
               </button>
             </div>
           )}
 
           {/* 8 GAMES LIST INSIDE PLUGINS MENU */}
           {showArcadePlugins && (role === 'parent' || !incomingGameRequest) && (
-            <div className="pl-2 pr-1 py-1.5 space-y-1 bg-[#0c0c0c] rounded-xl border border-emerald-500/30 my-1">
+            <div className="pl-1.5 pr-1 py-1.5 space-y-1 bg-[#0c0c0c] rounded-xl border border-emerald-500/30 my-1">
               <div className="text-[10px] font-bold text-emerald-400 px-2 py-0.5">ARCADE GAMES (8 ACTIVE)</div>
-              <div className="max-h-52 overflow-y-auto space-y-1 scrollbar-none pr-1">
+              <div className="max-h-48 overflow-y-auto space-y-1 scrollbar-none pr-1">
                 {ARCADE_GAMES.map((game) => (
                   <button
                     key={game.id}
@@ -1460,25 +1823,25 @@ export default function App() {
             </div>
           )}
 
-          <div className="flex items-center gap-3 md:gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-2.5 md:py-1.5 px-3 md:px-2.5 rounded-xl md:rounded-lg cursor-pointer transition-colors">
-            <FolderGit2 size={17} className="text-[#9b9b9b]" /> Projects
+          <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-2 px-3 rounded-xl cursor-pointer transition-colors">
+            <FolderGit2 size={16} className="text-[#9b9b9b]" /> Projects
           </div>
 
           <div 
             onClick={() => { setViewMode('codex'); closeSidebarOnMobile(); }}
-            className={`flex items-center gap-3 md:gap-2.5 py-2.5 md:py-1.5 px-3 md:px-2.5 rounded-xl md:rounded-lg cursor-pointer transition-colors ${viewMode === 'codex' ? 'bg-[#212121] text-white font-medium' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
+            className={`flex items-center gap-2.5 py-2 px-3 rounded-xl cursor-pointer transition-colors ${viewMode === 'codex' ? 'bg-[#212121] text-white font-medium' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
           >
-            <TerminalSquare size={17} className={viewMode === 'codex' ? 'text-emerald-400' : 'text-[#9b9b9b]'} />
+            <TerminalSquare size={16} className={viewMode === 'codex' ? 'text-emerald-400' : 'text-[#9b9b9b]'} />
             <span>Codex</span>
           </div>
 
-          <div className="flex items-center gap-3 md:gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-2.5 md:py-1.5 px-3 md:px-2.5 rounded-xl md:rounded-lg cursor-pointer transition-colors">
-            <MoreHorizontal size={17} className="text-[#9b9b9b]" /> More
+          <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-2 px-3 rounded-xl cursor-pointer transition-colors">
+            <MoreHorizontal size={16} className="text-[#9b9b9b]" /> More
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5 border-t border-[#1a1a1a] mt-1 scrollbar-none text-sm md:text-[13px]">
-          <div className="text-xs md:text-[11px] text-[#737373] px-3 md:px-2.5 py-1.5 font-semibold">Recents</div>
+        <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5 border-t border-[#1a1a1a] mt-1 scrollbar-none text-xs">
+          <div className="text-[11px] text-[#737373] px-3 py-1.5 font-semibold uppercase tracking-wider">Recents</div>
           {roomList.map((roomName, idx) => (
             <div 
               key={idx}
@@ -1488,9 +1851,9 @@ export default function App() {
                 setReplyTarget(null);
                 closeSidebarOnMobile();
               }}
-              className={`flex items-center justify-between py-2 md:py-1.5 px-3 md:px-2.5 rounded-xl md:rounded-lg cursor-pointer transition-colors group ${currentRoom === roomName && viewMode === 'real_gpt' ? 'bg-[#212121] text-white font-medium' : 'text-[#b4b4b4] hover:bg-[#171717] hover:text-white'}`}
+              className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors group ${currentRoom === roomName && viewMode === 'real_gpt' ? 'bg-[#212121] text-white font-medium' : 'text-[#b4b4b4] hover:bg-[#171717] hover:text-white'}`}
             >
-              <span className="truncate max-w-[200px]">{roomName}</span>
+              <span className="truncate max-w-[190px]">{roomName}</span>
             </div>
           ))}
         </div>
@@ -1499,74 +1862,74 @@ export default function App() {
           <div className="p-2 border-t border-[#1e1e1e] flex items-center gap-1.5 shrink-0 bg-[#0a0a0a]">
             <button 
               onClick={() => { setShowPendingModal(true); closeSidebarOnMobile(); }}
-              className="flex-1 flex items-center justify-between text-xs text-amber-400 hover:bg-[#1a1a1a] p-2 rounded-lg cursor-pointer transition-all active:scale-95"
+              className="flex-1 flex items-center justify-between text-xs text-amber-400 hover:bg-[#1a1a1a] p-2 rounded-xl cursor-pointer font-medium"
             >
-              <span className="flex items-center gap-2 font-medium"><AlertCircle size={15} /> Answer Pending</span>
-              <span className={`px-2 py-0.5 rounded-full font-mono text-[11px] font-bold ${pendingMessages.length > 0 ? 'bg-amber-500 text-black animate-pulse' : 'bg-amber-500/20 text-amber-300'}`}>
+              <span className="flex items-center gap-1.5"><AlertCircle size={15} /> Answer Pending</span>
+              <span className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-bold ${pendingMessages.length > 0 ? 'bg-amber-500 text-black animate-pulse' : 'bg-amber-500/20 text-amber-300'}`}>
                 {pendingMessages.length}
               </span>
             </button>
             <button 
               onClick={downloadPendingPDF}
               title="Download Answer Pending Report"
-              className="p-2 text-gray-400 hover:text-amber-400 hover:bg-[#1a1a1a] rounded-lg transition-colors cursor-pointer shrink-0"
+              className="p-2 text-gray-400 hover:text-amber-400 hover:bg-[#1a1a1a] rounded-xl cursor-pointer"
             >
               <Download size={15} />
             </button>
           </div>
         )}
 
-        <div className="p-3 md:p-2.5 border-t border-[#171717] flex items-center justify-between text-xs bg-[#000000]">
+        <div className="p-3 border-t border-[#171717] flex items-center justify-between text-xs bg-[#000000]">
           <div className="flex items-center gap-2.5 overflow-hidden">
-            <div className="w-8 h-8 md:w-7 md:h-7 rounded-full bg-[#1e293b] border border-[#333] flex items-center justify-center text-white text-xs font-bold shrink-0">
+            <div className="w-8 h-8 rounded-full bg-[#1e293b] border border-[#333] flex items-center justify-center text-white text-xs font-bold shrink-0">
               {role === 'parent' ? 'H' : 'A'}
             </div>
             <div className="truncate">
-              <p className="text-white text-xs font-medium truncate">
+              <p className="text-white font-medium truncate">
                 {role === 'parent' ? 'Admin (H)' : 'User (A)'}
               </p>
               <p className="text-[10px] text-gray-400">Free</p>
             </div>
           </div>
-          <button className="bg-[#1f1f1f] hover:bg-[#2c2c2c] text-white text-xs px-2.5 py-1 rounded-md transition-colors cursor-pointer shrink-0">
+          <button className="bg-[#1f1f1f] hover:bg-[#2c2c2c] text-white text-xs px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0">
             Upgrade
           </button>
         </div>
       </aside>
 
       <main className="flex-1 flex flex-col relative bg-[#000000] overflow-hidden min-w-0">
-        <header className="h-14 md:h-12 flex items-center justify-between px-3 md:px-4 shrink-0 z-10 border-b border-[#141414]">
-          <div className="flex items-center gap-2 overflow-hidden">
+        <header className="h-14 flex items-center justify-between px-4 shrink-0 z-10 border-b border-[#141414]">
+          <div className="flex items-center gap-2.5 overflow-hidden">
             <button 
               onClick={() => setSidebarOpen(true)} 
-              className="text-[#9b9b9b] hover:text-white p-1.5 rounded-lg active:bg-[#1f1f1f] cursor-pointer shrink-0"
+              className="text-[#9b9b9b] hover:text-white p-1.5 rounded-xl active:bg-[#1f1f1f] cursor-pointer shrink-0"
               title="Open Sidebar"
             >
               <PanelLeft size={20} />
             </button>
 
-            <span className="text-sm md:text-xs font-semibold text-gray-200 truncate max-w-[140px] sm:max-w-[240px]">
+            <span className="text-sm font-semibold text-gray-200 truncate max-w-[150px] sm:max-w-[260px]">
               {viewMode === 'codex' ? 'Codex' : currentRoom}
             </span>
 
             {role === 'parent' && (
               <button
                 onClick={downloadFullChatPDF}
-                title="Click to export chat PDF manually (Auto-downloads at 7:00 PM)"
-                className="flex items-center gap-1.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all ml-2 cursor-pointer shadow-[0_0_10px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
+                title="Click to export chat PDF manually (Auto-downloads daily at 7:00 PM)"
+                className="flex items-center gap-1.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all ml-2 cursor-pointer shadow-[0_0_10px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
               >
-                <Timer size={14} className="text-emerald-400 animate-spin" style={{ animationDuration: '4s' }} />
+                <Timer size={15} className="text-emerald-400 animate-spin" style={{ animationDuration: '4s' }} />
                 <span>7 PM: {countdownStr}</span>
               </button>
             )}
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3 text-xs text-[#9b9b9b] shrink-0">
+          <div className="flex items-center gap-3 text-xs md:text-sm text-[#9b9b9b] shrink-0">
             <span 
-              className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+              className={`w-3 h-3 rounded-full transition-all duration-300 ${
                 !isConnected 
                   ? 'bg-zinc-600' 
-                  : (hasUnreadSecret ? 'bg-rose-500 animate-pulse shadow-[0_0_10px_#f43f5e]' : 'bg-emerald-500 shadow-[0_0_6px_#10b981]')
+                  : (hasUnreadSecret ? 'bg-rose-500 animate-pulse shadow-[0_0_10px_#f43f5e]' : 'bg-emerald-500 shadow-[0_0_8px_#10b981]')
               }`} 
               title={
                 !isConnected 
@@ -1574,18 +1937,18 @@ export default function App() {
                   : (hasUnreadSecret ? 'Unread Secret Message Pending!' : 'Server Connected')
               } 
             />
-            {role === 'parent' && <span className="text-[9px] sm:text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-1.5 py-0.5 rounded font-mono">ADMIN (H)</span>}
+            {role === 'parent' && <span className="text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded font-mono">ADMIN (H)</span>}
             
-            <button className="hidden sm:flex items-center gap-1.5 text-white hover:text-gray-200 cursor-pointer text-xs font-medium">
-              <Sparkles size={14} className="text-blue-400" />
+            <button className="hidden sm:flex items-center gap-1.5 text-white hover:text-gray-200 cursor-pointer font-medium">
+              <Sparkles size={15} className="text-blue-400" />
               <span>Upgrade</span>
             </button>
             
-            <button className="p-1 text-white hover:text-gray-200 cursor-pointer text-xs">
-              <Share size={15} />
+            <button className="p-1.5 text-white hover:text-gray-200 cursor-pointer">
+              <Share size={16} />
             </button>
-            <button className="p-1 text-white hover:text-gray-200 cursor-pointer text-xs" onClick={() => window.location.reload()}>
-              <RefreshCw size={15} />
+            <button className="p-1.5 text-white hover:text-gray-200 cursor-pointer" onClick={() => window.location.reload()}>
+              <RefreshCw size={16} />
             </button>
           </div>
         </header>
@@ -1593,60 +1956,60 @@ export default function App() {
         {autoplayBlocked && (
           <div 
             onClick={handleManualUnmuteClick}
-            className="bg-amber-500/20 border-b border-amber-500/40 text-amber-300 px-3 py-2 text-xs flex items-center justify-between cursor-pointer animate-pulse z-30"
+            className="bg-amber-500/20 border-b border-amber-500/40 text-amber-300 px-4 py-2 text-xs flex items-center justify-between cursor-pointer animate-pulse z-30 font-medium"
           >
             <div className="flex items-center gap-2 truncate">
               <VolumeX size={16} className="shrink-0" />
               <span className="truncate">Tap here to unmute synchronized playback</span>
             </div>
-            <span className="bg-amber-500 text-black font-bold px-2 py-0.5 rounded text-[10px] shrink-0 ml-2">Unmute</span>
+            <span className="bg-amber-500 text-black font-bold px-2 py-0.5 rounded text-xs shrink-0 ml-2">Unmute</span>
           </div>
         )}
 
         {syncStatus === 'connected' && activeVideoId && viewMode !== 'scheduled' && viewMode !== 'codex' && (
-          <div className="bg-[#141414]/95 border-b border-[#2a2a2a] px-3 sm:px-4 py-2 flex items-center justify-between z-20 text-xs backdrop-blur-md shadow-lg shrink-0">
+          <div className="bg-[#141414]/95 border-b border-[#2a2a2a] px-4 py-2 flex items-center justify-between z-20 text-xs backdrop-blur-md shadow-lg shrink-0">
             <div className="flex items-center gap-2 overflow-hidden flex-1 mr-2">
-              <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                <Music size={13} className={isPlaying ? 'animate-bounce' : ''} />
+              <div className="w-6 h-6 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                <Music size={14} className={isPlaying ? 'animate-bounce' : ''} />
               </div>
-              <span className="text-gray-300 truncate font-mono text-[11px]">
+              <span className="text-gray-300 truncate font-mono text-xs">
                 🎵 <strong className="text-white">Live:</strong> {activeTrackTitle || "Synced Track"}
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={handleTogglePlayPause}
-                className="bg-[#222] hover:bg-[#333] text-white p-1.5 px-2 rounded-lg flex items-center gap-1 cursor-pointer text-[11px] font-semibold border border-[#333]"
+                className="bg-[#222] hover:bg-[#333] text-white p-1.5 px-2.5 rounded-xl flex items-center gap-1 cursor-pointer text-xs font-semibold border border-[#333]"
               >
-                {isPlaying ? <Pause size={12} /> : <Play size={12} />}
+                {isPlaying ? <Pause size={13} /> : <Play size={13} />}
                 <span>{isPlaying ? 'Pause' : 'Play'}</span>
               </button>
               <button
                 onClick={() => setViewMode('scheduled')}
-                className="text-amber-400 text-[11px] font-semibold px-1.5 py-1 cursor-pointer underline decoration-dotted"
+                className="text-amber-400 text-xs font-semibold px-2 py-1 cursor-pointer underline decoration-dotted"
               >
                 Lounge
               </button>
               <button
                 onClick={handleDisconnectSync}
-                className="bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-rose-300 p-1.5 rounded-lg cursor-pointer"
+                className="bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-rose-300 p-1.5 rounded-xl cursor-pointer"
                 title="Disconnect Audio completely"
               >
-                <Unlink size={12} />
+                <Unlink size={13} />
               </button>
             </div>
           </div>
         )}
 
-        {/* FULLY WORKING EMBEDDED PLUGIN GAME VIEW */}
+        {/* ACTIVE PLUGIN GAME VIEW */}
         {activeGame ? (
           <section className="flex-1 overflow-y-auto px-4 py-6 max-w-3xl w-full mx-auto space-y-4 scrollbar-none font-sans flex flex-col items-center justify-center">
             <div className="w-full bg-[#121212] border-2 border-emerald-500/40 rounded-3xl p-6 shadow-2xl relative space-y-5 text-center">
               <div className="flex items-center justify-between border-b border-[#222] pb-3">
                 <div className="flex items-center gap-2">
                   <Gamepad2 size={22} className="text-emerald-400 animate-bounce" />
-                  <h2 className="text-lg font-black text-white">{activeGame.name}</h2>
+                  <h2 className="text-base font-black text-white">{activeGame.name}</h2>
                 </div>
                 <button 
                   onClick={() => setActiveGame(null)} 
@@ -1702,7 +2065,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* 2. LUDO QUICK SPRINT */}
+              {/* 2. LUDO SPRINT */}
               {activeGame.id === 'ludo' && (
                 <div className="space-y-5 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-md mx-auto">
                   <div className="grid grid-cols-2 gap-3">
