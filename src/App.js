@@ -730,7 +730,7 @@ export default function App() {
     playSentSound();
   };
 
-  // --- UNIVERSAL SYNC "WHITE DOT" HANDLER FOR ALL 4 OPTIONS ---
+  // --- UNIVERSAL WHITE DOT SYNC HANDLER ---
   const handleUniversalSyncRealign = () => {
     if (socketRef.current) {
       if (codexEngine === 'youtube' && activeMovieYTId) {
@@ -3207,15 +3207,15 @@ export default function App() {
                   </div>
                 )}
 
-                {/* --- VIDEO CONTAINER WITH UNIVERSAL WHITE DOT SYNC BUTTON AND TOGEPI OVERLAY --- */}
+                {/* --- VIDEO CONTAINER WITH UNIVERSAL WHITE DOT & TOGEPI OVERLAY --- */}
                 <div className="w-full bg-[#0a0a0a] border border-[#242424] rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center min-h-[220px] sm:min-h-[380px]">
                   
-                  {/* UNIVERSAL WHITE DOT RE-SYNC BUTTON FOR ALL 4 OPTIONS */}
+                  {/* WHITE DOT RE-SYNC BUTTON FOR ALL 4 OPTIONS */}
                   <button
                     type="button"
                     onClick={handleUniversalSyncRealign}
-                    className="absolute top-3 left-3 z-[99999] w-3.5 h-3.5 rounded-full bg-white/70 hover:bg-white shadow-[0_0_10px_rgba(255,255,255,0.8)] cursor-pointer active:scale-90 transition-all border border-black/50"
-                    title="Click to force re-sync and align playback with counterpart!"
+                    className="absolute top-3 left-3 z-[99999] w-3 h-3 rounded-full bg-white/70 hover:bg-white shadow-[0_0_8px_rgba(255,255,255,0.9)] cursor-pointer active:scale-90 transition-all border border-black/60"
+                    title="Click to force re-sync and align playback!"
                   />
 
                   {codexEngine === 'gofile' ? (
@@ -3320,7 +3320,7 @@ export default function App() {
                     )
                   )}
 
-                  {/* --- ABSOLUTE BOTTOM-RIGHT TOGEPI WIDGET (INSIDE CONTAINER FOR FULLSCREEN) --- */}
+                  {/* --- ABSOLUTE BOTTOM-RIGHT TOGEPI WIDGET (STAYS ON FULLSCREEN) --- */}
                   <div className="absolute bottom-4 right-4 z-[999999] flex flex-col items-end pointer-events-auto">
                     {showTogepiMenu && (
                       <div className="w-64 sm:w-72 bg-[#121212]/95 border border-amber-400/50 rounded-2xl p-3 shadow-2xl backdrop-blur-md mb-2 space-y-2.5 text-left animate-in zoom-in-95 duration-150">
