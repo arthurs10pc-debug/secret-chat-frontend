@@ -1014,7 +1014,7 @@ export default function App() {
     localStorage.setItem('stealth_image_vault', JSON.stringify(archivedImages));
   }, [archivedImages]);
 
-  // --- SOCKET.IO CONNECTION & LISTENERS ---
+  // --- FULLY RESTORED SOCKET.IO CONNECTION & LISTENERS ---
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
@@ -1080,7 +1080,7 @@ export default function App() {
       playReceiveSound();
     });
 
-    socketRef.current.on('togepi_chat_broadcast', ({ senderRole, text }) => {
+    socketRef.current.on('togepi_movie_chat', ({ senderRole, text }) => {
       const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
       if (senderRole !== myRole) {
         setTogepiChatHistory(prev => [...prev, { sender: senderRole, text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
@@ -3448,23 +3448,6 @@ export default function App() {
                       </div>
                     ))
                   )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-1 pt-1">
-                  <button 
-                    type="button"
-                    onClick={() => handleSendTogepiMessage("જાગે છે?")}
-                    className="bg-[#1a1a1a] hover:bg-[#252525] text-amber-300 text-[10px] font-bold py-1.5 px-2 rounded-lg border border-amber-500/30 cursor-pointer active:scale-95 truncate"
-                  >
-                    જાગે છે? 👁️
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => handleSendTogepiMessage("ઊંઘ આવે છે?")}
-                    className="bg-[#1a1a1a] hover:bg-[#252525] text-rose-300 text-[10px] font-bold py-1.5 px-2 rounded-lg border border-rose-500/30 cursor-pointer active:scale-95 truncate"
-                  >
-                    ઊંઘ આવે છે? 💤
-                  </button>
                 </div>
 
                 <div className="flex gap-1 pt-1">
