@@ -546,7 +546,7 @@ export default function App() {
     setMovieError('');
 
     if (file.name.toLowerCase().endsWith('.mkv')) {
-      setMovieError("Warning: .MKV file selected. Native web players cannot decode AC3/MKV audio. If no sound plays, use an .MP4 format.");
+      setMovieError("Warning: .MKV file selected. Native web players cannot decode AC3/MKV audio. If no sound plays, use an .MP4 file.");
     }
 
     const objUrl = URL.createObjectURL(file);
@@ -730,6 +730,22 @@ export default function App() {
     playSentSound();
   };
 
+  // --- UNIVERSAL SYNC "WHITE DOT" HANDLER FOR ALL 4 OPTIONS ---
+  const handleUniversalSyncRealign = () => {
+    if (socketRef.current) {
+      if (codexEngine === 'youtube' && activeMovieYTId) {
+        socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'youtube', ytId: activeMovieYTId, senderRole: role });
+      } else if (codexEngine === 'gofile' && activeMovieSrc) {
+        socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'gofile', url: activeMovieSrc, senderRole: role });
+      } else if (codexEngine === 'embed' && activeEmbedUrl) {
+        socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'embed', embedUrl: activeEmbedUrl, imdbId: currentImdbId, senderRole: role });
+      } else if (codexEngine === 'local') {
+        socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'local', senderRole: role });
+      }
+      alert("✨ Re-synced successfully! Both sides are now aligned.");
+    }
+  };
+
   // --- TOUCH-TO-SHOW TOGEPI WIDGET HANDLER ---
   useEffect(() => {
     const handleScreenTouch = () => {
@@ -739,7 +755,7 @@ export default function App() {
         if (!showTogepiMenu) {
           setIsTogepiVisible(false);
         }
-      }, 3500);
+      }, 4000);
     };
     window.addEventListener('pointerdown', handleScreenTouch);
     return () => {
@@ -3032,7 +3048,7 @@ export default function App() {
             )}
 
             {viewMode === 'codex' && (
-              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-3 sm:space-y-4 scrollbar-none font-sans relative">
+              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-3 sm:space-y-4 scrollbar-none font-sans">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#222] pb-2.5 gap-2">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
@@ -3191,8 +3207,17 @@ export default function App() {
                   </div>
                 )}
 
-                {/* --- VIDEO CONTAINER WITH TRUE INSIDE OVERLAY TOGEPI WIDGET --- */}
+                {/* --- VIDEO CONTAINER WITH UNIVERSAL WHITE DOT SYNC BUTTON AND TOGEPI OVERLAY --- */}
                 <div className="w-full bg-[#0a0a0a] border border-[#242424] rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center min-h-[220px] sm:min-h-[380px]">
+                  
+                  {/* UNIVERSAL WHITE DOT RE-SYNC BUTTON FOR ALL 4 OPTIONS */}
+                  <button
+                    type="button"
+                    onClick={handleUniversalSyncRealign}
+                    className="absolute top-3 left-3 z-[99999] w-3.5 h-3.5 rounded-full bg-white/70 hover:bg-white shadow-[0_0_10px_rgba(255,255,255,0.8)] cursor-pointer active:scale-90 transition-all border border-black/50"
+                    title="Click to force re-sync and align playback with counterpart!"
+                  />
+
                   {codexEngine === 'gofile' ? (
                     activeMovieSrc ? (
                       <video 
@@ -3295,7 +3320,7 @@ export default function App() {
                     )
                   )}
 
-                  {/* --- TRUE ABSOLUTE VIDEO OVERLAY TOGEPI WIDGET (INSIDE SCREEN, STAYS ON FULLSCREEN) --- */}
+                  {/* --- ABSOLUTE BOTTOM-RIGHT TOGEPI WIDGET (INSIDE CONTAINER FOR FULLSCREEN) --- */}
                   <div className="absolute bottom-4 right-4 z-[999999] flex flex-col items-end pointer-events-auto">
                     {showTogepiMenu && (
                       <div className="w-64 sm:w-72 bg-[#121212]/95 border border-amber-400/50 rounded-2xl p-3 shadow-2xl backdrop-blur-md mb-2 space-y-2.5 text-left animate-in zoom-in-95 duration-150">
@@ -3343,7 +3368,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setShowTogepiMenu(!showTogepiMenu)}
-                      className="w-9 h-9 rounded-full hover:scale-110 active:scale-95 transition-all cursor-pointer flex items-center justify-center relative group drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]"
+                      className={`w-9 h-9 rounded-full hover:scale-110 active:scale-95 transition-all duration-300 cursor-pointer flex items-center justify-center relative group drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)] ${isTogepiVisible || showTogepiMenu ? 'opacity-100' : 'opacity-20 hover:opacity-100'}`}
                       title="Togepi Movie Chat"
                     >
                       <img 
