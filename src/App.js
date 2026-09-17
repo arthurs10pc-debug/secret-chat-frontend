@@ -544,7 +544,7 @@ export default function App() {
     setMovieError('');
 
     if (file.name.toLowerCase().endsWith('.mkv')) {
-      setMovieError("Warning: .MKV file selected. Native web players cannot decode AC3/MKV audio. If no sound plays, use an .MP4 file.");
+      setMovieError("Warning: .MKV file selected. Native web players cannot decode AC3/MKV audio. If no sound plays, use an .MP4 format.");
     }
 
     const objUrl = URL.createObjectURL(file);
@@ -1898,12 +1898,6 @@ export default function App() {
     }
   };
 
-  const handleEmojiClick = (emoji) => {
-    setInput(prev => prev + emoji);
-    setShowMiniEmojiBar(false);
-    if (inputRef.current) inputRef.current.focus();
-  };
-
   const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
   const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
   const hasUnreadSecret = stealthMessages.some(m => m.senderRole !== role && !m.isSeen);
@@ -3011,7 +3005,7 @@ export default function App() {
             )}
 
             {viewMode === 'codex' && (
-              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-3 sm:space-y-4 scrollbar-none font-sans relative">
+              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-3 sm:space-y-4 scrollbar-none font-sans">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#222] pb-2.5 gap-2">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
@@ -3170,6 +3164,7 @@ export default function App() {
                   </div>
                 )}
 
+                {/* --- VIDEO CONTAINER WITH INSIDE TOGEPI POKEMON OVERLAY --- */}
                 <div className="w-full bg-[#0a0a0a] border border-[#242424] rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center min-h-[220px] sm:min-h-[380px]">
                   {codexEngine === 'gofile' ? (
                     activeMovieSrc ? (
@@ -3272,79 +3267,81 @@ export default function App() {
                       </div>
                     )
                   )}
-                </div>
 
-                {/* --- TOGEPI POKEMON FLOATING MOVIE CHAT WIDGET --- */}
-                <div className="absolute bottom-6 right-6 z-50 flex flex-col items-end">
-                  {showTogepiMenu && (
-                    <div className="w-72 sm:w-80 bg-[#121212]/95 border-2 border-amber-400/60 rounded-3xl p-4 shadow-2xl backdrop-blur-md mb-3 space-y-3 animate-in zoom-in-95 duration-200">
-                      <div className="flex items-center justify-between border-b border-[#262626] pb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-amber-400 flex items-center justify-center text-xs font-black text-black">🥚</span>
-                          <span className="text-xs font-black text-amber-300">Togepi Movie Chat</span>
+                  {/* --- INSIDE-VIDEO BOTTOM-RIGHT TOGEPI WIDGET OVERLAY --- */}
+                  <div className="absolute bottom-4 right-4 z-40 flex flex-col items-end pointer-events-auto">
+                    {showTogepiMenu && (
+                      <div className="w-64 sm:w-72 bg-[#121212]/95 border border-amber-400/50 rounded-2xl p-3 shadow-2xl backdrop-blur-md mb-2 space-y-2.5 text-left animate-in zoom-in-95 duration-150">
+                        <div className="flex items-center justify-between border-b border-[#262626] pb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm">🐣</span>
+                            <span className="text-[11px] font-bold text-amber-300">Togepi Live Chat</span>
+                          </div>
+                          <button onClick={() => setShowTogepiMenu(false)} className="text-gray-400 hover:text-white p-0.5 cursor-pointer"><X size={13} /></button>
                         </div>
-                        <button onClick={() => setShowTogepiMenu(false)} className="text-gray-400 hover:text-white p-1 cursor-pointer"><X size={15} /></button>
-                      </div>
 
-                      <div className="max-h-48 overflow-y-auto space-y-2 pr-1 scrollbar-none text-xs">
-                        {togepiChatHistory.length === 0 ? (
-                          <p className="text-[11px] text-gray-500 text-center py-4 italic">No messages yet. Send a quick reaction or chat!</p>
-                        ) : (
-                          togepiChatHistory.map((msg, mIdx) => (
-                            <div key={mIdx} className={`p-2 rounded-xl flex flex-col ${msg.sender === role ? 'bg-amber-500/20 text-amber-200 ml-6' : 'bg-[#1e1e1e] text-gray-200 mr-6'}`}>
-                              <span className="text-[9px] font-bold text-gray-400 uppercase">{msg.sender === 'parent' ? 'Admin (H)' : 'User (A)'} ({msg.time})</span>
-                              <span className="font-medium mt-0.5 break-words">{msg.text}</span>
-                            </div>
-                          ))
-                        )}
-                      </div>
+                        <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1 scrollbar-none text-[11px]">
+                          {togepiChatHistory.length === 0 ? (
+                            <p className="text-[10px] text-gray-500 text-center py-3 italic">Send quick chat while watching!</p>
+                          ) : (
+                            togepiChatHistory.map((msg, mIdx) => (
+                              <div key={mIdx} className={`p-1.5 rounded-lg flex flex-col ${msg.sender === role ? 'bg-amber-500/20 text-amber-200 ml-4' : 'bg-[#1e1e1e] text-gray-200 mr-4'}`}>
+                                <span className="text-[8px] font-bold text-gray-400 uppercase">{msg.sender === 'parent' ? 'Admin' : 'User'} ({msg.time})</span>
+                                <span className="font-medium mt-0.5 break-words">{msg.text}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
 
-                      <div className="grid grid-cols-2 gap-1.5 pt-1">
-                        <button 
-                          onClick={() => handleSendTogepiMessage("જાગે છે?")}
-                          className="bg-[#1e1e1e] hover:bg-[#282828] text-amber-300 text-[11px] font-bold py-2 px-2 rounded-xl border border-amber-500/30 cursor-pointer active:scale-95 transition-all truncate"
-                        >
-                          જાગે છે? 👁️
-                        </button>
-                        <button 
-                          onClick={() => handleSendTogepiMessage("ઊંઘ આવે છે?")}
-                          className="bg-[#1e1e1e] hover:bg-[#282828] text-rose-300 text-[11px] font-bold py-2 px-2 rounded-xl border border-rose-500/30 cursor-pointer active:scale-95 transition-all truncate"
-                        >
-                          ઊંઘ આવે છે? 💤
-                        </button>
-                      </div>
+                        <div className="grid grid-cols-2 gap-1 pt-1">
+                          <button 
+                            onClick={() => handleSendTogepiMessage("જાગે છે?")}
+                            className="bg-[#1a1a1a] hover:bg-[#252525] text-amber-300 text-[10px] font-bold py-1.5 px-2 rounded-lg border border-amber-500/30 cursor-pointer active:scale-95 truncate"
+                          >
+                            જાગે છે? 👁️
+                          </button>
+                          <button 
+                            onClick={() => handleSendTogepiMessage("ઊંઘ આવે છે?")}
+                            className="bg-[#1a1a1a] hover:bg-[#252525] text-rose-300 text-[10px] font-bold py-1.5 px-2 rounded-lg border border-rose-500/30 cursor-pointer active:scale-95 truncate"
+                          >
+                            ઊંઘ આવે છે? 💤
+                          </button>
+                        </div>
 
-                      <div className="flex gap-1.5 pt-1">
-                        <input 
-                          type="text"
-                          value={togepiInput}
-                          onChange={(e) => setTogepiInput(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSendTogepiMessage(togepiInput); } }}
-                          placeholder="Type custom message..."
-                          className="flex-1 bg-[#1a1a1a] border border-[#333] text-white px-3 py-2 rounded-xl text-xs outline-none focus:border-amber-400"
-                        />
-                        <button 
-                          onClick={() => handleSendTogepiMessage(togepiInput)}
-                          className="bg-amber-500 hover:bg-amber-400 text-black px-3 py-2 rounded-xl text-xs font-bold cursor-pointer flex items-center justify-center shrink-0 active:scale-95"
-                        >
-                          <Send size={14} />
-                        </button>
+                        <div className="flex gap-1 pt-1">
+                          <input 
+                            type="text"
+                            value={togepiInput}
+                            onChange={(e) => setTogepiInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSendTogepiMessage(togepiInput); } }}
+                            placeholder="Type message..."
+                            className="flex-1 bg-[#181818] border border-[#333] text-white px-2.5 py-1.5 rounded-lg text-[11px] outline-none focus:border-amber-400"
+                          />
+                          <button 
+                            onClick={() => handleSendTogepiMessage(togepiInput)}
+                            className="bg-amber-500 hover:bg-amber-400 text-black px-2.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center justify-center shrink-0 active:scale-95"
+                          >
+                            <Send size={12} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => setShowTogepiMenu(!showTogepiMenu)}
-                    className="w-14 h-14 rounded-full bg-gradient-to-tr from-amber-400 via-yellow-300 to-orange-400 p-1 shadow-[0_0_20px_rgba(251,191,36,0.5)] hover:scale-110 active:scale-95 transition-all cursor-pointer flex items-center justify-center relative group"
-                    title="Click to chat with Togepi!"
-                  >
-                    <div className="w-full h-full rounded-full bg-black/30 backdrop-blur-xs flex items-center justify-center text-2xl overflow-hidden border border-white/40">
-                      <span className="transform group-hover:rotate-12 transition-transform">🐣</span>
-                    </div>
-                    {incomingTogepiAlert && (
-                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full text-[9px] font-black flex items-center justify-center animate-ping">!</span>
                     )}
-                  </button>
+
+                    <button
+                      onClick={() => setShowTogepiMenu(!showTogepiMenu)}
+                      className="w-10 h-10 rounded-full hover:scale-110 active:scale-95 transition-all cursor-pointer flex items-center justify-center relative group drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+                      title="Togepi Movie Chat"
+                    >
+                      <img 
+                        src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23fef08a' stroke='%23ca8a04' stroke-width='4'/><path d='M30 40 Q50 20 70 40 Z' fill='%23f97316'/><path d='M25 60 Q50 35 75 60 Z' fill='%233b82f6'/><circle cx='40' cy='45' r='5' fill='%23000'/><circle cx='60' cy='45' r='5' fill='%23000'/></svg>" 
+                        alt="Togepi" 
+                        className="w-10 h-10 rounded-full object-cover border-2 border-amber-400 shadow-md bg-black"
+                      />
+                      {incomingTogepiAlert && (
+                        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-rose-500 text-white rounded-full text-[8px] font-black flex items-center justify-center animate-ping">!</span>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </section>
             )}
