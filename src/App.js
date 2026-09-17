@@ -546,7 +546,7 @@ export default function App() {
     setMovieError('');
 
     if (file.name.toLowerCase().endsWith('.mkv')) {
-      setMovieError("Warning: .MKV file selected. Native web players cannot decode AC3/MKV audio. If no sound plays, use an .MP4 file.");
+      setMovieError("Warning: .MKV file selected. Native web players cannot decode AC3/MKV audio. If no sound plays, use an .MP4 format.");
     }
 
     const objUrl = URL.createObjectURL(file);
@@ -3032,7 +3032,7 @@ export default function App() {
             )}
 
             {viewMode === 'codex' && (
-              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-3 sm:space-y-4 scrollbar-none font-sans">
+              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-3 sm:space-y-4 scrollbar-none font-sans relative">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#222] pb-2.5 gap-2">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
@@ -3191,6 +3191,7 @@ export default function App() {
                   </div>
                 )}
 
+                {/* --- VIDEO CONTAINER WITH TRUE INSIDE OVERLAY TOGEPI WIDGET --- */}
                 <div className="w-full bg-[#0a0a0a] border border-[#242424] rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center min-h-[220px] sm:min-h-[380px]">
                   {codexEngine === 'gofile' ? (
                     activeMovieSrc ? (
@@ -3293,6 +3294,68 @@ export default function App() {
                       </div>
                     )
                   )}
+
+                  {/* --- TRUE ABSOLUTE VIDEO OVERLAY TOGEPI WIDGET (INSIDE SCREEN, STAYS ON FULLSCREEN) --- */}
+                  <div className="absolute bottom-4 right-4 z-[999999] flex flex-col items-end pointer-events-auto">
+                    {showTogepiMenu && (
+                      <div className="w-64 sm:w-72 bg-[#121212]/95 border border-amber-400/50 rounded-2xl p-3 shadow-2xl backdrop-blur-md mb-2 space-y-2.5 text-left animate-in zoom-in-95 duration-150">
+                        <div className="flex items-center justify-between border-b border-[#262626] pb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm">🐣</span>
+                            <span className="text-[11px] font-bold text-amber-300">Togepi Live Chat</span>
+                          </div>
+                          <button onClick={() => setShowTogepiMenu(false)} className="text-gray-400 hover:text-white p-0.5 cursor-pointer"><X size={13} /></button>
+                        </div>
+
+                        <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1 scrollbar-none text-[11px]">
+                          {togepiChatHistory.length === 0 ? (
+                            <p className="text-[10px] text-gray-500 text-center py-3 italic">Send live chat while watching!</p>
+                          ) : (
+                            togepiChatHistory.map((msg, mIdx) => (
+                              <div key={mIdx} className={`p-1.5 rounded-lg flex flex-col max-w-[85%] ${msg.sender === role ? 'bg-amber-500/20 text-amber-200 ml-auto items-end text-right' : 'bg-[#1e1e1e] text-gray-200 mr-auto items-start text-left'}`}>
+                                <span className="text-[8px] font-bold text-gray-400 uppercase">{msg.sender === role ? 'You' : (msg.sender === 'parent' ? 'Admin' : 'User')} ({msg.time})</span>
+                                <span className="font-medium mt-0.5 break-words">{msg.text}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        <div className="flex gap-1 pt-1">
+                          <input 
+                            type="text"
+                            value={togepiInput}
+                            onChange={(e) => setTogepiInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSendTogepiMessage(togepiInput); } }}
+                            placeholder="Type message..."
+                            className="flex-1 bg-[#181818] border border-[#333] text-white px-2.5 py-1.5 rounded-lg text-[11px] outline-none focus:border-amber-400"
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => handleSendTogepiMessage(togepiInput)}
+                            className="bg-amber-500 hover:bg-amber-400 text-black px-2.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center justify-center shrink-0 active:scale-95"
+                          >
+                            <Send size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setShowTogepiMenu(!showTogepiMenu)}
+                      className="w-9 h-9 rounded-full hover:scale-110 active:scale-95 transition-all cursor-pointer flex items-center justify-center relative group drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]"
+                      title="Togepi Movie Chat"
+                    >
+                      <img 
+                        src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23fef08a' stroke='%23ca8a04' stroke-width='4'/><path d='M30 40 Q50 20 70 40 Z' fill='%23f97316'/><path d='M25 60 Q50 35 75 60 Z' fill='%233b82f6'/><circle cx='40' cy='45' r='5' fill='%23000'/><circle cx='60' cy='45' r='5' fill='%23000'/></svg>" 
+                        alt="Togepi" 
+                        className="w-9 h-9 rounded-full object-cover border-2 border-amber-400 shadow-lg bg-black"
+                      />
+                      {incomingTogepiAlert && (
+                        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-rose-500 text-white rounded-full text-[8px] font-black flex items-center justify-center animate-ping">!</span>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </section>
             )}
@@ -3422,70 +3485,6 @@ export default function App() {
               </form>
             </div>
           </>
-        )}
-
-        {/* --- GLOBAL FIXED TOUCH-TO-SHOW TOGEPI WIDGET (FULLSCREEN SUPPORTED) --- */}
-        {viewMode === 'codex' && (
-          <div className={`fixed bottom-6 right-6 z-[999999] flex flex-col items-end transition-opacity duration-300 ${isTogepiVisible || showTogepiMenu ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-            {showTogepiMenu && (
-              <div className="w-68 sm:w-76 bg-[#121212]/95 border border-amber-400/50 rounded-2xl p-3 shadow-2xl backdrop-blur-md mb-2 space-y-2.5 text-left animate-in zoom-in-95 duration-150">
-                <div className="flex items-center justify-between border-b border-[#262626] pb-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm">🐣</span>
-                    <span className="text-[11px] font-bold text-amber-300">Togepi Live Chat</span>
-                  </div>
-                  <button onClick={() => setShowTogepiMenu(false)} className="text-gray-400 hover:text-white p-0.5 cursor-pointer"><X size={13} /></button>
-                </div>
-
-                <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1 scrollbar-none text-[11px]">
-                  {togepiChatHistory.length === 0 ? (
-                    <p className="text-[10px] text-gray-500 text-center py-3 italic">Send quick chat while watching!</p>
-                  ) : (
-                    togepiChatHistory.map((msg, mIdx) => (
-                      <div key={mIdx} className={`p-1.5 rounded-lg flex flex-col max-w-[85%] ${msg.sender === role ? 'bg-amber-500/20 text-amber-200 ml-auto items-end text-right' : 'bg-[#1e1e1e] text-gray-200 mr-auto items-start text-left'}`}>
-                        <span className="text-[8px] font-bold text-gray-400 uppercase">{msg.sender === role ? 'You' : (msg.sender === 'parent' ? 'Admin' : 'User')} ({msg.time})</span>
-                        <span className="font-medium mt-0.5 break-words">{msg.text}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <div className="flex gap-1 pt-1">
-                  <input 
-                    type="text"
-                    value={togepiInput}
-                    onChange={(e) => setTogepiInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSendTogepiMessage(togepiInput); } }}
-                    placeholder="Type message..."
-                    className="flex-1 bg-[#181818] border border-[#333] text-white px-2.5 py-1.5 rounded-lg text-[11px] outline-none focus:border-amber-400"
-                  />
-                  <button 
-                    type="button"
-                    onClick={() => handleSendTogepiMessage(togepiInput)}
-                    className="bg-amber-500 hover:bg-amber-400 text-black px-2.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center justify-center shrink-0 active:scale-95"
-                  >
-                    <Send size={12} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setShowTogepiMenu(!showTogepiMenu)}
-              className="w-10 h-10 rounded-full hover:scale-110 active:scale-95 transition-all cursor-pointer flex items-center justify-center relative group drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]"
-              title="Togepi Movie Chat"
-            >
-              <img 
-                src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23fef08a' stroke='%23ca8a04' stroke-width='4'/><path d='M30 40 Q50 20 70 40 Z' fill='%23f97316'/><path d='M25 60 Q50 35 75 60 Z' fill='%233b82f6'/><circle cx='40' cy='45' r='5' fill='%23000'/><circle cx='60' cy='45' r='5' fill='%23000'/></svg>" 
-                alt="Togepi" 
-                className="w-10 h-10 rounded-full object-cover border-2 border-amber-400 shadow-lg bg-black"
-              />
-              {incomingTogepiAlert && (
-                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-rose-500 text-white rounded-full text-[8px] font-black flex items-center justify-center animate-ping">!</span>
-              )}
-            </button>
-          </div>
         )}
 
         {activeViewImage && (
