@@ -9,7 +9,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5
+  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -109,6 +109,12 @@ export default function App() {
   const [showArcadePlugins, setShowArcadePlugins] = useState(false);
   const [incomingGameRequest, setIncomingGameRequest] = useState(false);
   const [activeGame, setActiveGame] = useState(null);
+
+  // Togepi Live Chat Widget State inside Codex
+  const [showTogepiMenu, setShowTogepiMenu] = useState(false);
+  const [togepiInput, setTogepiInput] = useState('');
+  const [togepiChatHistory, setTogepiChatHistory] = useState([]);
+  const [incomingTogepiAlert, setIncomingTogepiAlert] = useState(null);
 
   // Live Scores & Game States (H vs A)
   const [scores, setScores] = useState({ H: 0, A: 0 });
@@ -258,7 +264,7 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // --- ALL HELPER FUNCTIONS DEFINED ---
+  // --- HELPER FUNCTIONS ---
   const encryptText = (text) => CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
   const decryptText = (cipher) => {
     try {
@@ -709,6 +715,19 @@ export default function App() {
     setIncomingAlert(null);
   };
 
+  // --- TOGEPI CHAT SENDER HELPER ---
+  const handleSendTogepiMessage = (textToSend) => {
+    if (!textToSend.trim()) return;
+    const msgObj = { sender: role, text: textToSend.trim(), time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+    setTogepiChatHistory(prev => [...prev, msgObj]);
+    setTogepiInput('');
+
+    if (socketRef.current) {
+      socketRef.current.emit('togepi_movie_chat', { room: GLOBAL_ROOM, senderRole: role, text: textToSend.trim() });
+    }
+    playSentSound();
+  };
+
   // --- 7 PM Auto-Download Countdown Timer Effect ---
   useEffect(() => {
     const timerInterval = setInterval(() => {
@@ -738,7 +757,7 @@ export default function App() {
     return () => clearInterval(timerInterval);
   }, [role, stealthMessages]);
 
-  // --- FIXED DOUBLE ESCAPE KEY LISTENER ---
+  // --- DOUBLE ESCAPE KEY LISTENER ---
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -758,6 +777,7 @@ export default function App() {
           setIsBotOpen(false);
           setActiveViewImage(null);
           setActiveReactionMsgId(null);
+          setShowTogepiMenu(false);
         }
       }
     };
@@ -1038,6 +1058,15 @@ export default function App() {
       setActiveGame(gameObj);
       setWinnerMessage('');
       playReceiveSound();
+    });
+
+    socketRef.current.on('togepi_chat_broadcast', ({ senderRole, text }) => {
+      const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
+      if (senderRole !== myRole) {
+        setTogepiChatHistory(prev => [...prev, { sender: senderRole, text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+        setIncomingTogepiAlert({ sender: senderRole, text, time: Date.now() });
+        playReceiveSound();
+      }
     });
 
     socketRef.current.on('arcade_game_action_broadcast', (moveData) => {
@@ -1867,12 +1896,6 @@ export default function App() {
         reaction: emoji
       });
     }
-  };
-
-  const handleEmojiClick = (emoji) => {
-    setInput(prev => prev + emoji);
-    setShowMiniEmojiBar(false);
-    if (inputRef.current) inputRef.current.focus();
   };
 
   const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
@@ -2982,7 +3005,7 @@ export default function App() {
             )}
 
             {viewMode === 'codex' && (
-              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-3 sm:space-y-4 scrollbar-none font-sans">
+              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-3 sm:space-y-4 scrollbar-none font-sans relative">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#222] pb-2.5 gap-2">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
@@ -3243,6 +3266,79 @@ export default function App() {
                       </div>
                     )
                   )}
+                </div>
+
+                {/* --- TOGEPI POKEMON FLOATING MOVIE CHAT WIDGET --- */}
+                <div className="absolute bottom-6 right-6 z-50 flex flex-col items-end">
+                  {showTogepiMenu && (
+                    <div className="w-72 sm:w-80 bg-[#121212]/95 border-2 border-amber-400/60 rounded-3xl p-4 shadow-2xl backdrop-blur-md mb-3 space-y-3 animate-in zoom-in-95 duration-200">
+                      <div className="flex items-center justify-between border-b border-[#262626] pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-full bg-amber-400 flex items-center justify-center text-xs font-black text-black">🥚</span>
+                          <span className="text-xs font-black text-amber-300">Togepi Movie Chat</span>
+                        </div>
+                        <button onClick={() => setShowTogepiMenu(false)} className="text-gray-400 hover:text-white p-1 cursor-pointer"><X size={15} /></button>
+                      </div>
+
+                      <div className="max-h-48 overflow-y-auto space-y-2 pr-1 scrollbar-none text-xs">
+                        {togepiChatHistory.length === 0 ? (
+                          <p className="text-[11px] text-gray-500 text-center py-4 italic">No messages yet. Send a quick reaction or chat!</p>
+                        ) : (
+                          togepiChatHistory.map((msg, mIdx) => (
+                            <div key={mIdx} className={`p-2 rounded-xl flex flex-col ${msg.sender === role ? 'bg-amber-500/20 text-amber-200 ml-6' : 'bg-[#1e1e1e] text-gray-200 mr-6'}`}>
+                              <span className="text-[9px] font-bold text-gray-400 uppercase">{msg.sender === 'parent' ? 'Admin (H)' : 'User (A)'} ({msg.time})</span>
+                              <span className="font-medium mt-0.5 break-words">{msg.text}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5 pt-1">
+                        <button 
+                          onClick={() => handleSendTogepiMessage("જાગે છે?")}
+                          className="bg-[#1e1e1e] hover:bg-[#282828] text-amber-300 text-[11px] font-bold py-2 px-2 rounded-xl border border-amber-500/30 cursor-pointer active:scale-95 transition-all truncate"
+                        >
+                          જાગે છે? 👁️
+                        </button>
+                        <button 
+                          onClick={() => handleSendTogepiMessage("ઊંઘ આવે છે?")}
+                          className="bg-[#1e1e1e] hover:bg-[#282828] text-rose-300 text-[11px] font-bold py-2 px-2 rounded-xl border border-rose-500/30 cursor-pointer active:scale-95 transition-all truncate"
+                        >
+                          ઊંઘ આવે છે? 💤
+                        </button>
+                      </div>
+
+                      <div className="flex gap-1.5 pt-1">
+                        <input 
+                          type="text"
+                          value={togepiInput}
+                          onChange={(e) => setTogepiInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSendTogepiMessage(togepiInput); } }}
+                          placeholder="Type custom message..."
+                          className="flex-1 bg-[#1a1a1a] border border-[#333] text-white px-3 py-2 rounded-xl text-xs outline-none focus:border-amber-400"
+                        />
+                        <button 
+                          onClick={() => handleSendTogepiMessage(togepiInput)}
+                          className="bg-amber-500 hover:bg-amber-400 text-black px-3 py-2 rounded-xl text-xs font-bold cursor-pointer flex items-center justify-center shrink-0 active:scale-95"
+                        >
+                          <Send size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => setShowTogepiMenu(!showTogepiMenu)}
+                    className="w-14 h-14 rounded-full bg-gradient-to-tr from-amber-400 via-yellow-300 to-orange-400 p-1 shadow-[0_0_20px_rgba(251,191,36,0.5)] hover:scale-110 active:scale-95 transition-all cursor-pointer flex items-center justify-center relative group"
+                    title="Click to chat with Togepi!"
+                  >
+                    <div className="w-full h-full rounded-full bg-black/30 backdrop-blur-xs flex items-center justify-center text-2xl overflow-hidden border border-white/40">
+                      <span className="transform group-hover:rotate-12 transition-transform">🐣</span>
+                    </div>
+                    {incomingTogepiAlert && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full text-[9px] font-black flex items-center justify-center animate-ping">!</span>
+                    )}
+                  </button>
                 </div>
               </section>
             )}
