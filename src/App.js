@@ -70,16 +70,11 @@ const extractYouTubeId = (url) => {
 const getEmbedUrl = (server, imdbId) => {
   const cleanId = imdbId.trim();
   switch (server) {
-    case 'vidlink':
-      return `https://vidlink.pro/movie/${cleanId}`;
-    case 'autoembed':
-      return `https://player.autoembed.cc/embed/movie/${cleanId}`;
-    case 'vidsrc_xyz':
-      return `https://vidsrc.xyz/embed/movie/${cleanId}`;
-    case 'smashy':
-      return `https://embed.smashystream.com/playere.php?imdb=${cleanId}`;
-    default:
-      return `https://vidlink.pro/movie/${cleanId}`;
+    case 'vidlink': return `https://vidlink.pro/movie/${cleanId}`;
+    case 'autoembed': return `https://player.autoembed.cc/embed/movie/${cleanId}`;
+    case 'vidsrc_xyz': return `https://vidsrc.xyz/embed/movie/${cleanId}`;
+    case 'smashy': return `https://embed.smashystream.com/playere.php?imdb=${cleanId}`;
+    default: return `https://vidlink.pro/movie/${cleanId}`;
   }
 };
 
@@ -263,6 +258,333 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
+  // --- ALL DEFINED HANDLERS & HELPERS (FIXING ALL NO-UNDEF ERRORS) ---
+  const encryptText = (text) => CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
+  const decryptText = (cipher) => {
+    try {
+      const bytes = CryptoJS.AES.decrypt(cipher, SECRET_KEY);
+      const original = bytes.toString(CryptoJS.enc.Utf8);
+      return original || cipher;
+    } catch {
+      return cipher;
+    }
+  };
+
+  const playSentSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.04);
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.04);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.04);
+    } catch (e) {}
+  }, []);
+
+  const playReceiveSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc1.type = 'sine'; osc2.type = 'sine';
+      osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
+      osc2.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.09, ctx.currentTime);
+      osc1.connect(gain); osc2.connect(gain); gain.connect(ctx.destination);
+      osc1.start(ctx.currentTime); osc1.stop(ctx.currentTime + 0.08);
+      osc2.start(ctx.currentTime + 0.08); osc2.stop(ctx.currentTime + 0.28);
+    } catch (e) {}
+  }, []);
+
+  const playBubblePopSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(800, ctx.currentTime);
+      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 0.08);
+    } catch (e) {}
+  }, []);
+
+  const closeSidebarOnMobile = () => {
+    if (window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  };
+
+  const fetchLiveAIResponse = async (userPrompt) => {
+    setIsThinking(true);
+    const userMsg = {
+      id: 'usr_' + Date.now(),
+      role: 'user',
+      text: userPrompt,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    
+    const updated = [...conversations, userMsg];
+    setConversations(updated);
+
+    if (currentRoom === "New chat" || currentRoom.startsWith("New chat")) {
+      const generatedTitle = userPrompt.length > 24 ? userPrompt.substring(0, 22) + '...' : userPrompt;
+      const updatedList = roomList.map(r => r === currentRoom ? generatedTitle : r);
+      setRoomList(updatedList);
+      setCurrentRoom(generatedTitle);
+    }
+
+    let reply = "";
+    try {
+      const payload = {
+        messages: [
+          { role: "system", content: "You are ChatGPT, an AI assistant created by OpenAI. Provide authentic, highly intelligent, detailed, and directly useful answers with clean markdown formatting, proper paragraphs, and bullet points." },
+          { role: "user", content: userPrompt }
+        ],
+        model: "openai",
+        seed: Math.floor(Math.random() * 99999)
+      };
+
+      const response = await fetch("https://text.pollinations.ai/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        const text = await response.text();
+        if (text && text.trim().length > 15 && !text.includes("402 Payment Required")) {
+          reply = text.trim();
+        }
+      }
+    } catch (e) {}
+
+    if (!reply) {
+      reply = `Network connection timed out while reaching the inference cluster. Please send your query again.`;
+    }
+
+    const aiMsg = {
+      id: 'ai_' + Date.now(),
+      role: 'assistant',
+      text: reply,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setConversations([...updated, aiMsg]);
+    setIsThinking(false);
+  };
+
+  const processAndSendImage = (file) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64Data = event.target.result;
+      const encrypted = encryptText(base64Data);
+
+      if (socketRef.current && viewMode === 'stealth') {
+        socketRef.current.emit('send_stealth_msg', {
+          room: GLOBAL_ROOM,
+          role,
+          encryptedText: encrypted,
+          isMedia: true
+        });
+        playSentSound();
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSelectLocalFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setMovieError('');
+
+    if (file.name.toLowerCase().endsWith('.mkv')) {
+      setMovieError("Warning: .MKV file selected. Native web players cannot decode AC3/MKV audio. If no sound plays, use an .MP4 file.");
+    }
+
+    const objUrl = URL.createObjectURL(file);
+    setLocalVideoSrc(objUrl);
+    setLocalFileName(file.name);
+    setIsMoviePlaying(false);
+  };
+
+  const handleNewChat = () => {
+    setConversations([]);
+    setCurrentRoom("New chat");
+    setViewMode('real_gpt');
+    setReplyTarget(null);
+    closeSidebarOnMobile();
+  };
+
+  const downloadPendingPDF = (e) => {
+    if (e) e.stopPropagation();
+    const doc = new jsPDF();
+    const pendingList = stealthMessagesRef.current.filter(m => m.flaggedPending);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text(`Answer Pending Questions Export`, 14, 20);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Export Timestamp: ${new Date().toLocaleString()}`, 14, 28);
+    doc.text(`Total Pending Items: ${pendingList.length}`, 14, 34);
+    doc.line(14, 38, 196, 38);
+
+    let y = 46;
+    if (pendingList.length === 0) {
+      doc.text("No pending questions flagged in the system.", 14, y);
+    } else {
+      pendingList.forEach((m, idx) => {
+        const senderLabel = m.senderRole === 'user' ? 'A' : 'H';
+        doc.setFont("helvetica", "bold");
+        doc.text(`[Pending #${idx + 1}] [${m.timeFormatted}] ${senderLabel}:`, 14, y);
+        y += 6;
+
+        doc.setFont("helvetica", "normal");
+        const splitText = doc.splitTextToSize(m.isMedia ? "[Encrypted Image Asset]" : cleanOriginalText(m.text || ""), 175);
+        doc.text(splitText, 18, y);
+        y += (splitText.length * 5) + 4;
+
+        if (y > 270) {
+          doc.addPage();
+          y = 20;
+        }
+      });
+    }
+
+    doc.save(`pending_answers_${Date.now()}.pdf`);
+  };
+
+  const handleScrollToMessage = (targetMsgId) => {
+    if (!targetMsgId) return;
+    const el = document.getElementById(`stealth-msg-${targetMsgId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedMsgId(targetMsgId);
+      setTimeout(() => setHighlightedMsgId(null), 1800);
+    }
+  };
+
+  const handleOpenViewOnce = (msg) => {
+    if (socketRef.current) {
+      socketRef.current.emit('mark_media_opened', { room: GLOBAL_ROOM, messageId: msg._id });
+    }
+
+    setStealthMessages(prev => prev.map(m => m._id === msg._id ? { ...m, mediaOpened: true } : m));
+
+    setActiveViewImage({
+      id: msg._id,
+      data: msg.text,
+      sender: msg.senderRole === 'user' ? 'A' : 'H',
+      time: msg.timeFormatted
+    });
+  };
+
+  const togglePendingFlag = (e, msg) => {
+    e.stopPropagation();
+    if (role !== 'parent') return;
+
+    const newStatus = !msg.flaggedPending;
+    setStealthMessages(prev => prev.map(m => m._id === msg._id ? { ...m, flaggedPending: newStatus } : m));
+
+    if (socketRef.current) {
+      socketRef.current.emit('toggle_pending', { 
+        messageId: msg._id, 
+        status: newStatus, 
+        room: GLOBAL_ROOM 
+      });
+    }
+  };
+
+  const handleHtml5Play = () => {
+    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
+    setIsMoviePlaying(true);
+    if (socketRef.current) {
+      socketRef.current.emit('codex_movie_sync', {
+        room: GLOBAL_ROOM,
+        state: 'PLAY',
+        currentTime: html5VideoRef.current.currentTime,
+        timestamp: Date.now()
+      });
+    }
+  };
+
+  const handleHtml5Pause = () => {
+    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
+    setIsMoviePlaying(false);
+    if (socketRef.current) {
+      socketRef.current.emit('codex_movie_sync', {
+        room: GLOBAL_ROOM,
+        state: 'PAUSE',
+        currentTime: html5VideoRef.current.currentTime,
+        timestamp: Date.now()
+      });
+    }
+  };
+
+  const handleHtml5Seeked = () => {
+    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
+    if (socketRef.current) {
+      socketRef.current.emit('codex_movie_sync', {
+        room: GLOBAL_ROOM,
+        state: html5VideoRef.current.paused ? 'PAUSE' : 'PLAY',
+        currentTime: html5VideoRef.current.currentTime,
+        timestamp: Date.now()
+      });
+    }
+  };
+
+  const handleCloseViewOnce = () => {
+    if (!activeViewImage) return;
+
+    const archiveItem = {
+      id: activeViewImage.id,
+      data: activeViewImage.data,
+      sender: activeViewImage.sender,
+      time: activeViewImage.time,
+      archivedAt: Date.now()
+    };
+    setArchivedImages(prev => [archiveItem, ...prev]);
+    setStealthMessages(prev => prev.filter(m => m._id !== activeViewImage.id));
+
+    if (socketRef.current) {
+      socketRef.current.emit('destroy_view_once', {
+        room: GLOBAL_ROOM,
+        messageId: activeViewImage.id
+      });
+    }
+
+    setActiveViewImage(null);
+  };
+
+  const handleBubbleDismiss = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (rect.left + rect.width / 2) / window.innerWidth;
+    const y = (rect.top + rect.height / 2) / window.innerHeight;
+
+    confetti({
+      particleCount: 45,
+      spread: 70,
+      startVelocity: 25,
+      origin: { x, y },
+      colors: ['#ffffff', '#e0f2fe', '#93c5fd', '#bfdbfe']
+    });
+
+    if (socketRef.current) {
+      socketRef.current.emit('bubble_popped', { room: GLOBAL_ROOM });
+    }
+
+    setIncomingAlert(null);
+  };
+
   // --- 7 PM Auto-Download Countdown Timer Effect ---
   useEffect(() => {
     const timerInterval = setInterval(() => {
@@ -325,12 +647,6 @@ export default function App() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [sidebarOpen]);
-
-  const closeSidebarOnMobile = () => {
-    if (window.innerWidth < 768) {
-      setSidebarOpen(false);
-    }
-  };
 
   useEffect(() => {
     if (!window.YT) {
@@ -507,97 +823,7 @@ export default function App() {
     localStorage.setItem('stealth_image_vault', JSON.stringify(archivedImages));
   }, [archivedImages]);
 
-  const playSentSound = useCallback(() => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.04);
-      gain.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.04);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.04);
-    } catch (e) {}
-  }, []);
-
-  const playReceiveSound = useCallback(() => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc1 = ctx.createOscillator();
-      const osc2 = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc1.type = 'sine';
-      osc2.type = 'sine';
-
-      osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
-      osc2.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08);
-
-      gain.gain.setValueAtTime(0.09, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
-
-      osc1.connect(gain);
-      osc2.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc1.start(ctx.currentTime);
-      osc1.stop(ctx.currentTime + 0.08);
-      osc2.start(ctx.currentTime + 0.08);
-      osc2.stop(ctx.currentTime + 0.28);
-    } catch (e) {}
-  }, []);
-
-  const playBubblePopSound = useCallback(() => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(800, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(220, ctx.currentTime + 0.08);
-      gain.gain.setValueAtTime(0.06, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.08);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.08);
-    } catch (e) {}
-  }, []);
-
-  const encryptText = (text) => CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
-  const decryptText = (cipher) => {
-    try {
-      const bytes = CryptoJS.AES.decrypt(cipher, SECRET_KEY);
-      const original = bytes.toString(CryptoJS.enc.Utf8);
-      return original || cipher;
-    } catch {
-      return cipher;
-    }
-  };
-
-  const markMessagesAsSeen = useCallback(() => {
-    const isCurrentlyStealth = viewModeRef.current === 'stealth';
-    const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
-
-    if (isCurrentlyStealth && isTabActive && socketRef.current) {
-      const currentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
-      socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: currentRole });
-    }
-  }, []);
-
-  useEffect(() => {
-    if (viewMode === 'stealth') {
-      markMessagesAsSeen();
-      const currentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
-      setStealthMessages(prev => prev.map(m => m.senderRole !== currentRole ? { ...m, isSeen: true } : m));
-    }
-  }, [viewMode, markMessagesAsSeen]);
-
-  // --- FULLY RESTORED SOCKET.IO CONNECTION & LISTENERS ---
+  // --- SOCKET.IO CONNECTION & LISTENERS ---
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
@@ -1492,19 +1718,49 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    const handlePaste = (e) => {
+      if (viewMode !== 'stealth') return;
+      const items = (e.clipboardData || window.clipboardData).items;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          processAndSendImage(file);
+          e.preventDefault();
+          break;
+        }
+      }
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [viewMode, role]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        escPressCount.current += 1;
+        if (escPressCount.current === 1) {
+          escTimer.current = setTimeout(() => { escPressCount.current = 0; }, 400);
+        } else if (escPressCount.current === 2) {
+          clearTimeout(escTimer.current);
+          escPressCount.current = 0;
+          setViewMode('real_gpt');
+          setShowPendingModal(false);
+          setShowMiniEmojiBar(false);
+          setIncomingAlert(null);
+          setIsBotOpen(false);
+          setActiveViewImage(null);
+          setActiveReactionMsgId(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const handleEmojiClick = (emoji) => {
     setInput(prev => prev + emoji);
     setShowMiniEmojiBar(false);
-    if (inputRef.current) inputRef.current.focus();
-  };
-
-  const handleStartReply = (msg) => {
-    const pureText = msg.isMedia ? "[Photo]" : cleanOriginalText(msg.text);
-    setReplyTarget({
-      id: msg._id,
-      text: pureText,
-      senderRole: msg.senderRole === 'user' ? 'A' : 'H'
-    });
     if (inputRef.current) inputRef.current.focus();
   };
 
