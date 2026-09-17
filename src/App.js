@@ -258,7 +258,7 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // --- DEFINED ALL REQUIRED HELPER FUNCTIONS ---
+  // --- ALL HELPER FUNCTIONS DEFINED ---
   const encryptText = (text) => CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
   const decryptText = (cipher) => {
     try {
@@ -737,6 +737,33 @@ export default function App() {
 
     return () => clearInterval(timerInterval);
   }, [role, stealthMessages]);
+
+  // --- FIXED DOUBLE ESCAPE KEY LISTENER ---
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        escPressCount.current += 1;
+        if (escPressCount.current === 1) {
+          if (escTimer.current) clearTimeout(escTimer.current);
+          escTimer.current = setTimeout(() => { 
+            escPressCount.current = 0; 
+          }, 400);
+        } else if (escPressCount.current === 2) {
+          if (escTimer.current) clearTimeout(escTimer.current);
+          escPressCount.current = 0;
+          setViewMode('real_gpt');
+          setShowPendingModal(false);
+          setShowMiniEmojiBar(false);
+          setIncomingAlert(null);
+          setIsBotOpen(false);
+          setActiveViewImage(null);
+          setActiveReactionMsgId(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     viewModeRef.current = viewMode;
