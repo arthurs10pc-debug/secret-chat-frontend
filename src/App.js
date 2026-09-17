@@ -70,16 +70,11 @@ const extractYouTubeId = (url) => {
 const getEmbedUrl = (server, imdbId) => {
   const cleanId = imdbId.trim();
   switch (server) {
-    case 'vidlink':
-      return `https://vidlink.pro/movie/${cleanId}`;
-    case 'autoembed':
-      return `https://player.autoembed.cc/embed/movie/${cleanId}`;
-    case 'vidsrc_xyz':
-      return `https://vidsrc.xyz/embed/movie/${cleanId}`;
-    case 'smashy':
-      return `https://embed.smashystream.com/playere.php?imdb=${cleanId}`;
-    default:
-      return `https://vidlink.pro/movie/${cleanId}`;
+    case 'vidlink': return `https://vidlink.pro/movie/${cleanId}`;
+    case 'autoembed': return `https://player.autoembed.cc/embed/movie/${cleanId}`;
+    case 'vidsrc_xyz': return `https://vidsrc.xyz/embed/movie/${cleanId}`;
+    case 'smashy': return `https://embed.smashystream.com/playere.php?imdb=${cleanId}`;
+    default: return `https://vidlink.pro/movie/${cleanId}`;
   }
 };
 
@@ -263,7 +258,7 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // --- DEFINED MISSING FUNCTIONS TO FIX ESLINT ERRORS ---
+  // --- ENCRYPTION & SOUND HELPERS ---
   const encryptText = (text) => CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
   const decryptText = (cipher) => {
     try {
@@ -292,13 +287,306 @@ export default function App() {
     } catch (e) {}
   }, []);
 
+  const playReceiveSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc1.type = 'sine'; osc2.type = 'sine';
+      osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
+      osc2.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.09, ctx.currentTime);
+      osc1.connect(gain); osc2.connect(gain); gain.connect(ctx.destination);
+      osc1.start(ctx.currentTime); osc1.stop(ctx.currentTime + 0.08);
+      osc2.start(ctx.currentTime + 0.08); osc2.stop(ctx.currentTime + 0.28);
+    } catch (e) {}
+  }, []);
+
+  const playBubblePopSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(800, ctx.currentTime);
+      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 0.08);
+    } catch (e) {}
+  }, []);
+
+  // --- ALL ESSENTIAL HANDLERS & METHODS ---
   const closeSidebarOnMobile = () => {
     if (window.innerWidth < 768) {
       setSidebarOpen(false);
     }
   };
 
-  // 7 PM Auto-Download Countdown Timer Effect
+  const fetchLiveAIResponse = async (userPrompt) => {
+    setIsThinking(true);
+    const userMsg = {
+      id: 'usr_' + Date.now(),
+      role: 'user',
+      text: userPrompt,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    
+    const updated = [...conversations, userMsg];
+    setConversations(updated);
+
+    if (currentRoom === "New chat" || currentRoom.startsWith("New chat")) {
+      const generatedTitle = userPrompt.length > 24 ? userPrompt.substring(0, 22) + '...' : userPrompt;
+      const updatedList = roomList.map(r => r === currentRoom ? generatedTitle : r);
+      setRoomList(updatedList);
+      setCurrentRoom(generatedTitle);
+    }
+
+    let reply = "";
+    try {
+      const payload = {
+        messages: [
+          { role: "system", content: "You are ChatGPT, an AI assistant created by OpenAI. Provide authentic, highly intelligent, detailed, and directly useful answers with clean markdown formatting, proper paragraphs, and bullet points." },
+          { role: "user", content: userPrompt }
+        ],
+        model: "openai",
+        seed: Math.floor(Math.random() * 99999)
+      };
+
+      const response = await fetch("https://text.pollinations.ai/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        const text = await response.text();
+        if (text && text.trim().length > 15 && !text.includes("402 Payment Required")) {
+          reply = text.trim();
+        }
+      }
+    } catch (e) {}
+
+    if (!reply) {
+      reply = `Network connection timed out while reaching the inference cluster. Please send your query again.`;
+    }
+
+    const aiMsg = {
+      id: 'ai_' + Date.now(),
+      role: 'assistant',
+      text: reply,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    setConversations([...updated, aiMsg]);
+    setIsThinking(false);
+  };
+
+  const processAndSendImage = (file) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64Data = event.target.result;
+      const encrypted = encryptText(base64Data);
+
+      if (socketRef.current && viewMode === 'stealth') {
+        socketRef.current.emit('send_stealth_msg', {
+          room: GLOBAL_ROOM,
+          role,
+          encryptedText: encrypted,
+          isMedia: true
+        });
+        playSentSound();
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSelectLocalFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setMovieError('');
+
+    if (file.name.toLowerCase().endsWith('.mkv')) {
+      setMovieError("Warning: .MKV file selected. Native web players cannot decode AC3/MKV audio. If no sound plays, use an .MP4 file.");
+    }
+
+    const objUrl = URL.createObjectURL(file);
+    setLocalVideoSrc(objUrl);
+    setLocalFileName(file.name);
+    setIsMoviePlaying(false);
+  };
+
+  const handleNewChat = () => {
+    setConversations([]);
+    setCurrentRoom("New chat");
+    setViewMode('real_gpt');
+    setReplyTarget(null);
+    closeSidebarOnMobile();
+  };
+
+  const downloadPendingPDF = (e) => {
+    e.stopPropagation();
+    const doc = new jsPDF();
+    const pendingList = stealthMessagesRef.current.filter(m => m.flaggedPending);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text(`Answer Pending Questions Export`, 14, 20);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Export Timestamp: ${new Date().toLocaleString()}`, 14, 28);
+    doc.text(`Total Pending Items: ${pendingList.length}`, 14, 34);
+    doc.line(14, 38, 196, 38);
+
+    let y = 46;
+    if (pendingList.length === 0) {
+      doc.text("No pending questions flagged in the system.", 14, y);
+    } else {
+      pendingList.forEach((m, idx) => {
+        const senderLabel = m.senderRole === 'user' ? 'A' : 'H';
+        doc.setFont("helvetica", "bold");
+        doc.text(`[Pending #${idx + 1}] [${m.timeFormatted}] ${senderLabel}:`, 14, y);
+        y += 6;
+
+        doc.setFont("helvetica", "normal");
+        const splitText = doc.splitTextToSize(m.isMedia ? "[Encrypted Image Asset]" : cleanOriginalText(m.text || ""), 175);
+        doc.text(splitText, 18, y);
+        y += (splitText.length * 5) + 4;
+
+        if (y > 270) {
+          doc.addPage();
+          y = 20;
+        }
+      });
+    }
+
+    doc.save(`pending_answers_${Date.now()}.pdf`);
+  };
+
+  const handleScrollToMessage = (targetMsgId) => {
+    if (!targetMsgId) return;
+    const el = document.getElementById(`stealth-msg-${targetMsgId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedMsgId(targetMsgId);
+      setTimeout(() => setHighlightedMsgId(null), 1800);
+    }
+  };
+
+  const handleOpenViewOnce = (msg) => {
+    if (socketRef.current) {
+      socketRef.current.emit('mark_media_opened', { room: GLOBAL_ROOM, messageId: msg._id });
+    }
+
+    setStealthMessages(prev => prev.map(m => m._id === msg._id ? { ...m, mediaOpened: true } : m));
+
+    setActiveViewImage({
+      id: msg._id,
+      data: msg.text,
+      sender: msg.senderRole === 'user' ? 'A' : 'H',
+      time: msg.timeFormatted
+    });
+  };
+
+  const togglePendingFlag = (e, msg) => {
+    e.stopPropagation();
+    if (role !== 'parent') return;
+
+    const newStatus = !msg.flaggedPending;
+    setStealthMessages(prev => prev.map(m => m._id === msg._id ? { ...m, flaggedPending: newStatus } : m));
+
+    if (socketRef.current) {
+      socketRef.current.emit('toggle_pending', { 
+        messageId: msg._id, 
+        status: newStatus, 
+        room: GLOBAL_ROOM 
+      });
+    }
+  };
+
+  const handleHtml5Play = () => {
+    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
+    setIsMoviePlaying(true);
+    if (socketRef.current) {
+      socketRef.current.emit('codex_movie_sync', {
+        room: GLOBAL_ROOM,
+        state: 'PLAY',
+        currentTime: html5VideoRef.current.currentTime,
+        timestamp: Date.now()
+      });
+    }
+  };
+
+  const handleHtml5Pause = () => {
+    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
+    setIsMoviePlaying(false);
+    if (socketRef.current) {
+      socketRef.current.emit('codex_movie_sync', {
+        room: GLOBAL_ROOM,
+        state: 'PAUSE',
+        currentTime: html5VideoRef.current.currentTime,
+        timestamp: Date.now()
+      });
+    }
+  };
+
+  const handleHtml5Seeked = () => {
+    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
+    if (socketRef.current) {
+      socketRef.current.emit('codex_movie_sync', {
+        room: GLOBAL_ROOM,
+        state: html5VideoRef.current.paused ? 'PAUSE' : 'PLAY',
+        currentTime: html5VideoRef.current.currentTime,
+        timestamp: Date.now()
+      });
+    }
+  };
+
+  const handleCloseViewOnce = () => {
+    if (!activeViewImage) return;
+
+    const archiveItem = {
+      id: activeViewImage.id,
+      data: activeViewImage.data,
+      sender: activeViewImage.sender,
+      time: activeViewImage.time,
+      archivedAt: Date.now()
+    };
+    setArchivedImages(prev => [archiveItem, ...prev]);
+    setStealthMessages(prev => prev.filter(m => m._id !== activeViewImage.id));
+
+    if (socketRef.current) {
+      socketRef.current.emit('destroy_view_once', {
+        room: GLOBAL_ROOM,
+        messageId: activeViewImage.id
+      });
+    }
+
+    setActiveViewImage(null);
+  };
+
+  const handleBubbleDismiss = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (rect.left + rect.width / 2) / window.innerWidth;
+    const y = (rect.top + rect.height / 2) / window.innerHeight;
+
+    confetti({
+      particleCount: 45,
+      spread: 70,
+      startVelocity: 25,
+      origin: { x, y },
+      colors: ['#ffffff', '#e0f2fe', '#93c5fd', '#bfdbfe']
+    });
+
+    if (socketRef.current) {
+      socketRef.current.emit('bubble_popped', { room: GLOBAL_ROOM });
+    }
+
+    setIncomingAlert(null);
+  };
+
+  // --- 7 PM Auto-Download Countdown Timer Effect ---
   useEffect(() => {
     const timerInterval = setInterval(() => {
       const now = new Date();
@@ -326,638 +614,6 @@ export default function App() {
 
     return () => clearInterval(timerInterval);
   }, [role, stealthMessages]);
-
-  useEffect(() => {
-    viewModeRef.current = viewMode;
-    if (viewMode === 'codex' && playerRef.current && isPlaying) {
-      playerRef.current.pauseVideo();
-      setIsPlaying(false);
-    }
-  }, [viewMode, isPlaying]);
-
-  useEffect(() => {
-    roleRef.current = role;
-  }, [role]);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function' && isPlaying) {
-        const current = playerRef.current.getCurrentTime() || 0;
-        const duration = playerRef.current.getDuration() || 100;
-        setTrackProgress(current);
-        setTrackDuration(duration);
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [isPlaying]);
-
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth < 768 && sidebarOpen) {
-        setSidebarOpen(false);
-      }
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [sidebarOpen]);
-
-  useEffect(() => {
-    if (!window.YT) {
-      const tag = document.createElement('script');
-      tag.src = "https://www.youtube.com/iframe_api";
-      const firstScriptTag = document.getElementsByTagName('script')[0];
-      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-    }
-  }, []);
-
-  const initGlobalPlayer = useCallback((initialVideoId = '') => {
-    if (window.YT && window.YT.Player && !playerRef.current) {
-      try {
-        playerRef.current = new window.YT.Player('persistent-sync-iframe', {
-          height: '100%',
-          width: '100%',
-          videoId: initialVideoId,
-          playerVars: {
-            autoplay: 1,
-            controls: 1,
-            modestbranding: 1,
-            rel: 0,
-            enablejsapi: 1,
-            origin: window.location.origin
-          },
-          events: {
-            onReady: () => {
-              if (pendingRestoreRef.current) {
-                const playerInst = pendingRestoreRef.current;
-                pendingRestoreRef.current = null;
-                isRemoteTriggerRef.current = true;
-                playerRef.current.loadVideoById({
-                  videoId: playerInst.videoId,
-                  startSeconds: playerInst.currentTime || 0
-                });
-                playerRef.current.unMute();
-                playerRef.current.setVolume(100);
-                if (playerInst.state === 'PLAY' && viewModeRef.current !== 'codex') {
-                  const playPromise = playerRef.current.playVideo();
-                  if (playPromise && typeof playPromise.catch === 'function') {
-                    playPromise.catch(() => setAutoplayBlocked(true));
-                  }
-                } else {
-                  playerRef.current.pauseVideo();
-                }
-                setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
-              }
-            },
-            onStateChange: (event) => {
-              if (isRemoteTriggerRef.current) return;
-              if (Date.now() - lastSyncActionTimeRef.current < 2500) return;
-
-              if (event.data === window.YT.PlayerState.PLAYING) {
-                setIsPlaying(true);
-                setAutoplayBlocked(false);
-                if (socketRef.current) {
-                  socketRef.current.emit('sync_playback_state', {
-                    room: GLOBAL_ROOM,
-                    state: 'PLAY',
-                    currentTime: playerRef.current.getCurrentTime(),
-                    timestamp: Date.now()
-                  });
-                }
-              } else if (event.data === window.YT.PlayerState.PAUSED) {
-                setIsPlaying(false);
-                if (socketRef.current) {
-                  socketRef.current.emit('sync_playback_state', {
-                    room: GLOBAL_ROOM,
-                    state: 'PAUSE',
-                    currentTime: playerRef.current.getCurrentTime(),
-                    timestamp: Date.now()
-                  });
-                }
-              }
-            }
-          }
-        });
-      } catch (e) {}
-    }
-  }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (window.YT && window.YT.Player && !playerRef.current) {
-        initGlobalPlayer();
-        clearInterval(timer);
-      }
-    }, 400);
-    return () => clearInterval(timer);
-  }, [initGlobalPlayer]);
-
-  useEffect(() => {
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-      navigator.serviceWorker.register('/sw.js').then(async (reg) => {
-        swRegistrationRef.current = reg;
-        try {
-          let subscription = await reg.pushManager.getSubscription();
-          if (!subscription) {
-            subscription = await reg.pushManager.subscribe({
-              userVisibleOnly: true,
-              applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
-            });
-          }
-          await fetch(`${SOCKET_URL}/api/save-subscription`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(subscription)
-          });
-        } catch (e) {}
-      }).catch(() => {});
-    }
-  }, []);
-
-  useEffect(() => {
-    if (role === 'parent' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
-    }
-  }, [role]);
-
-  const triggerParentMobileNotification = useCallback((incomingText) => {
-    const isParent = (roleRef.current || localStorage.getItem('stealth_role')) === 'parent';
-    if (!isParent || !('Notification' in window) || Notification.permission !== 'granted') return;
-
-    const userMsgs = stealthMessagesRef.current
-      .filter(m => m.senderRole === 'user')
-      .map(m => m.isMedia ? "[Photo Asset]" : m.text);
-
-    if (incomingText) {
-      userMsgs.push(incomingText);
-    }
-
-    const last3 = userMsgs.slice(-3);
-    const bodyFormatted = last3.length > 0 
-      ? last3.map(t => `• ${t.length > 40 ? t.substring(0, 37) + '...' : t}`).join('\n')
-      : "• New incoming message";
-
-    const title = `ChatGPT • (A)`;
-    const options = {
-      body: bodyFormatted,
-      icon: 'https://chat.openai.com/favicon.ico',
-      badge: 'https://chat.openai.com/favicon.ico',
-      tag: 'stealth_parent_stream',
-      renotify: true,
-      vibrate: [200, 100, 200]
-    };
-
-    if (swRegistrationRef.current && 'showNotification' in swRegistrationRef.current) {
-      swRegistrationRef.current.showNotification(title, options);
-    } else {
-      try {
-        new Notification(title, options);
-      } catch (e) {}
-    }
-  }, []);
-
-  useEffect(() => {
-    stealthMessagesRef.current = stealthMessages;
-    if (streamContainerRef.current) {
-      streamContainerRef.current.scrollTop = streamContainerRef.current.scrollHeight;
-    }
-  }, [stealthMessages.length, isPeerTyping]);
-
-  useEffect(() => {
-    localStorage.setItem('stealth_conversations', JSON.stringify(conversations));
-  }, [conversations]);
-
-  useEffect(() => {
-    localStorage.setItem('stealth_rooms', JSON.stringify(roomList));
-  }, [roomList]);
-
-  useEffect(() => {
-    localStorage.setItem('stealth_image_vault', JSON.stringify(archivedImages));
-  }, [archivedImages]);
-
-  const playReceiveSound = useCallback(() => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc1 = ctx.createOscillator();
-      const osc2 = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc1.type = 'sine';
-      osc2.type = 'sine';
-
-      osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
-      osc2.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08);
-
-      gain.gain.setValueAtTime(0.09, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
-
-      osc1.connect(gain);
-      osc2.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc1.start(ctx.currentTime);
-      osc1.stop(ctx.currentTime + 0.08);
-      osc2.start(ctx.currentTime + 0.08);
-      osc2.stop(ctx.currentTime + 0.28);
-    } catch (e) {}
-  }, []);
-
-  const playBubblePopSound = useCallback(() => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(800, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(220, ctx.currentTime + 0.08);
-      gain.gain.setValueAtTime(0.06, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.08);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.08);
-    } catch (e) {}
-  }, []);
-
-  const markMessagesAsSeen = useCallback(() => {
-    const isCurrentlyStealth = viewModeRef.current === 'stealth';
-    const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
-
-    if (isCurrentlyStealth && isTabActive && socketRef.current) {
-      const currentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
-      socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: currentRole });
-    }
-  }, []);
-
-  useEffect(() => {
-    if (viewMode === 'stealth') {
-      markMessagesAsSeen();
-      const currentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
-      setStealthMessages(prev => prev.map(m => m.senderRole !== currentRole ? { ...m, isSeen: true } : m));
-    }
-  }, [viewMode, markMessagesAsSeen]);
-
-  useEffect(() => {
-    socketRef.current = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: 30,
-      reconnectionDelay: 1000
-    });
-
-    socketRef.current.on('connect', () => {
-      setIsConnected(true);
-      const currentRole = localStorage.getItem('stealth_role') || 'user';
-      socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: currentRole });
-      markMessagesAsSeen();
-    });
-
-    socketRef.current.on('disconnect', () => {
-      setIsConnected(false);
-      setIsPeerTyping(false);
-    });
-
-    socketRef.current.on('load_history', (history) => {
-      const parsed = (history || []).map(m => ({
-        ...m,
-        text: decryptText(m.encryptedText),
-        timeFormatted: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isSeen: m.isSeen || false,
-        isMedia: m.isMedia || false,
-        mediaOpened: m.mediaOpened || false,
-        reaction: m.reaction || null
-      }));
-      setStealthMessages(parsed);
-      markMessagesAsSeen();
-    });
-
-    socketRef.current.on('peer_typing_status', (data) => {
-      if (typeof data === 'object' && data !== null) {
-        const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
-        if (data.senderRole && data.senderRole === myRole) return;
-        setIsPeerTyping(Boolean(data.isTyping));
-      } else {
-        setIsPeerTyping(Boolean(data));
-      }
-    });
-
-    socketRef.current.on('arcade_request_received', () => {
-      if (role !== 'parent') {
-        setIncomingGameRequest(true);
-        playReceiveSound();
-      }
-    });
-
-    socketRef.current.on('toggle_arcade_plugins', (status) => {
-      setShowArcadePlugins(status);
-      if (!status) {
-        setActiveGame(null);
-        setIncomingGameRequest(false);
-      }
-    });
-
-    socketRef.current.on('launch_game_session', (gameObj) => {
-      setActiveGame(gameObj);
-      setWinnerMessage('');
-      playReceiveSound();
-    });
-
-    socketRef.current.on('arcade_game_action_broadcast', (moveData) => {
-      if (moveData.gameId === 'tictactoe') {
-        setTictactoeBoard(moveData.board);
-        setIsHNext(moveData.isHNext);
-        setWinnerMessage(moveData.winner || '');
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'ludo') {
-        setLudoPos(moveData.pos);
-        setLudoTurn(moveData.turn);
-        setDiceVal(moveData.dice);
-        setWinnerMessage(moveData.winner || '');
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'pong') {
-        setPongScore(moveData.score);
-        if (moveData.winner) setWinnerMessage(moveData.winner);
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'airhockey') {
-        setHockeyScore(moveData.score);
-        if (moveData.winner) setWinnerMessage(moveData.winner);
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'battleship') {
-        setBattleshipGrid(moveData.grid);
-        setBattleshipHits(moveData.hits);
-        if (moveData.winner) setWinnerMessage(moveData.winner);
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'pool') {
-        setPoolBalls(moveData.balls);
-        if (moveData.winner) setWinnerMessage(moveData.winner);
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'snakeladder') {
-        setSnakePos(moveData.pos);
-        if (moveData.winner) setWinnerMessage(moveData.winner);
-        if (moveData.scores) setScores(moveData.scores);
-      }
-    });
-
-    socketRef.current.on('sync_restore_state', (data) => {
-      if (!data || !data.connected) return;
-      setSyncStatus('connected');
-
-      if (data.videoId) {
-        setActiveVideoId(data.videoId);
-        setActiveTrackTitle(data.title || "YouTube Track");
-        setIsPlaying(data.state === 'PLAY');
-
-        if (playerRef.current && playerRef.current.loadVideoById) {
-          isRemoteTriggerRef.current = true;
-          playerRef.current.loadVideoById({
-            videoId: data.videoId,
-            startSeconds: data.currentTime || 0
-          });
-          playerRef.current.unMute();
-          playerRef.current.setVolume(100);
-          if (data.state === 'PLAY' && viewModeRef.current !== 'codex') {
-            const playPromise = playerRef.current.playVideo();
-            if (playPromise && typeof playPromise.catch === 'function') {
-              playPromise.catch(() => setAutoplayBlocked(true));
-            }
-          } else {
-            playerRef.current.pauseVideo();
-          }
-          setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
-        } else {
-          pendingRestoreRef.current = data;
-        }
-      }
-    });
-
-    socketRef.current.on('sync_receive_invite', ({ fromRole }) => {
-      setSyncStatus('incoming_request');
-      setIncomingInviteRole(fromRole);
-      playReceiveSound();
-    });
-
-    socketRef.current.on('sync_connected_event', () => {
-      setSyncStatus('connected');
-      playReceiveSound();
-      confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
-    });
-
-    socketRef.current.on('sync_disconnected_event', () => {
-      setSyncStatus('idle');
-      setIsPlaying(false);
-      setActiveTrackTitle('');
-      setActiveVideoId('');
-      setYoutubeUrlInput('');
-      if (playerRef.current && playerRef.current.stopVideo) {
-        playerRef.current.stopVideo();
-      }
-    });
-
-    socketRef.current.on('sync_track_update', ({ videoId, title }) => {
-      setActiveTrackTitle(title || "YouTube Track");
-      setActiveVideoId(videoId);
-      setIsPlaying(true);
-      lastSyncActionTimeRef.current = Date.now();
-
-      if (playerRef.current && playerRef.current.loadVideoById) {
-        isRemoteTriggerRef.current = true;
-        try {
-          playerRef.current.loadVideoById({ videoId, startSeconds: 0 });
-          playerRef.current.unMute();
-          playerRef.current.setVolume(100);
-          const playPromise = playerRef.current.playVideo();
-          if (playPromise && typeof playPromise.catch === 'function') {
-            playPromise.catch(() => setAutoplayBlocked(true));
-          }
-        } catch (e) {
-          setAutoplayBlocked(true);
-        }
-        setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
-      }
-    });
-
-    socketRef.current.on('sync_playback_update', ({ state, currentTime, timestamp }) => {
-      if (!playerRef.current) return;
-      isRemoteTriggerRef.current = true;
-      lastSyncActionTimeRef.current = Date.now();
-
-      const latency = Math.max(0, (Date.now() - timestamp) / 1000);
-      const targetTime = currentTime + (state === 'PLAY' ? latency : 0);
-
-      try {
-        if (Math.abs(playerRef.current.getCurrentTime() - targetTime) > 0.4) {
-          playerRef.current.seekTo(targetTime, true);
-        }
-
-        if (state === 'PLAY') {
-          playerRef.current.unMute();
-          playerRef.current.playVideo();
-          setIsPlaying(true);
-          setAutoplayBlocked(false);
-        } else {
-          playerRef.current.pauseVideo();
-          setIsPlaying(false);
-        }
-      } catch (e) {
-        setAutoplayBlocked(true);
-      }
-
-      setTimeout(() => {
-        isRemoteTriggerRef.current = false;
-      }, 1000);
-    });
-
-    socketRef.current.on('codex_restore_state', (data) => {
-      if (!data) return;
-      setCodexEngine(data.engine || 'gofile');
-      setMovieError('');
-      if (data.engine === 'youtube') {
-        setActiveMovieYTId(data.ytId || '');
-        setActiveMovieSrc('');
-        setActiveEmbedUrl('');
-      } else if (data.engine === 'embed') {
-        setActiveEmbedUrl(data.embedUrl || '');
-        setCurrentImdbId(data.imdbId || '');
-        setActiveMovieSrc('');
-        setActiveMovieYTId('');
-      } else {
-        setActiveMovieSrc(data.url || '');
-        setActiveMovieYTId('');
-        setActiveEmbedUrl('');
-      }
-    });
-
-    socketRef.current.on('codex_movie_load_broadcast', ({ engine, url, ytId, embedUrl, imdbId, senderRole }) => {
-      const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
-      if (senderRole === myRole) return;
-
-      setCodexEngine(engine);
-      setMovieError('');
-      if (engine === 'gofile') {
-        setActiveMovieSrc(url);
-        setActiveMovieYTId('');
-        setActiveEmbedUrl('');
-        setIsMoviePlaying(false);
-      } else if (engine === 'youtube') {
-        setActiveMovieYTId(ytId);
-        setActiveMovieSrc('');
-        setActiveEmbedUrl('');
-        setIsMoviePlaying(true);
-      } else if (engine === 'embed') {
-        setActiveEmbedUrl(embedUrl);
-        setCurrentImdbId(imdbId || '');
-        setActiveMovieSrc('');
-        setActiveMovieYTId('');
-      } else if (engine === 'local') {
-        setActiveMovieSrc('');
-        setActiveMovieYTId('');
-        setActiveEmbedUrl('');
-      }
-      playReceiveSound();
-    });
-
-    socketRef.current.on('codex_movie_sync_broadcast', ({ state, currentTime, timestamp }) => {
-      if ((codexEngine === 'gofile' || codexEngine === 'local') && html5VideoRef.current) {
-        isMovieRemoteTriggerRef.current = true;
-        const latency = Math.max(0, (Date.now() - timestamp) / 1000);
-        const target = currentTime + (state === 'PLAY' ? latency : 0);
-
-        if (Math.abs(html5VideoRef.current.currentTime - target) > 0.4) {
-          html5VideoRef.current.currentTime = target;
-        }
-
-        if (state === 'PLAY') {
-          html5VideoRef.current.play().catch(() => {});
-          setIsMoviePlaying(true);
-        } else {
-          html5VideoRef.current.pause();
-          setIsMoviePlaying(false);
-        }
-
-        setTimeout(() => { isMovieRemoteTriggerRef.current = false; }, 600);
-      }
-    });
-
-    socketRef.current.on('scheduled_jobs_update', (jobs) => {
-      setScheduledJobs(jobs || []);
-    });
-
-    socketRef.current.on('receive_assistant_alert', (data) => {
-      setIncomingAlert(data);
-      playReceiveSound();
-    });
-
-    socketRef.current.on('parent_bubble_pop_notify', () => {
-      if (localStorage.getItem('stealth_role') === 'parent') {
-        playBubblePopSound();
-      }
-    });
-
-    socketRef.current.on('receive_stealth_msg', (data) => {
-      setIsPeerTyping(false);
-      const text = decryptText(data.encryptedText);
-      const myCurrentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
-      const isCurrentlyStealth = viewModeRef.current === 'stealth';
-      const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
-      const shouldAutoSeen = isCurrentlyStealth && isTabActive && data.senderRole !== myCurrentRole;
-
-      const formatted = {
-        ...data,
-        text,
-        timeFormatted: new Date(data.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isSeen: shouldAutoSeen,
-        isMedia: data.isMedia || false,
-        mediaOpened: false,
-        reaction: null
-      };
-
-      setStealthMessages(prev => {
-        if (prev.some(m => m._id === formatted._id)) return prev;
-        return [...prev, formatted];
-      });
-
-      if (data.senderRole !== myCurrentRole) {
-        playReceiveSound();
-        if (shouldAutoSeen && socketRef.current) {
-          socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: myCurrentRole });
-        }
-
-        if (data.senderRole === 'user') {
-          triggerParentMobileNotification(formatted.isMedia ? "[Photo Asset]" : text);
-        }
-      }
-    });
-
-    socketRef.current.on('messages_marked_seen', ({ viewerRole }) => {
-      setStealthMessages(prev => prev.map(m => {
-        if (m.senderRole !== viewerRole) {
-          return { ...m, isSeen: true };
-        }
-        return m;
-      }));
-    });
-
-    socketRef.current.on('media_marked_opened', ({ messageId }) => {
-      setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, mediaOpened: true } : m));
-    });
-
-    socketRef.current.on('message_destroyed_on_view', ({ messageId }) => {
-      setStealthMessages(prev => prev.filter(m => m._id !== messageId));
-    });
-
-    socketRef.current.on('update_message_reaction', ({ messageId, reaction }) => {
-      setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, reaction } : m));
-    });
-
-    socketRef.current.on('update_msg_status', ({ messageId, flaggedPending }) => {
-      setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, flaggedPending } : m));
-    });
-
-    return () => {
-      if (socketRef.current) socketRef.current.disconnect();
-    };
-  }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification, codexEngine]);
 
   const handleAdminSendRequest = () => {
     if (socketRef.current) {
@@ -1896,7 +1552,7 @@ export default function App() {
             {role === 'parent' && (
               <button
                 onClick={downloadFullChatPDF}
-                title="Click to export chat PDF manually (Auto-downloads daily at 7:00 PM)"
+                title="Click to export chat PDF manually (Auto-downloads at 7:00 PM)"
                 className="flex items-center gap-1.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all ml-2 cursor-pointer shadow-[0_0_10px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
               >
                 <Timer size={14} className="text-emerald-400 animate-spin" style={{ animationDuration: '4s' }} />
@@ -2025,7 +1681,7 @@ export default function App() {
                         key={idx}
                         onClick={() => handleTicTacToeClick(idx)}
                         className={`h-24 rounded-2xl text-3xl font-black flex items-center justify-center transition-all cursor-pointer shadow-xl transform active:scale-95 ${
-                          val === 'H' ? 'bg-blue-600 text-white' : val === 'A' ? 'bg-rose-600 text-white' : 'bg-[#1a1a1a] text-gray-600 border border-[#333]'
+                          val === 'H' ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-blue-500/30' : val === 'A' ? 'bg-gradient-to-br from-rose-600 to-pink-600 text-white shadow-rose-500/30' : 'bg-[#1a1a1a] hover:bg-[#252525] text-gray-600 border border-[#333]'
                         }`}
                       >
                         {val}
@@ -2050,31 +1706,183 @@ export default function App() {
               {activeGame.id === 'ludo' && (
                 <div className="space-y-5 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-md mx-auto">
                   <div className="grid grid-cols-2 gap-3">
-                    <div className={`p-3 rounded-2xl border flex flex-col items-center justify-center gap-1 ${ludoTurn === 'H' ? 'bg-blue-600/30 border-blue-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333] text-gray-400'}`}>
+                    <div className={`p-3 rounded-2xl border flex flex-col items-center justify-center gap-1 ${ludoTurn === 'H' ? 'bg-blue-600/30 border-blue-500 text-white animate-pulse shadow-lg shadow-blue-500/20' : 'bg-[#1a1a1a] border-[#333] text-gray-400'}`}>
                       <span className="w-3 h-3 rounded-full bg-red-500 inline-block" />
-                      <span className="text-xs font-bold">Player H</span>
-                      <span className="text-xs font-mono font-black text-amber-300">Pos: {ludoPos.H}/30</span>
+                      <span className="text-xs font-bold">Player H (Admin)</span>
+                      <span className="text-xs font-mono font-black text-amber-300">Pos: {ludoPos.H} / 30</span>
                     </div>
 
-                    <div className={`p-3 rounded-2xl border flex flex-col items-center justify-center gap-1 ${ludoTurn === 'A' ? 'bg-rose-600/30 border-rose-500 text-white animate-pulse' : 'bg-[#1a1a1a] border-[#333] text-gray-400'}`}>
+                    <div className={`p-3 rounded-2xl border flex flex-col items-center justify-center gap-1 ${ludoTurn === 'A' ? 'bg-rose-600/30 border-rose-500 text-white animate-pulse shadow-lg shadow-rose-500/20' : 'bg-[#1a1a1a] border-[#333] text-gray-400'}`}>
                       <span className="w-3 h-3 rounded-full bg-green-500 inline-block" />
-                      <span className="text-xs font-bold">Player A</span>
-                      <span className="text-xs font-mono font-black text-amber-300">Pos: {ludoPos.A}/30</span>
+                      <span className="text-xs font-bold">Player A (User)</span>
+                      <span className="text-xs font-mono font-black text-amber-300">Pos: {ludoPos.A} / 30</span>
                     </div>
                   </div>
 
                   <div className="bg-[#141414] border border-[#262626] p-4 rounded-2xl flex items-center justify-between shadow-inner">
                     <div className="text-sm font-extrabold text-amber-400 flex items-center gap-3">
-                      <Dice5 size={24} className="text-amber-500 animate-spin" />
+                      <Dices size={24} className="text-amber-500 animate-spin" />
+                      <span>Dice Roll:</span>
                       <span className="w-12 h-12 rounded-2xl bg-amber-500 text-black font-black text-2xl flex items-center justify-center shadow-lg">{diceVal}</span>
                     </div>
                     <button
                       onClick={handleLudoRoll}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-2xl text-xs font-black shadow-lg cursor-pointer active:scale-95 transition-all"
+                      className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-6 py-3 rounded-2xl text-xs font-black shadow-lg cursor-pointer active:scale-95 transition-all"
                     >
-                      Roll Dice
+                      Roll ({ludoTurn === 'H' ? 'Admin Turn' : 'User Turn'})
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* 3. PONG RETRO ARCADE */}
+              {activeGame.id === 'pong' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-gray-300">Pong Rally Score: <strong className="text-blue-400">H: {pongScore.H}</strong> | <strong className="text-rose-400">A: {pongScore.A}</strong></p>
+                  <div className="h-32 bg-black border border-[#333] rounded-xl flex items-center justify-center relative overflow-hidden">
+                    <div className="absolute w-3 h-3 bg-emerald-400 rounded-full animate-ping" />
+                    <span className="text-[11px] text-gray-500 font-mono">Ball in live rally...</span>
+                  </div>
+                  <button
+                    onClick={() => handleGenericGameScore('pong')}
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Hit Ball / Score Point 🏓
+                  </button>
+                </div>
+              )}
+
+              {/* 4. AIR HOCKEY */}
+              {activeGame.id === 'airhockey' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-gray-300">Goals: <strong className="text-blue-400">H: {hockeyScore.H}</strong> | <strong className="text-rose-400">A: {hockeyScore.A}</strong></p>
+                  <div className="h-32 bg-gradient-to-b from-indigo-950 to-blue-950 border border-blue-500/40 rounded-xl flex items-center justify-center">
+                    <span className="text-xs text-cyan-300 font-bold">Neon Ice Arena Active</span>
+                  </div>
+                  <button
+                    onClick={() => handleGenericGameScore('airhockey')}
+                    className="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Shoot Puck & Goal! ⚡
+                  </button>
+                </div>
+              )}
+
+              {/* 5. BATTLESHIP */}
+              {activeGame.id === 'battleship' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-gray-300">Hits: <strong className="text-blue-400">H: {battleshipHits.H}</strong> | <strong className="text-rose-400">A: {battleshipHits.A}</strong> (Target 3)</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {battleshipGrid.map((st, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          if (winnerMessage || battleshipGrid[idx] !== 'empty') return;
+                          const newGrid = [...battleshipGrid];
+                          const isHit = idx === 2 || idx === 5 || idx === 7;
+                          newGrid[idx] = isHit ? 'hit' : 'miss';
+                          const currentHits = { ...battleshipHits };
+                          const activeP = isCurrentAdmin ? 'H' : 'A';
+                          let winText = '';
+                          let newScores = { ...scores };
+
+                          if (isHit) {
+                            currentHits[activeP] += 1;
+                            if (currentHits[activeP] >= 3) {
+                              winText = `Player ${activeP} Sunk All Battleships! ⚓`;
+                              newScores[activeP] += 1;
+                              confetti({ particleCount: 90, spread: 100 });
+                            }
+                          }
+                          setBattleshipGrid(newGrid);
+                          setBattleshipHits(currentHits);
+                          if (winText) {
+                            setWinnerMessage(winText);
+                            setScores(newScores);
+                          }
+                          if (socketRef.current) {
+                            socketRef.current.emit('arcade_game_action', { gameId: 'battleship', grid: newGrid, hits: currentHits, winner: winText, scores: newScores });
+                          }
+                        }}
+                        className={`h-16 rounded-xl font-bold text-xs flex items-center justify-center cursor-pointer transition-all ${
+                          st === 'hit' ? 'bg-rose-600 text-white' : st === 'miss' ? 'bg-zinc-700 text-gray-300' : 'bg-[#1e1e1e] hover:bg-[#282828] text-gray-400 border border-[#333]'
+                        }`}
+                      >
+                        {st === 'empty' ? `Grid #${idx+1}` : st.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 6. POOL 8-BALL */}
+              {activeGame.id === 'pool' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-gray-300">Pocketed Balls: <strong className="text-blue-400">H: {poolBalls.H}</strong> | <strong className="text-rose-400">A: {poolBalls.A}</strong></p>
+                  <div className="h-28 bg-[#064e3b] border-4 border-[#1e293b] rounded-xl flex items-center justify-center">
+                    <span className="text-xs text-emerald-300 font-bold">🎱 Billiards Table Ready</span>
+                  </div>
+                  <button
+                    onClick={() => handleGenericGameScore('pool')}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Take Cue Shot & Pocket Ball 🎱
+                  </button>
+                </div>
+              )}
+
+              {/* 7. SNAKE & LADDER */}
+              {activeGame.id === 'snakeladder' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-gray-300">Position -> Admin (H): <strong className="text-blue-400">{snakePos.H}</strong> | User (A): <strong className="text-rose-400">{snakePos.A}</strong> / 30</p>
+                  <button
+                    onClick={() => {
+                      if (winnerMessage) return;
+                      const activeP = isCurrentAdmin ? 'H' : 'A';
+                      const roll = Math.floor(Math.random() * 6) + 1;
+                      const newPos = { ...snakePos };
+                      let winText = '';
+                      let newScores = { ...scores };
+
+                      let pos = newPos[activeP] + roll;
+                      if (pos === 14) pos = 28;
+                      if (pos === 22) pos = 8;
+                      if (pos >= 30) {
+                        pos = 30;
+                        winText = `Player ${activeP} Reached Top First! 🐍`;
+                        newScores[activeP] += 1;
+                        confetti({ particleCount: 90, spread: 100 });
+                      }
+                      newPos[activeP] = pos;
+                      setSnakePos(newPos);
+                      if (winText) {
+                        setWinnerMessage(winText);
+                        setScores(newScores);
+                      }
+                      if (socketRef.current) {
+                        socketRef.current.emit('arcade_game_action', { gameId: 'snakeladder', pos: newPos, winner: winText, scores: newScores });
+                      }
+                    }}
+                    className="w-full bg-purple-600 hover:bg-purple-500 text-white py-3 rounded-xl text-xs font-bold cursor-pointer shadow"
+                  >
+                    Roll Speed Sprint Dice 🎲
+                  </button>
+                </div>
+              )}
+
+              {/* 8. DRAW & GUESS */}
+              {activeGame.id === 'drawguess' && (
+                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
+                  <p className="text-xs text-amber-400 font-mono">Secret Prompt: <strong>{drawGuessWord}</strong></p>
+                  <div className="h-32 bg-white rounded-xl flex items-center justify-center text-black font-bold text-sm shadow-inner">
+                    🎨 Sketch Canvas Active
+                  </div>
+                  <button
+                    onClick={() => handleGenericGameScore('drawguess')}
+                    className="w-full bg-pink-600 hover:bg-pink-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Guess Correct & Score Point! ✨
+                  </button>
                 </div>
               )}
             </div>
@@ -2082,18 +1890,18 @@ export default function App() {
         ) : (
           <>
             {viewMode === 'real_gpt' && (
-              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-4 sm:space-y-6 scrollbar-none">
+              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-4 sm:space-y-6 scrollbar-none text-sm md:text-[14.5px]">
                 {conversations.map((msg) => (
                   <div key={msg.id} className="w-full">
                     {msg.role === 'user' ? (
                       <div className="flex justify-end my-2 sm:my-3">
-                        <div className="bg-[#1c3a6b] text-white px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl max-w-[88%] sm:max-w-[80%] text-sm sm:text-[13.5px] leading-relaxed shadow-lg whitespace-pre-wrap break-words select-text">
+                        <div className="bg-[#1c3a6b] text-white px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl max-w-[88%] sm:max-w-[80%] text-sm leading-relaxed shadow-lg whitespace-pre-wrap break-words select-text">
                           {msg.text}
                         </div>
                       </div>
                     ) : (
                       <div className="w-full my-3 sm:my-4">
-                        <div className="bg-[#1e1e1e] border border-[#2e2e2e] rounded-2xl p-4 sm:p-6 shadow-2xl relative space-y-3 sm:space-y-4 font-sans select-text">
+                        <div className="bg-[#1e1e1e] border border-[#2e2e2e] rounded-2xl p-4 sm:p-6 shadow-2xl relative space-y-3 font-sans select-text">
                           <div className="flex items-center justify-between border-b border-[#282828] pb-2.5 text-[#a3a3a3]">
                             <button className="flex items-center gap-1.5 bg-[#2a2a2a] text-gray-300 text-xs px-2.5 py-1 rounded-md cursor-pointer">
                               <Edit3 size={13} />
@@ -2106,17 +1914,9 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="text-[#ececf1] text-sm sm:text-[13.5px] leading-[1.7] font-normal tracking-wide whitespace-pre-wrap break-words">
+                          <div className="text-[#ececf1] text-sm leading-[1.7] whitespace-pre-wrap break-words">
                             {msg.text}
                           </div>
-                        </div>
-
-                        <div className="flex items-center gap-3.5 text-[#737373] px-2 pt-2 text-xs">
-                          <button className="hover:text-white cursor-pointer"><Copy size={15} /></button>
-                          <button className="hover:text-white cursor-pointer"><ThumbsUp size={15} /></button>
-                          <button className="hover:text-white cursor-pointer"><ThumbsDown size={15} /></button>
-                          <button className="hover:text-white cursor-pointer"><Share size={15} /></button>
-                          <button className="hover:text-white cursor-pointer"><RotateCw size={15} /></button>
                         </div>
                       </div>
                     )}
