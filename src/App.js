@@ -150,7 +150,7 @@ export default function App() {
   // 8. Draw & Guess State
   const [drawGuessWord] = useState('Golden Crown');
 
-  // 7 PM Auto-Download Countdown Timer State
+  // 7:20 PM Auto-Download Countdown Timer State
   const [countdownStr, setCountdownStr] = useState("00:00:00");
   const autoDownloadedRef = useRef(false);
 
@@ -730,7 +730,7 @@ export default function App() {
     playSentSound();
   };
 
-  // --- UNIVERSAL WHITE DOT SYNC HANDLER (YOUTUBE & ALL 4 ENGINES) ---
+  // --- UNIVERSAL WHITE DOT SYNC HANDLER FOR ALL 4 ENGINES (INCLUDING YOUTUBE) ---
   const handleUniversalSyncRealign = () => {
     if (socketRef.current) {
       if (codexEngine === 'youtube' && activeMovieYTId) {
@@ -774,12 +774,12 @@ export default function App() {
     };
   }, [showTogepiMenu]);
 
-  // --- 7 PM Auto-Download Countdown Timer Effect ---
+  // --- 7:20 PM Auto-Download Countdown Timer Effect ---
   useEffect(() => {
     const timerInterval = setInterval(() => {
       const now = new Date();
       const target = new Date();
-      target.setHours(19, 0, 0, 0);
+      target.setHours(19, 20, 0, 0);
 
       let diff = target.getTime() - now.getTime();
       if (diff <= 0) {
@@ -2254,11 +2254,11 @@ export default function App() {
             {role === 'parent' && (
               <button
                 onClick={downloadFullChatPDF}
-                title="Click to export chat PDF manually (Auto-downloads daily at 7:00 PM)"
+                title="Click to export chat PDF manually (Auto-downloads daily at 7:20 PM)"
                 className="flex items-center gap-1.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all ml-2 cursor-pointer shadow-[0_0_10px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
               >
                 <Timer size={15} className="text-emerald-400 animate-spin" style={{ animationDuration: '4s' }} />
-                <span>7 PM: {countdownStr}</span>
+                <span>7:20 PM: {countdownStr}</span>
               </button>
             )}
           </div>
