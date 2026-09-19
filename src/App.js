@@ -730,7 +730,7 @@ export default function App() {
     playSentSound();
   };
 
-  // --- UNIVERSAL WHITE DOT SYNC HANDLER FOR ALL 4 ENGINES (INCLUDING YOUTUBE) ---
+  // --- UNIVERSAL WHITE DOT SYNC HANDLER FOR ALL 4 OPTIONS ---
   const handleUniversalSyncRealign = () => {
     if (socketRef.current) {
       if (codexEngine === 'youtube' && activeMovieYTId) {
@@ -2731,7 +2731,9 @@ export default function App() {
                               <div 
                                 key={idx} 
                                 id={`stealth-msg-${m._id}`}
-                                className={`group relative flex items-start justify-between px-2 py-1 rounded-lg transition-all gap-2 ${
+                                onDoubleClick={() => handleStartReply(m)}
+                                title="Double click to reply"
+                                className={`group relative flex items-start justify-between px-2 py-1 rounded-lg transition-all gap-2 cursor-pointer ${
                                   isHighlighted ? 'bg-emerald-950/70 border border-emerald-500/50' : 'hover:bg-[#202020]'
                                 }`}
                               >
