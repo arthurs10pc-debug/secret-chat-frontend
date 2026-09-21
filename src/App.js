@@ -8,7 +8,7 @@ import {
   Search, PanelLeft, ArrowUp, Plus, RefreshCw, Sparkles, Share,
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
-  Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2 , Loader2, VolumeX,
+  Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
   Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck
 } from 'lucide-react';
 
@@ -430,7 +430,7 @@ export default function App() {
       return;
     }
 
-    if (viewMode === 'stealth') {
+    if (viewMode === 'stealth' || isWhatsAppView) {
       let finalMessageText = val;
       let replyRefId = null;
 
@@ -528,7 +528,7 @@ export default function App() {
       const base64Data = event.target.result;
       const encrypted = encryptText(base64Data);
 
-      if (socketRef.current && viewMode === 'stealth') {
+      if (socketRef.current) {
         socketRef.current.emit('send_stealth_msg', {
           room: GLOBAL_ROOM,
           role,
@@ -2273,7 +2273,18 @@ export default function App() {
             ) : (
               displayedStealthMessages.map((m, idx) => {
                 const isMine = m.senderRole === role;
-                const cleanBody = m.isMedia ? "[Photo Asset]" : cleanOriginalText(m.text);
+                const hasReplyTag = m.text && m.text.startsWith('[⤴');
+                let replySnippet = "";
+                let cleanBody = m.text;
+
+                if (hasReplyTag) {
+                  const closingIndex = m.text.indexOf(']');
+                  if (closingIndex !== -1) {
+                    replySnippet = m.text.substring(1, closingIndex);
+                    cleanBody = m.text.substring(closingIndex + 1).trim();
+                  }
+                }
+
                 return (
                   <div key={idx} className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'}`}>
                     <div 
@@ -2281,7 +2292,24 @@ export default function App() {
                       title="Double click to reply"
                       className={`max-w-[78%] rounded-2xl px-3.5 py-2 shadow text-xs relative cursor-pointer ${isMine ? 'bg-[#005c4b] text-white rounded-tr-none' : 'bg-[#202c33] text-gray-100 rounded-tl-none border border-[#2a3942]'}`}
                     >
-                      <p className="break-words leading-relaxed">{cleanBody}</p>
+                      {hasReplyTag && (
+                        <div className="bg-black/20 border-l-2 border-emerald-400 pl-2 py-0.5 mb-1 text-[10px] text-emerald-300 italic truncate rounded">
+                          {replySnippet}
+                        </div>
+                      )}
+
+                      {m.isMedia ? (
+                        <button 
+                          type="button"
+                          onClick={() => handleOpenViewOnce(m)}
+                          className="inline-flex items-center gap-1.5 py-1 text-amber-300 font-mono text-xs underline cursor-pointer"
+                        >
+                          <Eye size={13} /> [View Once Photo Asset]
+                        </button>
+                      ) : (
+                        <p className="break-words leading-relaxed">{cleanBody}</p>
+                      )}
+
                       <div className="flex items-center justify-end gap-1 mt-1 text-[9px] text-gray-300 font-mono">
                         <span>{m.timeFormatted}</span>
                         {isMine && <CheckCheck size={12} className="text-sky-400" />}
@@ -2294,7 +2322,22 @@ export default function App() {
             <div ref={messageEndRef} />
           </div>
 
+          {replyTarget && (
+            <div className="bg-[#1f2c34] border-t border-[#2a3942] px-3.5 py-2 flex items-center justify-between text-xs text-emerald-400">
+              <span className="truncate italic">Replying to: "{replyTarget.text}"</span>
+              <button onClick={() => setReplyTarget(null)} className="text-gray-400 hover:text-white cursor-pointer"><X size={14} /></button>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="h-16 bg-[#202c33] px-3 flex items-center gap-2 shrink-0 border-t border-[#2a3942]">
+            <button 
+              type="button" 
+              onClick={() => fileInputRef.current && fileInputRef.current.click()}
+              className="text-gray-400 hover:text-white cursor-pointer"
+              title="Attach Photo"
+            >
+              <Plus size={22} />
+            </button>
             <Smile size={22} className="text-gray-400 cursor-pointer" />
             <input 
               type="text" 
@@ -3515,12 +3558,12 @@ export default function App() {
                   <button 
                     type="button" 
                     onClick={() => {
-                      if (viewMode === 'stealth' && fileInputRef.current) {
+                      if (fileInputRef.current) {
                         fileInputRef.current.click();
                       }
                     }}
                     className="text-[#9b9b9b] hover:text-white p-1 rounded-full cursor-pointer shrink-0"
-                    title={viewMode === 'stealth' ? "Send Photo" : "Options"}
+                    title="Send Photo"
                   >
                     <Plus size={20} />
                   </button>
