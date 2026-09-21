@@ -9,7 +9,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle
+  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -104,6 +104,7 @@ export default function App() {
   });
 
   const [viewMode, setViewMode] = useState('real_gpt');
+  const [isWhatsAppView, setIsWhatsAppView] = useState(false);
 
   // Plugins & Arcade States
   const [showArcadePlugins, setShowArcadePlugins] = useState(false);
@@ -2019,222 +2020,291 @@ export default function App() {
         />
       )}
 
-      {/* COMPACT SIDEBAR MATCHING USER SCREENSHOT */}
-      <aside 
-        className={`
-          fixed md:static inset-y-0 left-0 z-40
-          w-64 md:w-60 max-w-[85vw]
-          transition-transform md:transition-[width] duration-250 ease-in-out
-          bg-[#000000] flex flex-col border-r border-[#171717] overflow-hidden select-none shrink-0
-          ${sidebarOpen ? 'translate-x-0 md:w-60' : '-translate-x-full md:translate-x-0 md:w-0'}
-        `}
-      >
-        <div className="h-14 flex items-center justify-between px-3.5 pt-1.5 shrink-0">
-          <span className="font-semibold text-base tracking-tight text-white flex items-center gap-1.5">
-            ChatGPT
-          </span>
-          <div className="flex items-center gap-2.5 text-[#9b9b9b]">
-            <Search size={18} className="cursor-pointer hover:text-white" />
-            <button 
-              onClick={() => setSidebarOpen(false)} 
-              className="p-1.5 rounded-lg hover:bg-[#1a1a1a] text-[#9b9b9b] hover:text-white cursor-pointer"
-            >
-              <PanelLeft size={18} />
-            </button>
-          </div>
-        </div>
-
-        <div className="px-2.5 py-1 space-y-1 shrink-0 text-xs md:text-[13px]">
-          <div 
-            onClick={handleNewChat}
-            className="flex items-center justify-between py-2 px-3 rounded-xl text-[#ececf1] hover:bg-[#1a1a1a] transition-colors cursor-pointer font-medium"
-          >
-            <span className="flex items-center gap-2.5">
-              <SquarePen size={16} /> New chat
+      {/* COMPACT SIDEBAR / WHATSAPP VIEW */}
+      {!isWhatsAppView ? (
+        <aside 
+          className={`
+            fixed md:static inset-y-0 left-0 z-40
+            w-64 md:w-60 max-w-[85vw]
+            transition-transform md:transition-[width] duration-250 ease-in-out
+            bg-[#000000] flex flex-col border-r border-[#171717] overflow-hidden select-none shrink-0
+            ${sidebarOpen ? 'translate-x-0 md:w-60' : '-translate-x-full md:translate-x-0 md:w-0'}
+          `}
+        >
+          <div className="h-14 flex items-center justify-between px-3.5 pt-1.5 shrink-0">
+            <span className="font-semibold text-base tracking-tight text-white flex items-center gap-1.5">
+              ChatGPT
             </span>
-            {role === 'parent' && <ShieldCheck size={14} className="text-emerald-400" />}
-          </div>
-
-          <div 
-            onClick={() => { setViewMode('images_archive'); closeSidebarOnMobile(); }}
-            className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${viewMode === 'images_archive' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
-          >
-            <span className="flex items-center gap-2.5">
-              <ImageIcon size={16} className={viewMode === 'images_archive' ? 'text-blue-400' : 'text-[#9b9b9b]'} /> Images
-            </span>
-            <span className="text-[11px] text-gray-400 font-mono">{archivedImages.length}</span>
-          </div>
-
-          <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-2 px-3 rounded-xl cursor-pointer transition-colors">
-            <BookOpen size={16} className="text-[#9b9b9b]" /> Library
-          </div>
-
-          <div 
-            onClick={() => { setViewMode('scheduled'); closeSidebarOnMobile(); }}
-            className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${viewMode === 'scheduled' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
-          >
-            <span className="flex items-center gap-2.5">
-              <Clock size={16} className={viewMode === 'scheduled' ? 'text-amber-400' : 'text-[#9b9b9b]'} /> Scheduled
-            </span>
-            {syncStatus === 'connected' ? (
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" title="Joint Synced" />
-            ) : (
-              syncStatus === 'incoming_request' && <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-bounce" />
-            )}
-          </div>
-
-          {/* PLUGINS MENU ITEM */}
-          <div 
-            onClick={() => {
-              if (role === 'parent' || showArcadePlugins) {
-                setShowArcadePlugins(!showArcadePlugins);
-              }
-            }}
-            className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${
-              incomingGameRequest ? 'bg-amber-500/20 border border-amber-500/50 animate-pulse' : (showArcadePlugins ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]')
-            }`}
-          >
-            <span className="flex items-center gap-2.5">
-              <ToyBrick size={16} className={incomingGameRequest ? 'text-amber-400 animate-spin' : (showArcadePlugins ? 'text-emerald-400' : 'text-[#9b9b9b]')} /> 
-              <span>Plugins</span>
-            </span>
-            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
-              incomingGameRequest ? 'bg-amber-500 text-black animate-bounce' : (showArcadePlugins ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-400')
-            }`}>
-              {incomingGameRequest ? 'NEW REQ' : (showArcadePlugins ? 'ACTIVE' : 'LOCKED')}
-            </span>
-          </div>
-
-          {/* ADMIN (H) CONTROLS INSIDE PLUGINS MENU */}
-          {showArcadePlugins && role === 'parent' && (
-            <div className="pl-2 pr-1.5 py-2 space-y-2 bg-[#0c0c0c] rounded-xl border border-[#222] my-1">
-              <div className="flex items-center justify-between text-[11px] font-bold text-amber-400">
-                <span className="flex items-center gap-1"><Gamepad2 size={13} /> Arcade Master (H)</span>
-              </div>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  onClick={handleAdminSendRequest}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold py-1.5 rounded-lg cursor-pointer transition-all shadow"
-                >
-                  Send Request
-                </button>
-                <button
-                  onClick={handleAdminDisconnectArcade}
-                  className="bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 text-[10px] font-bold py-1.5 rounded-lg cursor-pointer transition-all"
-                >
-                  Disconnect
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* USER (A) ACCEPT HANDSHAKE BANNER INSIDE PLUGINS MENU */}
-          {incomingGameRequest && role !== 'parent' && (
-            <div className="bg-amber-950/60 border border-amber-500/50 p-2.5 rounded-xl my-1 space-y-2 text-left animate-in fade-in duration-200">
-              <p className="text-[11px] text-amber-300 font-bold flex items-center gap-1">
-                <Radio size={13} className="animate-pulse" /> Admin sent arcade request!
-              </p>
-              <button
-                onClick={handleUserAcceptRequest}
-                className="w-full bg-amber-500 hover:bg-amber-400 text-black text-[11px] font-black py-2 rounded-lg cursor-pointer flex items-center justify-center gap-1 shadow-lg active:scale-95 transition-all"
+            <div className="flex items-center gap-2.5 text-[#9b9b9b]">
+              <Search size={18} className="cursor-pointer hover:text-white" />
+              <button 
+                onClick={() => setSidebarOpen(false)} 
+                className="p-1.5 rounded-lg hover:bg-[#1a1a1a] text-[#9b9b9b] hover:text-white cursor-pointer"
               >
-                <Check size={13} /> Accept & Unlock
+                <PanelLeft size={18} />
+              </button>
+            </div>
+          </div>
+
+          <div className="px-2.5 py-1 space-y-1 shrink-0 text-xs md:text-[13px]">
+            <div 
+              onClick={handleNewChat}
+              className="flex items-center justify-between py-2 px-3 rounded-xl text-[#ececf1] hover:bg-[#1a1a1a] transition-colors cursor-pointer font-medium"
+            >
+              <span className="flex items-center gap-2.5">
+                <SquarePen size={16} /> New chat
+              </span>
+              {role === 'parent' && <ShieldCheck size={14} className="text-emerald-400" />}
+            </div>
+
+            <div 
+              onClick={() => { setViewMode('images_archive'); closeSidebarOnMobile(); }}
+              className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${viewMode === 'images_archive' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
+            >
+              <span className="flex items-center gap-2.5">
+                <ImageIcon size={16} className={viewMode === 'images_archive' ? 'text-blue-400' : 'text-[#9b9b9b]'} /> Images
+              </span>
+              <span className="text-[11px] text-gray-400 font-mono">{archivedImages.length}</span>
+            </div>
+
+            <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-2 px-3 rounded-xl cursor-pointer transition-colors">
+              <BookOpen size={16} className="text-[#9b9b9b]" /> Library
+            </div>
+
+            <div 
+              onClick={() => { setViewMode('scheduled'); closeSidebarOnMobile(); }}
+              className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${viewMode === 'scheduled' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
+            >
+              <span className="flex items-center gap-2.5">
+                <Clock size={16} className={viewMode === 'scheduled' ? 'text-amber-400' : 'text-[#9b9b9b]'} /> Scheduled
+              </span>
+              {syncStatus === 'connected' ? (
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" title="Joint Synced" />
+              ) : (
+                syncStatus === 'incoming_request' && <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-bounce" />
+              )}
+            </div>
+
+            {/* PLUGINS MENU ITEM */}
+            <div 
+              onClick={() => {
+                if (role === 'parent' || showArcadePlugins) {
+                  setShowArcadePlugins(!showArcadePlugins);
+                }
+              }}
+              className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${
+                incomingGameRequest ? 'bg-amber-500/20 border border-amber-500/50 animate-pulse' : (showArcadePlugins ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]')
+              }`}
+            >
+              <span className="flex items-center gap-2.5">
+                <ToyBrick size={16} className={incomingGameRequest ? 'text-amber-400 animate-spin' : (showArcadePlugins ? 'text-emerald-400' : 'text-[#9b9b9b]')} /> 
+                <span>Plugins</span>
+              </span>
+              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                incomingGameRequest ? 'bg-amber-500 text-black animate-bounce' : (showArcadePlugins ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-400')
+              }`}>
+                {incomingGameRequest ? 'NEW REQ' : (showArcadePlugins ? 'ACTIVE' : 'LOCKED')}
+              </span>
+            </div>
+
+            {/* ADMIN (H) CONTROLS INSIDE PLUGINS MENU */}
+            {showArcadePlugins && role === 'parent' && (
+              <div className="pl-2 pr-1.5 py-2 space-y-2 bg-[#0c0c0c] rounded-xl border border-[#222] my-1">
+                <div className="flex items-center justify-between text-[11px] font-bold text-amber-400">
+                  <span className="flex items-center gap-1"><Gamepad2 size={13} /> Arcade Master (H)</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    onClick={handleAdminSendRequest}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold py-1.5 rounded-lg cursor-pointer transition-all shadow"
+                  >
+                    Send Request
+                  </button>
+                  <button
+                    onClick={handleAdminDisconnectArcade}
+                    className="bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 text-[10px] font-bold py-1.5 rounded-lg cursor-pointer transition-all"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* USER (A) ACCEPT HANDSHAKE BANNER INSIDE PLUGINS MENU */}
+            {incomingGameRequest && role !== 'parent' && (
+              <div className="bg-amber-950/60 border border-amber-500/50 p-2.5 rounded-xl my-1 space-y-2 text-left animate-in fade-in duration-200">
+                <p className="text-[11px] text-amber-300 font-bold flex items-center gap-1">
+                  <Radio size={13} className="animate-pulse" /> Admin sent arcade request!
+                </p>
+                <button
+                  onClick={handleUserAcceptRequest}
+                  className="w-full bg-amber-500 hover:bg-amber-400 text-black text-[11px] font-black py-2 rounded-lg cursor-pointer flex items-center justify-center gap-1 shadow-lg active:scale-95 transition-all"
+                >
+                  <Check size={13} /> Accept & Unlock
+                </button>
+              </div>
+            )}
+
+            {/* 8 GAMES LIST INSIDE PLUGINS MENU */}
+            {showArcadePlugins && (role === 'parent' || !incomingGameRequest) && (
+              <div className="pl-1.5 pr-1 py-1.5 space-y-1 bg-[#0c0c0c] rounded-xl border border-emerald-500/30 my-1">
+                <div className="text-[10px] font-bold text-emerald-400 px-2 py-0.5">ARCADE GAMES (8 ACTIVE)</div>
+                <div className="max-h-48 overflow-y-auto space-y-1 scrollbar-none pr-1">
+                  {ARCADE_GAMES.map((game) => (
+                    <button
+                      key={game.id}
+                      onClick={() => handleLaunchGame(game)}
+                      className="w-full text-left bg-[#141414] hover:bg-[#1f1f1f] border border-[#262626] p-2 rounded-lg transition-all cursor-pointer flex items-center justify-between group"
+                    >
+                      <span className="text-[11px] font-bold text-gray-200 group-hover:text-white truncate">{game.name}</span>
+                      <Play size={10} className="text-gray-400 group-hover:text-emerald-400 shrink-0 ml-1" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-2 px-3 rounded-xl cursor-pointer transition-colors">
+              <FolderGit2 size={16} className="text-[#9b9b9b]" /> Projects
+            </div>
+
+            <div 
+              onClick={() => { setViewMode('codex'); closeSidebarOnMobile(); }}
+              className={`flex items-center gap-2.5 py-2 px-3 rounded-xl cursor-pointer transition-colors ${viewMode === 'codex' ? 'bg-[#212121] text-white font-medium' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
+            >
+              <TerminalSquare size={16} className={viewMode === 'codex' ? 'text-emerald-400' : 'text-[#9b9b9b]'} />
+              <span>Codex</span>
+            </div>
+
+            <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-2 px-3 rounded-xl cursor-pointer transition-colors">
+              <MoreHorizontal size={16} className="text-[#9b9b9b]" /> More
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5 border-t border-[#1a1a1a] mt-1 scrollbar-none text-xs">
+            <div className="text-[11px] text-[#737373] px-3 py-1.5 font-semibold uppercase tracking-wider">Recents</div>
+            {roomList.map((roomName, idx) => (
+              <div 
+                key={idx}
+                onClick={() => {
+                  setCurrentRoom(roomName);
+                  setViewMode('real_gpt');
+                  setReplyTarget(null);
+                  closeSidebarOnMobile();
+                }}
+                className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors group ${currentRoom === roomName && viewMode === 'real_gpt' ? 'bg-[#212121] text-white font-medium' : 'text-[#b4b4b4] hover:bg-[#171717] hover:text-white'}`}
+              >
+                <span className="truncate max-w-[190px]">{roomName}</span>
+              </div>
+            ))}
+          </div>
+
+          {role === 'parent' && (
+            <div className="p-2 border-t border-[#1e1e1e] flex items-center gap-1.5 shrink-0 bg-[#0a0a0a]">
+              <button 
+                onClick={() => { setShowPendingModal(true); closeSidebarOnMobile(); }}
+                className="flex-1 flex items-center justify-between text-xs text-amber-400 hover:bg-[#1a1a1a] p-2 rounded-xl cursor-pointer font-medium"
+              >
+                <span className="flex items-center gap-1.5"><AlertCircle size={15} /> Answer Pending</span>
+                <span className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-bold ${pendingMessages.length > 0 ? 'bg-amber-500 text-black animate-pulse' : 'bg-amber-500/20 text-amber-300'}`}>
+                  {pendingMessages.length}
+                </span>
+              </button>
+              <button 
+                onClick={downloadPendingPDF}
+                title="Download Answer Pending Report"
+                className="p-2 text-gray-400 hover:text-amber-400 hover:bg-[#1a1a1a] rounded-xl cursor-pointer"
+              >
+                <Download size={15} />
               </button>
             </div>
           )}
 
-          {/* 8 GAMES LIST INSIDE PLUGINS MENU */}
-          {showArcadePlugins && (role === 'parent' || !incomingGameRequest) && (
-            <div className="pl-1.5 pr-1 py-1.5 space-y-1 bg-[#0c0c0c] rounded-xl border border-emerald-500/30 my-1">
-              <div className="text-[10px] font-bold text-emerald-400 px-2 py-0.5">ARCADE GAMES (8 ACTIVE)</div>
-              <div className="max-h-48 overflow-y-auto space-y-1 scrollbar-none pr-1">
-                {ARCADE_GAMES.map((game) => (
-                  <button
-                    key={game.id}
-                    onClick={() => handleLaunchGame(game)}
-                    className="w-full text-left bg-[#141414] hover:bg-[#1f1f1f] border border-[#262626] p-2 rounded-lg transition-all cursor-pointer flex items-center justify-between group"
-                  >
-                    <span className="text-[11px] font-bold text-gray-200 group-hover:text-white truncate">{game.name}</span>
-                    <Play size={10} className="text-gray-400 group-hover:text-emerald-400 shrink-0 ml-1" />
-                  </button>
-                ))}
+          <div className="p-3 border-t border-[#171717] flex items-center justify-between text-xs bg-[#000000]">
+            <div className="flex items-center gap-2.5 overflow-hidden">
+              <div className="w-8 h-8 rounded-full bg-[#1e293b] border border-[#333] flex items-center justify-center text-white text-xs font-bold shrink-0">
+                {role === 'parent' ? 'H' : 'A'}
+              </div>
+              <div className="truncate">
+                <p className="text-white font-medium truncate">
+                  {role === 'parent' ? 'Admin (H)' : 'User (A)'}
+                </p>
+                <p className="text-[10px] text-gray-400">Free</p>
               </div>
             </div>
-          )}
-
-          <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-2 px-3 rounded-xl cursor-pointer transition-colors">
-            <FolderGit2 size={16} className="text-[#9b9b9b]" /> Projects
-          </div>
-
-          <div 
-            onClick={() => { setViewMode('codex'); closeSidebarOnMobile(); }}
-            className={`flex items-center gap-2.5 py-2 px-3 rounded-xl cursor-pointer transition-colors ${viewMode === 'codex' ? 'bg-[#212121] text-white font-medium' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
-          >
-            <TerminalSquare size={16} className={viewMode === 'codex' ? 'text-emerald-400' : 'text-[#9b9b9b]'} />
-            <span>Codex</span>
-          </div>
-
-          <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-2 px-3 rounded-xl cursor-pointer transition-colors">
-            <MoreHorizontal size={16} className="text-[#9b9b9b]" /> More
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5 border-t border-[#1a1a1a] mt-1 scrollbar-none text-xs">
-          <div className="text-[11px] text-[#737373] px-3 py-1.5 font-semibold uppercase tracking-wider">Recents</div>
-          {roomList.map((roomName, idx) => (
-            <div 
-              key={idx}
-              onClick={() => {
-                setCurrentRoom(roomName);
-                setViewMode('real_gpt');
-                setReplyTarget(null);
-                closeSidebarOnMobile();
-              }}
-              className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors group ${currentRoom === roomName && viewMode === 'real_gpt' ? 'bg-[#212121] text-white font-medium' : 'text-[#b4b4b4] hover:bg-[#171717] hover:text-white'}`}
-            >
-              <span className="truncate max-w-[190px]">{roomName}</span>
-            </div>
-          ))}
-        </div>
-
-        {role === 'parent' && (
-          <div className="p-2 border-t border-[#1e1e1e] flex items-center gap-1.5 shrink-0 bg-[#0a0a0a]">
+            {/* UPGRADE BUTTON FOR MOBILE WHATSAPP VIEW TOGGLE */}
             <button 
-              onClick={() => { setShowPendingModal(true); closeSidebarOnMobile(); }}
-              className="flex-1 flex items-center justify-between text-xs text-amber-400 hover:bg-[#1a1a1a] p-2 rounded-xl cursor-pointer font-medium"
+              onClick={() => setIsWhatsAppView(true)}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 font-bold"
+              title="Switch to WhatsApp View"
             >
-              <span className="flex items-center gap-1.5"><AlertCircle size={15} /> Answer Pending</span>
-              <span className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-bold ${pendingMessages.length > 0 ? 'bg-amber-500 text-black animate-pulse' : 'bg-amber-500/20 text-amber-300'}`}>
-                {pendingMessages.length}
-              </span>
-            </button>
-            <button 
-              onClick={downloadPendingPDF}
-              title="Download Answer Pending Report"
-              className="p-2 text-gray-400 hover:text-amber-400 hover:bg-[#1a1a1a] rounded-xl cursor-pointer"
-            >
-              <Download size={15} />
+              Upgrade
             </button>
           </div>
-        )}
-
-        <div className="p-3 border-t border-[#171717] flex items-center justify-between text-xs bg-[#000000]">
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <div className="w-8 h-8 rounded-full bg-[#1e293b] border border-[#333] flex items-center justify-center text-white text-xs font-bold shrink-0">
-              {role === 'parent' ? 'H' : 'A'}
+        </aside>
+      ) : (
+        /* WHATSAPP MOBILE CHAT VIEW (STRICTLY COMPACT MOBILE VIEW) */
+        <aside className="fixed md:static inset-0 z-50 w-full md:w-96 bg-[#0b141a] flex flex-col border-r border-[#222327] overflow-hidden select-none shrink-0 font-sans">
+          <div className="h-16 bg-[#202c33] flex items-center justify-between px-4 shrink-0 text-white shadow">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-[#111b21] flex items-center justify-center text-lg font-bold border border-emerald-500/40">
+                {role === 'parent' ? 'A' : 'H'}
+              </div>
+              <div>
+                <h3 className="text-sm font-bold tracking-tight">{role === 'parent' ? 'User (A)' : 'Admin (H)'}</h3>
+                <p className="text-[10px] text-emerald-400 font-mono">online</p>
+              </div>
             </div>
-            <div className="truncate">
-              <p className="text-white font-medium truncate">
-                {role === 'parent' ? 'Admin (H)' : 'User (A)'}
-              </p>
-              <p className="text-[10px] text-gray-400">Free</p>
+            <div className="flex items-center gap-4 text-gray-300">
+              <VideoIcon size={18} className="cursor-pointer" />
+              <Phone size={18} className="cursor-pointer" />
+              <button 
+                onClick={() => setIsWhatsAppView(false)}
+                className="bg-[#111b21] hover:bg-[#2a3942] text-xs px-3 py-1.5 rounded-lg text-amber-300 font-bold cursor-pointer border border-amber-500/30"
+              >
+                Exit WP
+              </button>
             </div>
           </div>
-          <button className="bg-[#1f1f1f] hover:bg-[#2c2c2c] text-white text-xs px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0">
-            Upgrade
-          </button>
-        </div>
-      </aside>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#0b141a] bg-[radial-gradient(#1f2c34_1px,transparent_1px)] bg-[size:16px_16px]">
+            {displayedStealthMessages.length === 0 ? (
+              <div className="text-center text-xs text-gray-500 py-12">No WhatsApp messages yet. Say hello!</div>
+            ) : (
+              displayedStealthMessages.map((m, idx) => {
+                const isMine = m.senderRole === role;
+                const cleanBody = m.isMedia ? "[Photo Asset]" : cleanOriginalText(m.text);
+                return (
+                  <div key={idx} className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[78%] rounded-2xl px-3.5 py-2 shadow text-xs relative ${isMine ? 'bg-[#005c4b] text-white rounded-tr-none' : 'bg-[#202c33] text-gray-100 rounded-tl-none border border-[#2a3942]'}`}>
+                      <p className="break-words leading-relaxed">{cleanBody}</p>
+                      <div className="flex items-center justify-end gap-1 mt-1 text-[9px] text-gray-300 font-mono">
+                        <span>{m.timeFormatted}</span>
+                        {isMine && <CheckCheck size={12} className="text-sky-400" />}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            <div ref={messageEndRef} />
+          </div>
+
+          <form onSubmit={handleSubmit} className="h-16 bg-[#202c33] px-3 flex items-center gap-2 shrink-0 border-t border-[#2a3942]">
+            <Smile size={22} className="text-gray-400 cursor-pointer" />
+            <input 
+              type="text" 
+              value={input}
+              onChange={handleInputChange}
+              placeholder="Type a message..."
+              className="flex-1 bg-[#2a3942] text-white placeholder-gray-400 text-xs px-4 py-2.5 rounded-xl outline-none"
+            />
+            <button type="submit" className="w-10 h-10 rounded-full bg-[#00a884] hover:bg-[#029374] text-white flex items-center justify-center cursor-pointer shadow">
+              <Send size={16} />
+            </button>
+          </form>
+        </aside>
+      )}
 
       <main className="flex-1 flex flex-col relative bg-[#000000] overflow-hidden min-w-0">
         <header className="h-14 flex items-center justify-between px-4 shrink-0 z-10 border-b border-[#141414]">
