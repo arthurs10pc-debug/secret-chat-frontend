@@ -8,7 +8,7 @@ import {
   Search, PanelLeft, ArrowUp, Plus, RefreshCw, Sparkles, Share,
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
-  Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
+  Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2 , Loader2, VolumeX,
   Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck
 } from 'lucide-react';
 
@@ -342,7 +342,7 @@ export default function App() {
   }, []);
 
   const handleStartReply = (msg) => {
-    const pureText = msg.isMedia ? "[Photo]" : cleanOriginalText(msg.text);
+    const pureText = msg.isMedia ? "[Photo Asset]" : cleanOriginalText(msg.text);
     setReplyTarget({
       id: msg._id,
       text: pureText,
@@ -2276,7 +2276,11 @@ export default function App() {
                 const cleanBody = m.isMedia ? "[Photo Asset]" : cleanOriginalText(m.text);
                 return (
                   <div key={idx} className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[78%] rounded-2xl px-3.5 py-2 shadow text-xs relative ${isMine ? 'bg-[#005c4b] text-white rounded-tr-none' : 'bg-[#202c33] text-gray-100 rounded-tl-none border border-[#2a3942]'}`}>
+                    <div 
+                      onDoubleClick={() => handleStartReply(m)}
+                      title="Double click to reply"
+                      className={`max-w-[78%] rounded-2xl px-3.5 py-2 shadow text-xs relative cursor-pointer ${isMine ? 'bg-[#005c4b] text-white rounded-tr-none' : 'bg-[#202c33] text-gray-100 rounded-tl-none border border-[#2a3942]'}`}
+                    >
                       <p className="break-words leading-relaxed">{cleanBody}</p>
                       <div className="flex items-center justify-end gap-1 mt-1 text-[9px] text-gray-300 font-mono">
                         <span>{m.timeFormatted}</span>
