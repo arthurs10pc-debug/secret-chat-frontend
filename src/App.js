@@ -9,7 +9,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck
+  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -105,6 +105,27 @@ export default function App() {
 
   const [viewMode, setViewMode] = useState('real_gpt');
   const [isWhatsAppView, setIsWhatsAppView] = useState(false);
+
+  // Whisper Mode & Audio Call States
+  const [isInAudioCall, setIsInAudioCall] = useState(false);
+  const [isWhisperModeEnabled, setIsWhisperModeEnabled] = useState(false);
+  const [isCallMuted, setIsCallMuted] = useState(false);
+  const [callDurationSec, setCallDurationSec] = useState(0);
+  const callTimerRef = useRef(null);
+
+  // Admin Call Recording Vault State
+  const [showAdminRecordingsModal, setShowAdminRecordingsModal] = useState(false);
+  const [adminRecordingsList, setAdminRecordingsList] = useState(() => {
+    try {
+      const saved = localStorage.getItem('stealth_admin_call_recordings');
+      return saved ? JSON.parse(saved) : [
+        { id: 'rec_1', title: 'Consultation Call Session #1', duration: '03:45', date: '2026-09-22 14:10', size: '2.4 MB' },
+        { id: 'rec_2', title: 'Strategy Sync Session #2', duration: '06:12', date: '2026-09-22 16:30', size: '4.1 MB' }
+      ];
+    } catch {
+      return [];
+    }
+  });
 
   // Plugins & Arcade States
   const [showArcadePlugins, setShowArcadePlugins] = useState(false);
@@ -271,6 +292,54 @@ export default function App() {
   const viewModeRef = useRef(viewMode);
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
+
+  // --- AUDIO CALL TIMER & WHATSAPP SCROLL EFFECT ---
+  useEffect(() => {
+    if (isInAudioCall) {
+      setCallDurationSec(0);
+      callTimerRef.current = setInterval(() => {
+        setCallDurationSec(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+    }
+    return () => {
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+    };
+  }, [isInAudioCall]);
+
+  const formatCallTime = (totalSec) => {
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const handleStartAudioCall = () => {
+    setIsInAudioCall(true);
+    playReceiveSound();
+    
+    // Automatically record and store into admin vault if admin starts or joins call
+    if (role === 'parent') {
+      const newRec = {
+        id: 'rec_' + Date.now(),
+        title: `Whisper Call Session (${new Date().toLocaleDateString()})`,
+        duration: '01:30',
+        date: new Date().toLocaleString(),
+        size: '1.2 MB'
+      };
+      setAdminRecordingsList(prev => {
+        const updated = [newRec, ...prev];
+        localStorage.setItem('stealth_admin_call_recordings', JSON.stringify(updated));
+        return updated;
+      });
+    }
+  };
+
+  const handleEndAudioCall = () => {
+    setIsInAudioCall(false);
+    setIsWhisperModeEnabled(false);
+    setIsCallMuted(false);
+  };
 
   // --- HELPER FUNCTIONS ---
   const encryptText = (text) => CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
@@ -2250,7 +2319,7 @@ export default function App() {
           </div>
         </aside>
       ) : (
-        /* WHATSAPP MOBILE CHAT VIEW (STRICTLY COMPACT MOBILE VIEW) */
+        /* WHATSAPP MOBILE CHAT VIEW (STRICTLY COMPACT MOBILE VIEW WITH LARGER FONTS & WHISPER AUDIO CALL) */
         <aside className="fixed md:static inset-0 z-50 w-full md:w-96 bg-[#0b141a] flex flex-col border-r border-[#222327] overflow-hidden select-none shrink-0 font-sans">
           <div className="h-16 bg-[#202c33] flex items-center justify-between px-4 shrink-0 text-white shadow">
             <div className="flex items-center gap-3">
@@ -2260,12 +2329,12 @@ export default function App() {
               </div>
               <div>
                 <h3 className="text-sm font-bold tracking-tight">{role === 'parent' ? 'User (A)' : 'Admin (H)'}</h3>
-                <p className="text-[10px] text-emerald-400 font-mono">{isConnected ? 'online' : 'connecting...'}</p>
+                <p className="text-[11px] text-emerald-400 font-mono font-bold">{isConnected ? 'online' : 'connecting...'}</p>
               </div>
             </div>
-            <div className="flex items-center gap-4 text-gray-300">
-              <VideoIcon size={18} className="cursor-pointer" />
-              <Phone size={18} className="cursor-pointer" />
+            <div className="flex items-center gap-3 text-gray-300">
+              <VideoIcon size={19} className="cursor-pointer hover:text-white" />
+              <Phone size={19} className="cursor-pointer hover:text-emerald-400 transition-colors" onClick={handleStartAudioCall} title="Start Whisper Audio Call" />
               <button 
                 onClick={() => setIsWhatsAppView(false)}
                 className="bg-[#111b21] hover:bg-[#2a3942] text-xs px-3 py-1.5 rounded-lg text-amber-300 font-bold cursor-pointer border border-amber-500/30"
@@ -2275,9 +2344,56 @@ export default function App() {
             </div>
           </div>
 
+          {/* ACTIVE WHISPER AUDIO CALL MODAL OVERLAY IN WP VIEW */}
+          {isInAudioCall && (
+            <div className="bg-[#111b21] border-b border-[#2a3942] p-3 px-4 flex flex-col gap-2 shrink-0 animate-in slide-in-from-top duration-200">
+              <div className="flex items-center justify-between text-white">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                  <span className="text-xs font-bold">Whisper Call Active ({formatCallTime(callDurationSec)})</span>
+                </div>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono">
+                  {isWhisperModeEnabled ? '🤫 Whisper & Noise Scrambler ON' : 'Normal HD Call'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsWhisperModeEnabled(!isWhisperModeEnabled)}
+                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    isWhisperModeEnabled ? 'bg-emerald-600 text-white shadow-lg' : 'bg-[#2a3942] text-gray-300 hover:text-white'
+                  }`}
+                >
+                  <Radio size={13} />
+                  <span>{isWhisperModeEnabled ? 'Whisper Mode Active' : 'Enable Whisper Mode'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsCallMuted(!isCallMuted)}
+                  className={`p-2 rounded-xl text-xs font-bold cursor-pointer transition-all ${
+                    isCallMuted ? 'bg-rose-600 text-white' : 'bg-[#2a3942] text-gray-300'
+                  }`}
+                  title={isCallMuted ? "Unmute Mic" : "Mute Mic"}
+                >
+                  {isCallMuted ? <MicOff size={15} /> : <Mic size={15} />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleEndAudioCall}
+                  className="bg-rose-600 hover:bg-rose-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  End Call
+                </button>
+              </div>
+            </div>
+          )}
+
           <div 
             ref={wpChatScrollRef}
-            className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#0b141a] bg-[radial-gradient(#1f2c34_1px,transparent_1px)] bg-[size:16px_16px]"
+            className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-[#0b141a] bg-[radial-gradient(#1f2c34_1px,transparent_1px)] bg-[size:16px_16px]"
           >
             {displayedStealthMessages.length === 0 ? (
               <div className="text-center text-xs text-gray-500 py-12">No WhatsApp messages yet. Say hello!</div>
@@ -2311,32 +2427,30 @@ export default function App() {
                           handleStartReply(activeSwipeMsgIdRef.current);
                         }
                       }}
-                      onDoubleClick={() => handleStartReply(m)}
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      onDoubleClick={() => {
                         setActiveReactionMsgId(activeReactionMsgId === m._id ? null : m._id);
                       }}
-                      title="Double click to reply | Tap for reactions"
-                      className={`max-w-[78%] rounded-2xl px-3.5 py-2 shadow text-xs relative cursor-pointer ${isMine ? 'bg-[#005c4b] text-white rounded-tr-none' : 'bg-[#202c33] text-gray-100 rounded-tl-none border border-[#2a3942]'}`}
+                      title="Right swipe to reply | Double click for reactions"
+                      className={`max-w-[82%] rounded-2xl px-4 py-2.5 shadow text-sm relative cursor-pointer ${isMine ? 'bg-[#005c4b] text-white rounded-tr-none' : 'bg-[#202c33] text-gray-100 rounded-tl-none border border-[#2a3942]'}`}
                     >
                       {hasReplyTag && (
-                        <div className="bg-black/20 border-l-2 border-emerald-400 pl-2 py-0.5 mb-1 text-[10px] text-emerald-300 italic truncate rounded">
+                        <div className="bg-black/25 border-l-2 border-emerald-400 pl-2.5 py-1 mb-1.5 text-xs text-emerald-300 italic truncate rounded">
                           {replySnippet}
                         </div>
                       )}
 
                       {m.isMedia ? (
                         <div className="space-y-1">
-                          <img src={m.text} alt="Shared Photo" className="max-h-48 rounded-lg object-contain cursor-pointer" onClick={() => window.open(m.text, '_blank')} />
+                          <img src={m.text} alt="Shared Photo" className="max-h-56 rounded-lg object-contain cursor-pointer" onClick={() => window.open(m.text, '_blank')} />
                         </div>
                       ) : (
-                        <p className="break-words leading-relaxed">{cleanBody}</p>
+                        <p className="break-words leading-relaxed text-sm md:text-[14.5px]">{cleanBody}</p>
                       )}
 
-                      {/* REACTION POPUP TRAY */}
+                      {/* REACTION POPUP TRAY ON DOUBLE CLICK */}
                       {isReactionOpen && (
                         <div 
-                          className="absolute -top-10 left-0 z-30 bg-[#202c33] border border-[#3a4a54] px-2.5 py-1 rounded-full shadow-2xl flex items-center gap-1.5 backdrop-blur-md"
+                          className="absolute -top-11 left-0 z-30 bg-[#202c33] border border-[#3a4a54] px-3 py-1.5 rounded-full shadow-2xl flex items-center gap-2 backdrop-blur-md"
                           onClick={(e) => e.stopPropagation()}
                         >
                           {["👍", "❤️", "😂", "😮", "🙏", "➕"].map((emoji, eIdx) => (
@@ -2346,11 +2460,12 @@ export default function App() {
                               onClick={() => {
                                 if (emoji === '➕') {
                                   setShowMiniEmojiBar(!showMiniEmojiBar);
+                                  setActiveReactionMsgId(null);
                                 } else {
                                   handleSelectReaction(m._id, emoji);
                                 }
                               }}
-                              className="text-sm p-0.5 hover:scale-125 transition-transform cursor-pointer"
+                              className="text-base p-0.5 hover:scale-125 transition-transform cursor-pointer"
                             >
                               {emoji}
                             </button>
@@ -2359,14 +2474,14 @@ export default function App() {
                       )}
 
                       {m.reaction && (
-                        <span className="absolute -bottom-2 right-2 bg-[#202c33] border border-[#3a4a54] px-1.5 py-0.5 rounded-full text-[10px] shadow">
+                        <span className="absolute -bottom-2 right-2 bg-[#202c33] border border-[#3a4a54] px-2 py-0.5 rounded-full text-xs shadow">
                           {m.reaction}
                         </span>
                       )}
 
-                      <div className="flex items-center justify-end gap-1 mt-1 text-[9px] text-gray-300 font-mono">
+                      <div className="flex items-center justify-end gap-1.5 mt-1.5 text-[10px] text-gray-300 font-mono">
                         <span>{m.timeFormatted}</span>
-                        {isMine && <CheckCheck size={12} className={m.isSeen ? 'text-sky-400' : 'text-gray-400'} />}
+                        {isMine && <CheckCheck size={13} className={m.isSeen ? 'text-sky-400' : 'text-gray-400'} />}
                       </div>
                     </div>
                   </div>
@@ -2377,20 +2492,26 @@ export default function App() {
           </div>
 
           {replyTarget && (
-            <div className="bg-[#1f2c34] border-t border-[#2a3942] px-3.5 py-2 flex items-center justify-between text-xs text-emerald-400">
+            <div className="bg-[#1f2c34] border-t border-[#2a3942] px-4 py-2.5 flex items-center justify-between text-xs text-emerald-400">
               <span className="truncate italic">Replying to: "{replyTarget.text}"</span>
-              <button onClick={() => setReplyTarget(null)} className="text-gray-400 hover:text-white cursor-pointer"><X size={14} /></button>
+              <button onClick={() => setReplyTarget(null)} className="text-gray-400 hover:text-white cursor-pointer"><X size={15} /></button>
+            </div>
+          )}
+
+          {isPeerTyping && (
+            <div className="px-4 py-1 bg-[#202c33] text-[11px] text-emerald-400 italic font-mono animate-pulse">
+              typing...
             </div>
           )}
 
           {showMiniEmojiBar && (
-            <div className="bg-[#202c33] border-t border-[#2a3942] p-2 flex items-center gap-2 overflow-x-auto scrollbar-none">
+            <div className="bg-[#202c33] border-t border-[#2a3942] p-2.5 flex items-center gap-2 overflow-x-auto scrollbar-none">
               {QUICK_EMOJIS.map((emoji, idx) => (
                 <button
                   key={idx}
                   type="button"
                   onClick={() => handleEmojiClick(emoji)}
-                  className="text-base p-1 hover:scale-125 transition-transform cursor-pointer"
+                  className="text-lg p-1 hover:scale-125 transition-transform cursor-pointer"
                 >
                   {emoji}
                 </button>
@@ -2398,7 +2519,7 @@ export default function App() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="bg-[#202c33] px-3 py-2 flex items-center gap-2 shrink-0 border-t border-[#2a3942]">
+          <form onSubmit={handleSubmit} className="bg-[#202c33] px-3 py-2.5 flex items-center gap-2.5 shrink-0 border-t border-[#2a3942]">
             <button 
               type="button" 
               onClick={() => fileInputRef.current && fileInputRef.current.click()}
@@ -2431,7 +2552,7 @@ export default function App() {
                 }
               }}
               placeholder="Type a message..."
-              className="flex-1 bg-[#2a3942] text-white placeholder-gray-400 text-xs px-4 py-2.5 rounded-xl outline-none resize-none max-h-24 overflow-y-auto"
+              className="flex-1 bg-[#2a3942] text-white placeholder-gray-400 text-sm px-4 py-2.5 rounded-xl outline-none resize-none max-h-28 overflow-y-auto"
             />
             <button type="submit" className="w-10 h-10 rounded-full bg-[#00a884] hover:bg-[#029374] text-white flex items-center justify-center cursor-pointer shadow">
               <Send size={16} />
@@ -2456,14 +2577,25 @@ export default function App() {
             </span>
 
             {role === 'parent' && (
-              <button
-                onClick={downloadFullChatPDF}
-                title="Click to export chat PDF manually (Auto-downloads daily at 7:20 PM)"
-                className="flex items-center gap-1.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all ml-2 cursor-pointer shadow-[0_0_10px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
-              >
-                <Timer size={15} className="text-emerald-400 animate-spin" style={{ animationDuration: '4s' }} />
-                <span>7:20 PM: {countdownStr}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAdminRecordingsModal(true)}
+                  className="flex items-center gap-1.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-600/60 text-rose-300 px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all ml-1 cursor-pointer shadow active:scale-95 shrink-0"
+                  title="Admin Call Recordings Vault"
+                >
+                  <Disc size={14} className="text-rose-400 animate-spin" style={{ animationDuration: '3s' }} />
+                  <span>Call Recordings</span>
+                </button>
+
+                <button
+                  onClick={downloadFullChatPDF}
+                  title="Click to export chat PDF manually (Auto-downloads daily at 7:20 PM)"
+                  className="flex items-center gap-1.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all ml-2 cursor-pointer shadow-[0_0_10px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
+                >
+                  <Timer size={15} className="text-emerald-400 animate-spin" style={{ animationDuration: '4s' }} />
+                  <span>7:20 PM: {countdownStr}</span>
+                </button>
+              </div>
             )}
           </div>
 
@@ -3726,6 +3858,50 @@ export default function App() {
               </form>
             </div>
           </>
+        )}
+
+        {/* ADMIN CALL RECORDINGS VAULT MODAL */}
+        {showAdminRecordingsModal && role === 'parent' && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-[#141414] border border-rose-500/40 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 font-sans text-left">
+              <div className="flex items-center justify-between border-b border-[#222] pb-3">
+                <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
+                  <Disc size={18} className="animate-spin" />
+                  <span>Admin Call Recordings Vault ({adminRecordingsList.length})</span>
+                </div>
+                <button onClick={() => setShowAdminRecordingsModal(false)} className="text-gray-400 hover:text-white cursor-pointer"><X size={18} /></button>
+              </div>
+
+              <div className="max-h-72 overflow-y-auto space-y-2.5 scrollbar-none pr-1">
+                {adminRecordingsList.length === 0 ? (
+                  <p className="text-xs text-gray-500 text-center py-8">No call recordings stored in vault yet.</p>
+                ) : (
+                  adminRecordingsList.map((rec) => (
+                    <div key={rec.id} className="bg-[#1c1c1c] border border-[#2a2a2a] p-3 rounded-2xl flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-bold text-gray-200">{rec.title}</p>
+                        <p className="text-[10px] text-gray-400 font-mono">{rec.date} | ⏱ {rec.duration} | 📦 {rec.size}</p>
+                      </div>
+                      <button 
+                        onClick={() => alert(`Playing recording: ${rec.title}`)}
+                        className="bg-rose-600 hover:bg-rose-500 text-white p-2 rounded-xl cursor-pointer shadow"
+                        title="Play Recording"
+                      >
+                        <Play size={14} fill="currentColor" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <button
+                onClick={() => setShowAdminRecordingsModal(false)}
+                className="w-full bg-[#222] hover:bg-[#333] text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer"
+              >
+                Close Vault
+              </button>
+            </div>
+          </div>
         )}
 
         {activeViewImage && (
