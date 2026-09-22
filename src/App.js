@@ -718,7 +718,6 @@ export default function App() {
     setIncomingAlert(null);
   };
 
-  // --- TOGEPI CHAT SENDER HELPER WITH WORKING SOCKET SYNC ---
   const handleSendTogepiMessage = (textToSend) => {
     if (!textToSend.trim()) return;
     const msgObj = { sender: role, text: textToSend.trim(), time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
@@ -731,7 +730,6 @@ export default function App() {
     playSentSound();
   };
 
-  // --- UNIVERSAL WHITE DOT SYNC HANDLER FOR ALL 4 OPTIONS ---
   const handleUniversalSyncRealign = () => {
     if (socketRef.current) {
       if (codexEngine === 'youtube' && activeMovieYTId) {
@@ -757,7 +755,6 @@ export default function App() {
     }
   };
 
-  // --- TOUCH-TO-SHOW TOGEPI WIDGET HANDLER ---
   useEffect(() => {
     const handleScreenTouch = () => {
       setIsTogepiVisible(true);
@@ -775,7 +772,6 @@ export default function App() {
     };
   }, [showTogepiMenu]);
 
-  // --- 7:20 PM Auto-Download Countdown Timer Effect ---
   useEffect(() => {
     const timerInterval = setInterval(() => {
       const now = new Date();
@@ -804,7 +800,6 @@ export default function App() {
     return () => clearInterval(timerInterval);
   }, [role, stealthMessages]);
 
-  // --- DOUBLE ESCAPE KEY LISTENER ---
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -1041,7 +1036,6 @@ export default function App() {
     localStorage.setItem('stealth_image_vault', JSON.stringify(archivedImages));
   }, [archivedImages]);
 
-  // --- FULLY RESTORED SOCKET.IO CONNECTION & LISTENERS ---
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
