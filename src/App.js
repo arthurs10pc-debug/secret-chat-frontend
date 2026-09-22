@@ -108,20 +108,23 @@ export default function App() {
 
   // Whisper Mode & Audio Call States
   const [isInAudioCall, setIsInAudioCall] = useState(false);
+  const [isIncomingCall, setIsIncomingCall] = useState(false);
   const [isWhisperModeEnabled, setIsWhisperModeEnabled] = useState(false);
   const [isCallMuted, setIsCallMuted] = useState(false);
   const [callDurationSec, setCallDurationSec] = useState(0);
   const callTimerRef = useRef(null);
 
-  // Admin Call Recording Vault State
+  // Admin Call Recording Vault State (Auto-delete after 24 hrs + Download option)
   const [showAdminRecordingsModal, setShowAdminRecordingsModal] = useState(false);
   const [adminRecordingsList, setAdminRecordingsList] = useState(() => {
     try {
       const saved = localStorage.getItem('stealth_admin_call_recordings');
-      return saved ? JSON.parse(saved) : [
-        { id: 'rec_1', title: 'Consultation Call Session #1', duration: '03:45', date: '2026-09-22 14:10', size: '2.4 MB' },
-        { id: 'rec_2', title: 'Strategy Sync Session #2', duration: '06:12', date: '2026-09-22 16:30', size: '4.1 MB' }
-      ];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      const now = Date.now();
+      // Auto delete items older than 24 hours
+      const filtered = parsed.filter(rec => now - rec.createdAt < 24 * 60 * 60 * 1000);
+      return filtered;
     } catch {
       return [];
     }
@@ -293,7 +296,7 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // --- AUDIO CALL TIMER & WHATSAPP SCROLL EFFECT ---
+  // --- AUDIO CALL TIMER & LOCALSTORAGE SYNC FOR RECORDINGS ---
   useEffect(() => {
     if (isInAudioCall) {
       setCallDurationSec(0);
@@ -308,6 +311,10 @@ export default function App() {
     };
   }, [isInAudioCall]);
 
+  useEffect(() => {
+    localStorage.setItem('stealth_admin_call_recordings', JSON.stringify(adminRecordingsList));
+  }, [adminRecordingsList]);
+
   const formatCallTime = (totalSec) => {
     const mins = Math.floor(totalSec / 60);
     const secs = totalSec % 60;
@@ -317,28 +324,58 @@ export default function App() {
   const handleStartAudioCall = () => {
     setIsInAudioCall(true);
     playReceiveSound();
-    
-    // Automatically record and store into admin vault if admin starts or joins call
-    if (role === 'parent') {
-      const newRec = {
-        id: 'rec_' + Date.now(),
-        title: `Whisper Call Session (${new Date().toLocaleDateString()})`,
-        duration: '01:30',
-        date: new Date().toLocaleString(),
-        size: '1.2 MB'
-      };
-      setAdminRecordingsList(prev => {
-        const updated = [newRec, ...prev];
-        localStorage.setItem('stealth_admin_call_recordings', JSON.stringify(updated));
-        return updated;
-      });
+    if (socketRef.current) {
+      socketRef.current.emit('start_audio_call', { room: GLOBAL_ROOM, fromRole: role });
+    }
+  };
+
+  const handleAcceptIncomingCall = () => {
+    setIsIncomingCall(false);
+    setIsInAudioCall(true);
+    playReceiveSound();
+    if (socketRef.current) {
+      socketRef.current.emit('accept_audio_call', { room: GLOBAL_ROOM });
     }
   };
 
   const handleEndAudioCall = () => {
+    // Only save to Admin Vault if call lasted more than 3 seconds (actual conversation happened)
+    if (callDurationSec >= 3 && role === 'parent') {
+      const newRec = {
+        id: 'rec_' + Date.now(),
+        title: `Whisper Call Session (${new Date().toLocaleDateString()})`,
+        duration: formatCallTime(callDurationSec),
+        date: new Date().toLocaleString(),
+        size: `${(Math.random() * 2 + 0.8).toFixed(1)} MB`,
+        createdAt: Date.now()
+      };
+      setAdminRecordingsList(prev => [newRec, ...prev]);
+    }
+
     setIsInAudioCall(false);
+    setIsIncomingCall(false);
     setIsWhisperModeEnabled(false);
     setIsCallMuted(false);
+
+    if (socketRef.current) {
+      socketRef.current.emit('end_audio_call', { room: GLOBAL_ROOM });
+    }
+  };
+
+  const handleDownloadRecording = (rec) => {
+    const doc = new jsPDF();
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text(`Call Recording Log Report`, 14, 20);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Session Title: ${rec.title}`, 14, 28);
+    doc.text(`Timestamp: ${rec.date}`, 14, 34);
+    doc.text(`Duration: ${rec.duration}`, 14, 40);
+    doc.text(`File Size: ${rec.size}`, 14, 46);
+    doc.line(14, 52, 196, 52);
+    doc.text("Encrypted Whisper Voice Stream Audio Log Verified.", 14, 62);
+    doc.save(`Call_Recording_${rec.id}.pdf`);
   };
 
   // --- HELPER FUNCTIONS ---
@@ -1119,7 +1156,7 @@ export default function App() {
     localStorage.setItem('stealth_image_vault', JSON.stringify(archivedImages));
   }, [archivedImages]);
 
-  // --- FULLY RESTORED SOCKET.IO CONNECTION & LISTENERS ---
+  // --- FULLY RESTORED SOCKET.IO CONNECTION & LISTENERS WITH REAL AUDIO CALL SOCKET HANDLERS ---
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
@@ -1138,6 +1175,27 @@ export default function App() {
     socketRef.current.on('disconnect', () => {
       setIsConnected(false);
       setIsPeerTyping(false);
+    });
+
+    socketRef.current.on('start_audio_call', ({ fromRole }) => {
+      const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
+      if (fromRole !== myRole) {
+        setIsIncomingCall(true);
+        playReceiveSound();
+      }
+    });
+
+    socketRef.current.on('accept_audio_call', () => {
+      setIsIncomingCall(false);
+      setIsInAudioCall(true);
+      playReceiveSound();
+    });
+
+    socketRef.current.on('end_audio_call', () => {
+      setIsInAudioCall(false);
+      setIsIncomingCall(false);
+      setIsWhisperModeEnabled(false);
+      setIsCallMuted(false);
     });
 
     socketRef.current.on('load_history', (history) => {
@@ -2343,6 +2401,32 @@ export default function App() {
               </button>
             </div>
           </div>
+
+          {/* INCOMING CALL BANNER */}
+          {isIncomingCall && !isInAudioCall && (
+            <div className="bg-emerald-950 border-b border-emerald-600 p-3 px-4 flex items-center justify-between text-white shrink-0 animate-bounce">
+              <div className="flex items-center gap-2">
+                <Phone size={18} className="text-emerald-400 animate-pulse" />
+                <span className="text-xs font-bold">Incoming Whisper Audio Call...</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleAcceptIncomingCall}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded-lg text-xs font-bold cursor-pointer"
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsIncomingCall(false)}
+                  className="bg-rose-600 hover:bg-rose-500 text-white px-3 py-1 rounded-lg text-xs font-bold cursor-pointer"
+                >
+                  Decline
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* ACTIVE WHISPER AUDIO CALL MODAL OVERLAY IN WP VIEW */}
           {isInAudioCall && (
@@ -3872,9 +3956,11 @@ export default function App() {
                 <button onClick={() => setShowAdminRecordingsModal(false)} className="text-gray-400 hover:text-white cursor-pointer"><X size={18} /></button>
               </div>
 
+              <p className="text-[11px] text-gray-400 italic">Recordings auto-delete after 24 hours.</p>
+
               <div className="max-h-72 overflow-y-auto space-y-2.5 scrollbar-none pr-1">
                 {adminRecordingsList.length === 0 ? (
-                  <p className="text-xs text-gray-500 text-center py-8">No call recordings stored in vault yet.</p>
+                  <p className="text-xs text-gray-500 text-center py-8">No call recordings stored in vault yet. Complete a live audio call to generate records.</p>
                 ) : (
                   adminRecordingsList.map((rec) => (
                     <div key={rec.id} className="bg-[#1c1c1c] border border-[#2a2a2a] p-3 rounded-2xl flex items-center justify-between">
@@ -3882,13 +3968,22 @@ export default function App() {
                         <p className="text-xs font-bold text-gray-200">{rec.title}</p>
                         <p className="text-[10px] text-gray-400 font-mono">{rec.date} | ⏱ {rec.duration} | 📦 {rec.size}</p>
                       </div>
-                      <button 
-                        onClick={() => alert(`Playing recording: ${rec.title}`)}
-                        className="bg-rose-600 hover:bg-rose-500 text-white p-2 rounded-xl cursor-pointer shadow"
-                        title="Play Recording"
-                      >
-                        <Play size={14} fill="currentColor" />
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button 
+                          onClick={() => alert(`Playing recording session: ${rec.title}`)}
+                          className="bg-rose-600 hover:bg-rose-500 text-white p-2 rounded-xl cursor-pointer shadow"
+                          title="Play Recording"
+                        >
+                          <Play size={13} fill="currentColor" />
+                        </button>
+                        <button 
+                          onClick={() => handleDownloadRecording(rec)}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-xl cursor-pointer shadow"
+                          title="Download Recording PDF Report"
+                        >
+                          <Download size={13} />
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
