@@ -19,7 +19,7 @@ const GLOBAL_ROOM = "stealth_master_room";
 const PUBLIC_VAPID_KEY = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-8vMeAtA5cHmDkJ0d8Q9cW4vG0mJ5M3Q5lK0P8vWq6X5LwG0J7j6W0Yg';
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "🙏", "👌", "💯", "🤫", "✨"];
-const HOVER_REACTIONS = ["👍", "❤️", "🥰", "😆", "😮", "😢", "😡"];
+const HOVER_REACTIONS = ["👍", "❤️", "🥰", "😆", "😮", "😢", "➕"];
 
 const ARCADE_GAMES = [
   { id: 'tictactoe', name: 'Tic Tac Toe (Ultimate Edition)', desc: 'Classic 3x3 grid tactical challenge' },
@@ -253,12 +253,17 @@ export default function App() {
   const [showMiniEmojiBar, setShowMiniEmojiBar] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
 
+  // Swipe gesture refs for WhatsApp view reply
+  const touchStartXRef = useRef(0);
+  const activeSwipeMsgIdRef = useRef(null);
+
   const socketRef = useRef(null);
   const stealthMessagesRef = useRef([]);
   const messageEndRef = useRef(null);
   const streamContainerRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const wpChatScrollRef = useRef(null);
   const escPressCount = useRef(0);
   const escTimer = useRef(null);
   const swRegistrationRef = useRef(null);
@@ -454,6 +459,9 @@ export default function App() {
       }
       setInput('');
       setReplyTarget(null);
+      if (wpChatScrollRef.current) {
+        wpChatScrollRef.current.scrollTop = wpChatScrollRef.current.scrollHeight;
+      }
       return;
     }
 
@@ -536,6 +544,9 @@ export default function App() {
           isMedia: true
         });
         playSentSound();
+        if (wpChatScrollRef.current) {
+          wpChatScrollRef.current.scrollTop = wpChatScrollRef.current.scrollHeight;
+        }
       }
     };
     reader.readAsDataURL(file);
@@ -1022,6 +1033,9 @@ export default function App() {
     if (streamContainerRef.current) {
       streamContainerRef.current.scrollTop = streamContainerRef.current.scrollHeight;
     }
+    if (wpChatScrollRef.current) {
+      wpChatScrollRef.current.scrollTop = wpChatScrollRef.current.scrollHeight;
+    }
   }, [stealthMessages.length, isPeerTyping]);
 
   useEffect(() => {
@@ -1036,6 +1050,7 @@ export default function App() {
     localStorage.setItem('stealth_image_vault', JSON.stringify(archivedImages));
   }, [archivedImages]);
 
+  // --- FULLY RESTORED SOCKET.IO CONNECTION & LISTENERS ---
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
@@ -1440,7 +1455,6 @@ export default function App() {
     }
   };
 
-  // WHATSAPP / IMESSAGE STYLE BUBBLE CHAT EXPORT TO PDF
   const downloadFullChatPDF = () => {
     if (role !== 'parent') return;
 
@@ -1523,7 +1537,6 @@ export default function App() {
     }
   };
 
-  // Tic Tac Toe Winner Logic
   const checkTicTacToeWinner = (board) => {
     const lines = [
       [0,1,2], [3,4,5], [6,7,8],
@@ -2241,12 +2254,13 @@ export default function App() {
         <aside className="fixed md:static inset-0 z-50 w-full md:w-96 bg-[#0b141a] flex flex-col border-r border-[#222327] overflow-hidden select-none shrink-0 font-sans">
           <div className="h-16 bg-[#202c33] flex items-center justify-between px-4 shrink-0 text-white shadow">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#111b21] flex items-center justify-center text-lg font-bold border border-emerald-500/40">
+              <div className="w-10 h-10 rounded-full bg-[#111b21] flex items-center justify-center text-lg font-bold border border-emerald-500/40 relative">
                 {role === 'parent' ? 'A' : 'H'}
+                {isConnected && <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#202c33] rounded-full" />}
               </div>
               <div>
                 <h3 className="text-sm font-bold tracking-tight">{role === 'parent' ? 'User (A)' : 'Admin (H)'}</h3>
-                <p className="text-[10px] text-emerald-400 font-mono">online</p>
+                <p className="text-[10px] text-emerald-400 font-mono">{isConnected ? 'online' : 'connecting...'}</p>
               </div>
             </div>
             <div className="flex items-center gap-4 text-gray-300">
@@ -2261,7 +2275,10 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#0b141a] bg-[radial-gradient(#1f2c34_1px,transparent_1px)] bg-[size:16px_16px]">
+          <div 
+            ref={wpChatScrollRef}
+            className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#0b141a] bg-[radial-gradient(#1f2c34_1px,transparent_1px)] bg-[size:16px_16px]"
+          >
             {displayedStealthMessages.length === 0 ? (
               <div className="text-center text-xs text-gray-500 py-12">No WhatsApp messages yet. Say hello!</div>
             ) : (
@@ -2279,11 +2296,27 @@ export default function App() {
                   }
                 }
 
+                const isReactionOpen = activeReactionMsgId === m._id;
+
                 return (
                   <div key={idx} className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'}`}>
                     <div 
+                      onTouchStart={(e) => {
+                        touchStartXRef.current = e.touches[0].clientX;
+                        activeSwipeMsgIdRef.current = m;
+                      }}
+                      onTouchEnd={(e) => {
+                        const diffX = e.changedTouches[0].clientX - touchStartXRef.current;
+                        if (diffX > 60 && activeSwipeMsgIdRef.current) {
+                          handleStartReply(activeSwipeMsgIdRef.current);
+                        }
+                      }}
                       onDoubleClick={() => handleStartReply(m)}
-                      title="Double click to reply"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveReactionMsgId(activeReactionMsgId === m._id ? null : m._id);
+                      }}
+                      title="Double click to reply | Tap for reactions"
                       className={`max-w-[78%] rounded-2xl px-3.5 py-2 shadow text-xs relative cursor-pointer ${isMine ? 'bg-[#005c4b] text-white rounded-tr-none' : 'bg-[#202c33] text-gray-100 rounded-tl-none border border-[#2a3942]'}`}
                     >
                       {hasReplyTag && (
@@ -2293,20 +2326,47 @@ export default function App() {
                       )}
 
                       {m.isMedia ? (
-                        <button 
-                          type="button"
-                          onClick={() => handleOpenViewOnce(m)}
-                          className="inline-flex items-center gap-1.5 py-1 text-amber-300 font-mono text-xs underline cursor-pointer"
-                        >
-                          <Eye size={13} /> [View Once Photo Asset]
-                        </button>
+                        <div className="space-y-1">
+                          <img src={m.text} alt="Shared Photo" className="max-h-48 rounded-lg object-contain cursor-pointer" onClick={() => window.open(m.text, '_blank')} />
+                        </div>
                       ) : (
                         <p className="break-words leading-relaxed">{cleanBody}</p>
                       )}
 
+                      {/* REACTION POPUP TRAY */}
+                      {isReactionOpen && (
+                        <div 
+                          className="absolute -top-10 left-0 z-30 bg-[#202c33] border border-[#3a4a54] px-2.5 py-1 rounded-full shadow-2xl flex items-center gap-1.5 backdrop-blur-md"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {["👍", "❤️", "😂", "😮", "🙏", "➕"].map((emoji, eIdx) => (
+                            <button
+                              key={eIdx}
+                              type="button"
+                              onClick={() => {
+                                if (emoji === '➕') {
+                                  setShowMiniEmojiBar(!showMiniEmojiBar);
+                                } else {
+                                  handleSelectReaction(m._id, emoji);
+                                }
+                              }}
+                              className="text-sm p-0.5 hover:scale-125 transition-transform cursor-pointer"
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {m.reaction && (
+                        <span className="absolute -bottom-2 right-2 bg-[#202c33] border border-[#3a4a54] px-1.5 py-0.5 rounded-full text-[10px] shadow">
+                          {m.reaction}
+                        </span>
+                      )}
+
                       <div className="flex items-center justify-end gap-1 mt-1 text-[9px] text-gray-300 font-mono">
                         <span>{m.timeFormatted}</span>
-                        {isMine && <CheckCheck size={12} className="text-sky-400" />}
+                        {isMine && <CheckCheck size={12} className={m.isSeen ? 'text-sky-400' : 'text-gray-400'} />}
                       </div>
                     </div>
                   </div>
@@ -2323,7 +2383,22 @@ export default function App() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="h-16 bg-[#202c33] px-3 flex items-center gap-2 shrink-0 border-t border-[#2a3942]">
+          {showMiniEmojiBar && (
+            <div className="bg-[#202c33] border-t border-[#2a3942] p-2 flex items-center gap-2 overflow-x-auto scrollbar-none">
+              {QUICK_EMOJIS.map((emoji, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleEmojiClick(emoji)}
+                  className="text-base p-1 hover:scale-125 transition-transform cursor-pointer"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="bg-[#202c33] px-3 py-2 flex items-center gap-2 shrink-0 border-t border-[#2a3942]">
             <button 
               type="button" 
               onClick={() => fileInputRef.current && fileInputRef.current.click()}
@@ -2332,13 +2407,31 @@ export default function App() {
             >
               <Plus size={22} />
             </button>
-            <Smile size={22} className="text-gray-400 cursor-pointer" />
-            <input 
-              type="text" 
+            <button 
+              type="button"
+              onClick={() => setShowMiniEmojiBar(!showMiniEmojiBar)}
+              className="text-gray-400 hover:text-white cursor-pointer"
+              title="Emojis"
+            >
+              <Smile size={22} />
+            </button>
+            <textarea 
+              rows={1}
               value={input}
               onChange={handleInputChange}
+              onFocus={() => {
+                if (wpChatScrollRef.current) {
+                  wpChatScrollRef.current.scrollTop = wpChatScrollRef.current.scrollHeight;
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
               placeholder="Type a message..."
-              className="flex-1 bg-[#2a3942] text-white placeholder-gray-400 text-xs px-4 py-2.5 rounded-xl outline-none"
+              className="flex-1 bg-[#2a3942] text-white placeholder-gray-400 text-xs px-4 py-2.5 rounded-xl outline-none resize-none max-h-24 overflow-y-auto"
             />
             <button type="submit" className="w-10 h-10 rounded-full bg-[#00a884] hover:bg-[#029374] text-white flex items-center justify-center cursor-pointer shadow">
               <Send size={16} />
