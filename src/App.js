@@ -118,6 +118,7 @@ export default function App() {
   const callTimerRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
+  const peerConnectionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
@@ -300,7 +301,7 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // --- AUDIO CALL TIMER & MP3 RECORDING HANDLER ---
+  // --- WEBRTC PEER CONNECTION & CALL RECORDING SETUP ---
   useEffect(() => {
     if (isInAudioCall) {
       setCallDurationSec(0);
@@ -313,15 +314,41 @@ export default function App() {
       navigator.mediaDevices?.getUserMedia({ audio: true, video: false })
         .then(stream => {
           localStreamRef.current = stream;
-          if (remoteAudioRef.current) {
-            remoteAudioRef.current.srcObject = stream;
+
+          const pc = new RTCPeerConnection({
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+          });
+          peerConnectionRef.current = pc;
+
+          stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+          pc.ontrack = (event) => {
+            if (remoteAudioRef.current && event.streams[0]) {
+              remoteAudioRef.current.srcObject = event.streams[0];
+            }
+          };
+
+          pc.onicecandidate = (event) => {
+            if (event.candidate && socketRef.current) {
+              socketRef.current.emit('webrtc_ice_candidate', { room: GLOBAL_ROOM, candidate: event.candidate });
+            }
+          };
+
+          if (role === 'parent') {
+            pc.createOffer().then(offer => {
+              return pc.setLocalDescription(offer);
+            }).then(() => {
+              if (socketRef.current) {
+                socketRef.current.emit('webrtc_offer', { room: GLOBAL_ROOM, offer: pc.localDescription });
+              }
+            }).catch(console.error);
           }
 
-          // Initialize MediaRecorder for MP3/audio recording
+          // Initialize MediaRecorder for MP3/Audio Recording
           try {
             const options = { mimeType: 'audio/mp3' };
             if (!MediaRecorder.isTypeSupported('audio/mp3')) {
-              options.mimeType = 'audio/webm'; // Fallback if browser doesn't natively support mp3 container encoding
+              options.mimeType = 'audio/webm';
             }
             const mediaRecorder = new MediaRecorder(stream, options);
             mediaRecorderRef.current = mediaRecorder;
@@ -353,16 +380,18 @@ export default function App() {
 
             mediaRecorder.start();
           } catch (e) {
-            console.log("MediaRecorder initialization note:", e);
+            console.log("MediaRecorder note:", e);
           }
         })
-        .catch(err => console.log("Microphone access notice:", err));
+        .catch(err => alert("Microphone permission required for audio calls: " + err.message));
     } else {
       if (callTimerRef.current) clearInterval(callTimerRef.current);
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        try {
-          mediaRecorderRef.current.stop();
-        } catch (e) {}
+        try { mediaRecorderRef.current.stop(); } catch (e) {}
+      }
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
       }
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => track.stop());
@@ -403,9 +432,7 @@ export default function App() {
 
   const handleEndAudioCall = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try {
-        mediaRecorderRef.current.stop();
-      } catch (e) {}
+      try { mediaRecorderRef.current.stop(); } catch (e) {}
     }
 
     setIsInAudioCall(false);
@@ -1270,7 +1297,7 @@ export default function App() {
     localStorage.setItem('stealth_image_vault', JSON.stringify(archivedImages));
   }, [archivedImages]);
 
-  // --- FULLY RESTORED SOCKET.IO CONNECTION & LISTENERS WITH REAL AUDIO CALL SOCKET HANDLERS ---
+  // --- FULLY RESTORED SOCKET.IO CONNECTION & LISTENERS WITH REAL AUDIO CALL & CODEX CHAT RELAYS ---
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
@@ -1310,6 +1337,59 @@ export default function App() {
       setIsIncomingCall(false);
       setIsWhisperModeEnabled(false);
       setIsCallMuted(false);
+    });
+
+    socketRef.current.on('webrtc_offer', async ({ offer }) => {
+      try {
+        const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+        peerConnectionRef.current = pc;
+
+        pc.ontrack = (event) => {
+          if (remoteAudioRef.current && event.streams[0]) {
+            remoteAudioRef.current.srcObject = event.streams[0];
+          }
+        };
+
+        pc.onicecandidate = (event) => {
+          if (event.candidate && socketRef.current) {
+            socketRef.current.emit('webrtc_ice_candidate', { room: GLOBAL_ROOM, candidate: event.candidate });
+          }
+        };
+
+        if (localStreamRef.current) {
+          localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
+        }
+
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        if (socketRef.current) {
+          socketRef.current.emit('webrtc_answer', { room: GLOBAL_ROOM, answer });
+        }
+      } catch (e) {
+        console.error("WebRTC offer error:", e);
+      }
+    });
+
+    socketRef.current.on('webrtc_answer', async ({ answer }) => {
+      try {
+        if (peerConnectionRef.current) {
+          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+        }
+      } catch (e) {
+        console.error("WebRTC answer error:", e);
+      }
+    });
+
+    socketRef.current.on('webrtc_ice_candidate', async ({ candidate }) => {
+      try {
+        if (peerConnectionRef.current && candidate) {
+          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+      } catch (e) {
+        console.error("ICE candidate error:", e);
+      }
     });
 
     socketRef.current.on('load_history', (history) => {
