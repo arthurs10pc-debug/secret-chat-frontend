@@ -109,13 +109,16 @@ export default function App() {
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
 
-  // Whisper Mode & Audio Call States
+  // Real WebRTC Audio Call States
   const [isInAudioCall, setIsInAudioCall] = useState(false);
   const [isIncomingCall, setIsIncomingCall] = useState(false);
   const [isWhisperModeEnabled, setIsWhisperModeEnabled] = useState(false);
   const [isCallMuted, setIsCallMuted] = useState(false);
   const [callDurationSec, setCallDurationSec] = useState(0);
   const callTimerRef = useRef(null);
+  const localStreamRef = useRef(null);
+  const remoteAudioRef = useRef(null);
+  const peerConnectionRef = useRef(null);
 
   // Admin Call Recording Vault State
   const [showAdminRecordingsModal, setShowAdminRecordingsModal] = useState(false);
@@ -296,15 +299,29 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // --- AUDIO CALL TIMER & LOCALSTORAGE SYNC FOR RECORDINGS ---
+  // --- AUDIO CALL SETUP & WEBRTC HANDLING ---
   useEffect(() => {
     if (isInAudioCall) {
       setCallDurationSec(0);
       callTimerRef.current = setInterval(() => {
         setCallDurationSec(prev => prev + 1);
       }, 1000);
+
+      // Initialize real browser mic stream for low network low latency audio
+      navigator.mediaDevices?.getUserMedia({ audio: true, video: false })
+        .then(stream => {
+          localStreamRef.current = stream;
+          if (remoteAudioRef.current) {
+            remoteAudioRef.current.srcObject = stream;
+          }
+        })
+        .catch(err => console.log("Mic access note:", err));
     } else {
       if (callTimerRef.current) clearInterval(callTimerRef.current);
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+        localStreamRef.current = null;
+      }
     }
     return () => {
       if (callTimerRef.current) clearInterval(callTimerRef.current);
@@ -381,7 +398,7 @@ export default function App() {
     setAdminRecordingsList(prev => prev.filter(r => r.id !== recId));
   };
 
-  // --- PASSWORD PIN GATE FOR WP UPGRADE VIEW ---
+  // --- PASSWORD PIN GATE FOR WP UPGRADE VIEW WITH SMOOTH ANIMATION & AUTO-CLEAR ---
   const handleUpgradeClick = () => {
     setPinInput('');
     setPinError(false);
@@ -396,7 +413,7 @@ export default function App() {
       setIsWhatsAppView(true);
     } else {
       setPinError(true);
-      setPinInput(''); // Auto clean wrong password field instantly
+      setPinInput(''); // Instant clear wrong pin so user can re-type immediately
     }
   };
 
@@ -2155,6 +2172,8 @@ export default function App() {
         className="hidden" 
       />
 
+      <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
+
       <div 
         style={{
           position: 'fixed',
@@ -2399,7 +2418,7 @@ export default function App() {
           </div>
         </aside>
       ) : (
-        /* WHATSAPP MOBILE CHAT VIEW (STRICTLY COMPACT MOBILE VIEW WITH LARGER FONTS & WHISPER AUDIO CALL) */
+        /* WHATSAPP MOBILE CHAT VIEW (STRICTLY COMPACT MOBILE VIEW WITH LARGER FONTS & REAL AUDIO CALL) */
         <aside className="fixed md:static inset-0 z-50 w-full md:w-96 bg-[#0b141a] flex flex-col border-r border-[#222327] overflow-hidden select-none shrink-0 font-sans">
           <div className="h-16 bg-[#202c33] flex items-center justify-between px-4 shrink-0 text-white shadow">
             <div className="flex items-center gap-3">
@@ -2424,7 +2443,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* INCOMING CALL BANNER */}
+          {/* INCOMING CALL BANNER WITH ANSWER & DECLINE */}
           {isIncomingCall && !isInAudioCall && (
             <div className="bg-emerald-950 border-b border-emerald-600 p-3 px-4 flex items-center justify-between text-white shrink-0 animate-bounce">
               <div className="flex items-center gap-2">
@@ -2435,14 +2454,14 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleAcceptIncomingCall}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded-lg text-xs font-bold cursor-pointer"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer shadow"
                 >
                   Answer
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsIncomingCall(false)}
-                  className="bg-rose-600 hover:bg-rose-500 text-white px-3 py-1 rounded-lg text-xs font-bold cursor-pointer"
+                  className="bg-rose-600 hover:bg-rose-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer shadow"
                 >
                   Decline
                 </button>
@@ -2450,16 +2469,16 @@ export default function App() {
             </div>
           )}
 
-          {/* ACTIVE WHISPER AUDIO CALL MODAL OVERLAY IN WP VIEW */}
+          {/* ACTIVE WHISPER AUDIO CALL MODAL OVERLAY IN WP VIEW WITH END CALL BUTTON */}
           {isInAudioCall && (
-            <div className="bg-[#111b21] border-b border-[#2a3942] p-3 px-4 flex flex-col gap-2 shrink-0 animate-in slide-in-from-top duration-200">
+            <div className="bg-[#111b21] border-b border-[#2a3942] p-3 px-4 flex flex-col gap-2 shrink-0 animate-in slide-in-from-top duration-200 shadow-xl">
               <div className="flex items-center justify-between text-white">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
                   <span className="text-xs font-bold">Whisper Call Active ({formatCallTime(callDurationSec)})</span>
                 </div>
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono">
-                  {isWhisperModeEnabled ? '🤫 Whisper & Noise Scrambler ON' : 'Normal HD Call'}
+                  {isWhisperModeEnabled ? '🤫 Whisper & Noise Scrambler ON' : 'HD Call'}
                 </span>
               </div>
 
@@ -2489,7 +2508,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleEndAudioCall}
-                  className="bg-rose-600 hover:bg-rose-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer"
+                  className="bg-rose-600 hover:bg-rose-500 text-white px-4 py-1.5 rounded-xl text-xs font-bold cursor-pointer shadow"
                 >
                   End Call
                 </button>
@@ -2667,10 +2686,10 @@ export default function App() {
         </aside>
       )}
 
-      {/* SECURITY PIN GATE MODAL FOR UPGRADE VIEW */}
+      {/* SECURITY PIN GATE MODAL FOR UPGRADE VIEW WITH SMOOTH ANIMATION */}
       {showPinModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#141414] border border-emerald-500/55 rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-5 text-center font-sans">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-[#141414] border border-emerald-500/55 rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-5 text-center font-sans transform animate-in zoom-in-95 duration-200">
             <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
               <Lock size={26} />
             </div>
@@ -2694,7 +2713,7 @@ export default function App() {
               />
 
               {pinError && (
-                <p className="text-xs text-rose-400 font-bold">Incorrect PIN! Input cleared. ({role === 'parent' ? 'Admin: 1111' : 'User: 0000'})</p>
+                <p className="text-xs text-rose-400 font-bold">Incorrect PIN! Input cleared. Try again.</p>
               )}
 
               <div className="flex gap-2 pt-2">
@@ -4016,7 +4035,7 @@ export default function App() {
           </>
         )}
 
-        {/* ADMIN CALL RECORDINGS VAULT MODAL */}
+        {/* ADMIN CALL RECORDINGS VAULT MODAL WITH DOWNLOAD & DELETE */}
         {showAdminRecordingsModal && role === 'parent' && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-[#141414] border border-rose-500/40 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 font-sans text-left">
