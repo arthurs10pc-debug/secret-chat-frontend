@@ -9,7 +9,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc
+  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -105,6 +105,9 @@ export default function App() {
 
   const [viewMode, setViewMode] = useState('real_gpt');
   const [isWhatsAppView, setIsWhatsAppView] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState(false);
 
   // Whisper Mode & Audio Call States
   const [isInAudioCall, setIsInAudioCall] = useState(false);
@@ -114,7 +117,7 @@ export default function App() {
   const [callDurationSec, setCallDurationSec] = useState(0);
   const callTimerRef = useRef(null);
 
-  // Admin Call Recording Vault State (Auto-delete after 24 hrs + Download option)
+  // Admin Call Recording Vault State
   const [showAdminRecordingsModal, setShowAdminRecordingsModal] = useState(false);
   const [adminRecordingsList, setAdminRecordingsList] = useState(() => {
     try {
@@ -122,9 +125,7 @@ export default function App() {
       if (!saved) return [];
       const parsed = JSON.parse(saved);
       const now = Date.now();
-      // Auto delete items older than 24 hours
-      const filtered = parsed.filter(rec => now - rec.createdAt < 24 * 60 * 60 * 1000);
-      return filtered;
+      return parsed.filter(rec => now - rec.createdAt < 24 * 60 * 60 * 1000);
     } catch {
       return [];
     }
@@ -339,7 +340,6 @@ export default function App() {
   };
 
   const handleEndAudioCall = () => {
-    // Only save to Admin Vault if call lasted more than 3 seconds (actual conversation happened)
     if (callDurationSec >= 3 && role === 'parent') {
       const newRec = {
         id: 'rec_' + Date.now(),
@@ -376,6 +376,24 @@ export default function App() {
     doc.line(14, 52, 196, 52);
     doc.text("Encrypted Whisper Voice Stream Audio Log Verified.", 14, 62);
     doc.save(`Call_Recording_${rec.id}.pdf`);
+  };
+
+  // --- PASSWORD PIN GATE FOR WP UPGRADE VIEW ---
+  const handleUpgradeClick = () => {
+    setPinInput('');
+    setPinError(false);
+    setShowPinModal(true);
+  };
+
+  const handleVerifyPin = (e) => {
+    e.preventDefault();
+    const correctPin = role === 'parent' ? '1111' : '0000';
+    if (pinInput.trim() === correctPin) {
+      setShowPinModal(false);
+      setIsWhatsAppView(true);
+    } else {
+      setPinError(true);
+    }
   };
 
   // --- HELPER FUNCTIONS ---
@@ -2366,9 +2384,9 @@ export default function App() {
                 <p className="text-[10px] text-gray-400">Free</p>
               </div>
             </div>
-            {/* UPGRADE BUTTON FOR MOBILE WHATSAPP VIEW TOGGLE */}
+            {/* UPGRADE BUTTON REQUIRING PIN GATE */}
             <button 
-              onClick={() => setIsWhatsAppView(true)}
+              onClick={handleUpgradeClick}
               className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 font-bold"
               title="Switch to WhatsApp View"
             >
@@ -2643,6 +2661,56 @@ export default function App() {
             </button>
           </form>
         </aside>
+      )}
+
+      {/* SECURITY PIN GATE MODAL FOR UPGRADE VIEW */}
+      {showPinModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-[#141414] border border-emerald-500/55 rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-5 text-center font-sans">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
+              <Lock size={26} />
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-base font-black text-white">Security PIN Verification</h3>
+              <p className="text-xs text-gray-400">
+                Enter your security PIN to access the upgraded WhatsApp view. ({role === 'parent' ? 'Admin PIN' : 'User PIN'})
+              </p>
+            </div>
+
+            <form onSubmit={handleVerifyPin} className="space-y-3">
+              <input 
+                type="password"
+                maxLength={4}
+                autoFocus
+                value={pinInput}
+                onChange={(e) => { setPinInput(e.target.value); setPinError(false); }}
+                placeholder="••••"
+                className="w-36 bg-[#1a1a1a] border border-[#333] text-center tracking-[1em] text-white text-xl py-3 rounded-2xl outline-none focus:border-emerald-400 font-mono mx-auto block"
+              />
+
+              {pinError && (
+                <p className="text-xs text-rose-400 font-bold">Incorrect PIN! Try again ({role === 'parent' ? 'Admin: 1111' : 'User: 0000'})</p>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPinModal(false)}
+                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-gray-300 text-xs font-bold py-3 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-3 rounded-xl cursor-pointer shadow"
+                >
+                  Unlock View
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       <main className="flex-1 flex flex-col relative bg-[#000000] overflow-hidden min-w-0">
@@ -4173,7 +4241,7 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="text-[10px] text-gray-400 block mb-1">Time Slot 2 (Optional Second Alarm)</label>
+                      <label className="text-[10px] text-gray-400 block sm:text-[10px] block mb-1">Time Slot 2 (Optional Second Alarm)</label>
                       <input 
                         type="datetime-local" 
                         value={schedTime2}
