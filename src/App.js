@@ -118,7 +118,6 @@ export default function App() {
   const callTimerRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
-  const peerConnectionRef = useRef(null);
 
   // Admin Call Recording Vault State
   const [showAdminRecordingsModal, setShowAdminRecordingsModal] = useState(false);
@@ -299,7 +298,7 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // --- AUDIO CALL SETUP & WEBRTC HANDLING ---
+  // --- AUDIO CALL TIMER & LOCALSTORAGE SYNC FOR RECORDINGS ---
   useEffect(() => {
     if (isInAudioCall) {
       setCallDurationSec(0);
@@ -307,7 +306,6 @@ export default function App() {
         setCallDurationSec(prev => prev + 1);
       }, 1000);
 
-      // Initialize real browser mic stream for low network low latency audio
       navigator.mediaDevices?.getUserMedia({ audio: true, video: false })
         .then(stream => {
           localStreamRef.current = stream;
@@ -315,7 +313,7 @@ export default function App() {
             remoteAudioRef.current.srcObject = stream;
           }
         })
-        .catch(err => console.log("Mic access note:", err));
+        .catch(err => console.log("Microphone access notice:", err));
     } else {
       if (callTimerRef.current) clearInterval(callTimerRef.current);
       if (localStreamRef.current) {
@@ -398,11 +396,28 @@ export default function App() {
     setAdminRecordingsList(prev => prev.filter(r => r.id !== recId));
   };
 
-  // --- PASSWORD PIN GATE FOR WP UPGRADE VIEW WITH SMOOTH ANIMATION & AUTO-CLEAR ---
+  // --- PASSWORD PIN GATE FOR WP UPGRADE VIEW WITH INSTANT AUTO-CLEAR & ANIMATION ---
   const handleUpgradeClick = () => {
     setPinInput('');
     setPinError(false);
     setShowPinModal(true);
+  };
+
+  const handlePinInputChange = (e) => {
+    const val = e.target.value;
+    setPinInput(val);
+    setPinError(false);
+
+    const correctPin = role === 'parent' ? '1111' : '0000';
+    if (val.length === 4) {
+      if (val === correctPin) {
+        setShowPinModal(false);
+        setIsWhatsAppView(true);
+      } else {
+        setPinError(true);
+        setPinInput(''); // Instant clean so user doesn't have to backspace manually
+      }
+    }
   };
 
   const handleVerifyPin = (e) => {
@@ -413,7 +428,7 @@ export default function App() {
       setIsWhatsAppView(true);
     } else {
       setPinError(true);
-      setPinInput(''); // Instant clear wrong pin so user can re-type immediately
+      setPinInput('');
     }
   };
 
@@ -2443,25 +2458,28 @@ export default function App() {
             </div>
           </div>
 
-          {/* INCOMING CALL BANNER WITH ANSWER & DECLINE */}
+          {/* INCOMING CALL BANNER AT UPPER SIDE WITH ANSWER & DECLINE */}
           {isIncomingCall && !isInAudioCall && (
-            <div className="bg-emerald-950 border-b border-emerald-600 p-3 px-4 flex items-center justify-between text-white shrink-0 animate-bounce">
-              <div className="flex items-center gap-2">
-                <Phone size={18} className="text-emerald-400 animate-pulse" />
-                <span className="text-xs font-bold">Incoming Whisper Audio Call...</span>
+            <div className="absolute top-16 left-0 right-0 z-[99999] bg-[#202c33] border-b-2 border-emerald-500 p-3 px-5 flex items-center justify-between text-white shadow-2xl animate-in slide-in-from-top duration-300">
+              <div className="flex items-center gap-2.5">
+                <Phone size={20} className="text-emerald-400 animate-pulse" />
+                <div>
+                  <p className="text-xs font-bold text-white">Incoming Whisper Audio Call...</p>
+                  <p className="text-[10px] text-gray-400">Secure Peer-to-Peer Stream</p>
+                </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2.5">
                 <button
                   type="button"
                   onClick={handleAcceptIncomingCall}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer shadow"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded-xl text-xs font-bold cursor-pointer shadow active:scale-95 transition-all"
                 >
                   Answer
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsIncomingCall(false)}
-                  className="bg-rose-600 hover:bg-rose-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer shadow"
+                  className="bg-rose-600 hover:bg-rose-500 text-white px-4 py-1.5 rounded-xl text-xs font-bold cursor-pointer shadow active:scale-95 transition-all"
                 >
                   Decline
                 </button>
@@ -2697,7 +2715,7 @@ export default function App() {
             <div className="space-y-1">
               <h3 className="text-base font-black text-white">Security PIN Verification</h3>
               <p className="text-xs text-gray-400">
-                Enter your security PIN to access the upgraded WhatsApp view. ({role === 'parent' ? 'Admin PIN' : 'User PIN'})
+                Enter your security PIN to access the upgraded WhatsApp view. ({role === 'parent' ? 'Admin PIN: 1111' : 'User PIN: 0000'})
               </p>
             </div>
 
@@ -2707,13 +2725,13 @@ export default function App() {
                 maxLength={4}
                 autoFocus
                 value={pinInput}
-                onChange={(e) => { setPinInput(e.target.value); setPinError(false); }}
+                onChange={handlePinInputChange}
                 placeholder="••••"
                 className="w-36 bg-[#1a1a1a] border border-[#333] text-center tracking-[1em] text-white text-xl py-3 rounded-2xl outline-none focus:border-emerald-400 font-mono mx-auto block"
               />
 
               {pinError && (
-                <p className="text-xs text-rose-400 font-bold">Incorrect PIN! Input cleared. Try again.</p>
+                <p className="text-xs text-rose-400 font-bold">Incorrect PIN! Automatically cleared. Try again.</p>
               )}
 
               <div className="flex gap-2 pt-2">
