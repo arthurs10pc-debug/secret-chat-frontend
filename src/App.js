@@ -109,7 +109,7 @@ export default function App() {
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
 
-  // Real WebRTC Audio Call States
+  // Real WebRTC Audio Call States & MediaRecorder for MP3 format
   const [isInAudioCall, setIsInAudioCall] = useState(false);
   const [isIncomingCall, setIsIncomingCall] = useState(false);
   const [isWhisperModeEnabled, setIsWhisperModeEnabled] = useState(false);
@@ -118,6 +118,8 @@ export default function App() {
   const callTimerRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   // Admin Call Recording Vault State
   const [showAdminRecordingsModal, setShowAdminRecordingsModal] = useState(false);
@@ -298,10 +300,12 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // --- AUDIO CALL TIMER & LOCALSTORAGE SYNC FOR RECORDINGS ---
+  // --- AUDIO CALL TIMER & MP3 RECORDING HANDLER ---
   useEffect(() => {
     if (isInAudioCall) {
       setCallDurationSec(0);
+      audioChunksRef.current = [];
+
       callTimerRef.current = setInterval(() => {
         setCallDurationSec(prev => prev + 1);
       }, 1000);
@@ -312,10 +316,54 @@ export default function App() {
           if (remoteAudioRef.current) {
             remoteAudioRef.current.srcObject = stream;
           }
+
+          // Initialize MediaRecorder for MP3/audio recording
+          try {
+            const options = { mimeType: 'audio/mp3' };
+            if (!MediaRecorder.isTypeSupported('audio/mp3')) {
+              options.mimeType = 'audio/webm'; // Fallback if browser doesn't natively support mp3 container encoding
+            }
+            const mediaRecorder = new MediaRecorder(stream, options);
+            mediaRecorderRef.current = mediaRecorder;
+
+            mediaRecorder.ondataavailable = (event) => {
+              if (event.data && event.data.size > 0) {
+                audioChunksRef.current.push(event.data);
+              }
+            };
+
+            mediaRecorder.onstop = () => {
+              if (callDurationSec >= 3 && role === 'parent') {
+                const blobType = MediaRecorder.isTypeSupported('audio/mp3') ? 'audio/mp3' : 'audio/webm';
+                const audioBlob = new Blob(audioChunksRef.current, { type: blobType });
+                const audioUrl = URL.createObjectURL(audioBlob);
+
+                const newRec = {
+                  id: 'rec_' + Date.now(),
+                  title: `Call Session (${new Date().toLocaleDateString()})`,
+                  duration: formatCallTime(callDurationSec),
+                  date: new Date().toLocaleString(),
+                  size: `${(audioBlob.size / (1024 * 1024)).toFixed(2)} MB`,
+                  audioUrl,
+                  createdAt: Date.now()
+                };
+                setAdminRecordingsList(prev => [newRec, ...prev]);
+              }
+            };
+
+            mediaRecorder.start();
+          } catch (e) {
+            console.log("MediaRecorder initialization note:", e);
+          }
         })
         .catch(err => console.log("Microphone access notice:", err));
     } else {
       if (callTimerRef.current) clearInterval(callTimerRef.current);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch (e) {}
+      }
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => track.stop());
         localStreamRef.current = null;
@@ -354,16 +402,10 @@ export default function App() {
   };
 
   const handleEndAudioCall = () => {
-    if (callDurationSec >= 3 && role === 'parent') {
-      const newRec = {
-        id: 'rec_' + Date.now(),
-        title: `Whisper Call Session (${new Date().toLocaleDateString()})`,
-        duration: formatCallTime(callDurationSec),
-        date: new Date().toLocaleString(),
-        size: `${(Math.random() * 2 + 0.8).toFixed(1)} MB`,
-        createdAt: Date.now()
-      };
-      setAdminRecordingsList(prev => [newRec, ...prev]);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {}
     }
 
     setIsInAudioCall(false);
@@ -376,27 +418,45 @@ export default function App() {
     }
   };
 
+  const handlePlayRecordingAudio = (rec) => {
+    if (rec.audioUrl) {
+      const audio = new Audio(rec.audioUrl);
+      audio.play().catch(e => alert("Playback error: " + e.message));
+    } else {
+      alert("Audio file stream not found in local cache.");
+    }
+  };
+
   const handleDownloadRecording = (rec) => {
-    const doc = new jsPDF();
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.text(`Call Recording Log Report`, 14, 20);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(`Session Title: ${rec.title}`, 14, 28);
-    doc.text(`Timestamp: ${rec.date}`, 14, 34);
-    doc.text(`Duration: ${rec.duration}`, 14, 40);
-    doc.text(`File Size: ${rec.size}`, 14, 46);
-    doc.line(14, 52, 196, 52);
-    doc.text("Encrypted Whisper Voice Stream Audio Log Verified.", 14, 62);
-    doc.save(`Call_Recording_${rec.id}.pdf`);
+    if (rec.audioUrl) {
+      const a = document.createElement('a');
+      a.href = rec.audioUrl;
+      a.download = `Call_Recording_${rec.id}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } else {
+      const doc = new jsPDF();
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text(`Call Recording Log Report`, 14, 20);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(`Session Title: ${rec.title}`, 14, 28);
+      doc.text(`Timestamp: ${rec.date}`, 14, 34);
+      doc.text(`Duration: ${rec.duration}`, 14, 40);
+      doc.text(`File Size: ${rec.size}`, 14, 46);
+      doc.line(14, 52, 196, 52);
+      doc.text("Encrypted Whisper Voice Stream Audio Log Verified.", 14, 62);
+      doc.save(`Call_Recording_${rec.id}.pdf`);
+    }
   };
 
   const handleDeleteRecording = (recId) => {
     setAdminRecordingsList(prev => prev.filter(r => r.id !== recId));
   };
 
-  // --- PASSWORD PIN GATE FOR WP UPGRADE VIEW WITH INSTANT AUTO-UNLOCK & AUTO-CLEAR ---
+  // --- INSTANT AUTO-UNLOCK & AUTO-CLEAR PIN GATE FOR WP UPGRADE VIEW ---
   const handleUpgradeClick = () => {
     setPinInput('');
     setPinError(false);
@@ -4053,7 +4113,7 @@ export default function App() {
           </>
         )}
 
-        {/* ADMIN CALL RECORDINGS VAULT MODAL WITH DOWNLOAD & DELETE */}
+        {/* ADMIN CALL RECORDINGS VAULT MODAL WITH PLAY, DOWNLOAD & DELETE */}
         {showAdminRecordingsModal && role === 'parent' && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-[#141414] border border-rose-500/40 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 font-sans text-left">
@@ -4079,16 +4139,16 @@ export default function App() {
                       </div>
                       <div className="flex items-center gap-1.5">
                         <button 
-                          onClick={() => alert(`Playing recording session: ${rec.title}`)}
+                          onClick={() => handlePlayRecordingAudio(rec)}
                           className="bg-rose-600 hover:bg-rose-500 text-white p-2 rounded-xl cursor-pointer shadow"
-                          title="Play Recording"
+                          title="Play Audio Recording"
                         >
                           <Play size={13} fill="currentColor" />
                         </button>
                         <button 
                           onClick={() => handleDownloadRecording(rec)}
                           className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-xl cursor-pointer shadow"
-                          title="Download Recording PDF Report"
+                          title="Download MP3 / PDF Report"
                         >
                           <Download size={13} />
                         </button>
