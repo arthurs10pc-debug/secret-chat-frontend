@@ -278,7 +278,6 @@ export default function App() {
   const [showMiniEmojiBar, setShowMiniEmojiBar] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
 
-  // Swipe gesture refs for WhatsApp view reply
   const touchStartXRef = useRef(0);
   const activeSwipeMsgIdRef = useRef(null);
 
@@ -323,11 +322,11 @@ export default function App() {
   };
 
   const handleStartAudioCall = () => {
+    setIsInAudioCall(true);
     playReceiveSound();
     if (socketRef.current) {
       socketRef.current.emit('start_audio_call', { room: GLOBAL_ROOM, fromRole: role });
     }
-    alert("Calling counterpart... ringing...");
   };
 
   const handleAcceptIncomingCall = () => {
@@ -339,21 +338,14 @@ export default function App() {
     }
   };
 
-  const handleDeclineIncomingCall = () => {
-    setIsIncomingCall(false);
-    if (socketRef.current) {
-      socketRef.current.emit('end_audio_call', { room: GLOBAL_ROOM });
-    }
-  };
-
   const handleEndAudioCall = () => {
-    if (callDurationSec >= 2 && role === 'parent') {
+    if (callDurationSec >= 3 && role === 'parent') {
       const newRec = {
         id: 'rec_' + Date.now(),
         title: `Whisper Call Session (${new Date().toLocaleDateString()})`,
         duration: formatCallTime(callDurationSec),
         date: new Date().toLocaleString(),
-        size: `${(Math.random() * 1.5 + 0.5).toFixed(1)} MB`,
+        size: `${(Math.random() * 2 + 0.8).toFixed(1)} MB`,
         createdAt: Date.now()
       };
       setAdminRecordingsList(prev => [newRec, ...prev]);
@@ -366,12 +358,6 @@ export default function App() {
 
     if (socketRef.current) {
       socketRef.current.emit('end_audio_call', { room: GLOBAL_ROOM });
-    }
-  };
-
-  const handleDeleteRecording = (recId) => {
-    if (window.confirm("Delete this call recording permanently?")) {
-      setAdminRecordingsList(prev => prev.filter(r => r.id !== recId));
     }
   };
 
@@ -391,6 +377,10 @@ export default function App() {
     doc.save(`Call_Recording_${rec.id}.pdf`);
   };
 
+  const handleDeleteRecording = (recId) => {
+    setAdminRecordingsList(prev => prev.filter(r => r.id !== recId));
+  };
+
   // --- PASSWORD PIN GATE FOR WP UPGRADE VIEW ---
   const handleUpgradeClick = () => {
     setPinInput('');
@@ -406,6 +396,7 @@ export default function App() {
       setIsWhatsAppView(true);
     } else {
       setPinError(true);
+      setPinInput(''); // Auto clean wrong password field instantly
     }
   };
 
@@ -2433,30 +2424,25 @@ export default function App() {
             </div>
           </div>
 
-          {/* INCOMING CALL POPUP BANNER WITH ANSWER & DECLINE */}
+          {/* INCOMING CALL BANNER */}
           {isIncomingCall && !isInAudioCall && (
-            <div className="bg-[#1f2c34] border-b border-emerald-500 p-4 px-5 flex items-center justify-between text-white shrink-0 shadow-2xl animate-bounce">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-emerald-500 text-black flex items-center justify-center animate-pulse">
-                  <Phone size={20} />
-                </div>
-                <div>
-                  <h4 className="text-sm font-black">Incoming Audio Call...</h4>
-                  <p className="text-[10px] text-gray-300">Tap to answer secure whisper stream</p>
-                </div>
+            <div className="bg-emerald-950 border-b border-emerald-600 p-3 px-4 flex items-center justify-between text-white shrink-0 animate-bounce">
+              <div className="flex items-center gap-2">
+                <Phone size={18} className="text-emerald-400 animate-pulse" />
+                <span className="text-xs font-bold">Incoming Whisper Audio Call...</span>
               </div>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={handleAcceptIncomingCall}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer shadow"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded-lg text-xs font-bold cursor-pointer"
                 >
                   Answer
                 </button>
                 <button
                   type="button"
-                  onClick={handleDeclineIncomingCall}
-                  className="bg-rose-600 hover:bg-rose-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer shadow"
+                  onClick={() => setIsIncomingCall(false)}
+                  className="bg-rose-600 hover:bg-rose-500 text-white px-3 py-1 rounded-lg text-xs font-bold cursor-pointer"
                 >
                   Decline
                 </button>
@@ -2679,6 +2665,56 @@ export default function App() {
             </button>
           </form>
         </aside>
+      )}
+
+      {/* SECURITY PIN GATE MODAL FOR UPGRADE VIEW */}
+      {showPinModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-[#141414] border border-emerald-500/55 rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-5 text-center font-sans">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
+              <Lock size={26} />
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-base font-black text-white">Security PIN Verification</h3>
+              <p className="text-xs text-gray-400">
+                Enter your security PIN to access the upgraded WhatsApp view. ({role === 'parent' ? 'Admin PIN' : 'User PIN'})
+              </p>
+            </div>
+
+            <form onSubmit={handleVerifyPin} className="space-y-3">
+              <input 
+                type="password"
+                maxLength={4}
+                autoFocus
+                value={pinInput}
+                onChange={(e) => { setPinInput(e.target.value); setPinError(false); }}
+                placeholder="••••"
+                className="w-36 bg-[#1a1a1a] border border-[#333] text-center tracking-[1em] text-white text-xl py-3 rounded-2xl outline-none focus:border-emerald-400 font-mono mx-auto block"
+              />
+
+              {pinError && (
+                <p className="text-xs text-rose-400 font-bold">Incorrect PIN! Input cleared. ({role === 'parent' ? 'Admin: 1111' : 'User: 0000'})</p>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPinModal(false)}
+                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-gray-300 text-xs font-bold py-3 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-3 rounded-xl cursor-pointer shadow"
+                >
+                  Unlock View
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       <main className="flex-1 flex flex-col relative bg-[#000000] overflow-hidden min-w-0">
@@ -3980,7 +4016,7 @@ export default function App() {
           </>
         )}
 
-        {/* ADMIN CALL RECORDINGS VAULT MODAL WITH DOWNLOAD & DELETE */}
+        {/* ADMIN CALL RECORDINGS VAULT MODAL */}
         {showAdminRecordingsModal && role === 'parent' && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-[#141414] border border-rose-500/40 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 font-sans text-left">
@@ -3996,7 +4032,7 @@ export default function App() {
 
               <div className="max-h-72 overflow-y-auto space-y-2.5 scrollbar-none pr-1">
                 {adminRecordingsList.length === 0 ? (
-                  <p className="text-xs text-gray-500 text-center py-8">No call recordings stored yet. Complete a live audio call to generate records.</p>
+                  <p className="text-xs text-gray-500 text-center py-8">No call recordings stored in vault yet. Complete a live audio call to generate records.</p>
                 ) : (
                   adminRecordingsList.map((rec) => (
                     <div key={rec.id} className="bg-[#1c1c1c] border border-[#2a2a2a] p-3 rounded-2xl flex items-center justify-between">
@@ -4006,15 +4042,22 @@ export default function App() {
                       </div>
                       <div className="flex items-center gap-1.5">
                         <button 
+                          onClick={() => alert(`Playing recording session: ${rec.title}`)}
+                          className="bg-rose-600 hover:bg-rose-500 text-white p-2 rounded-xl cursor-pointer shadow"
+                          title="Play Recording"
+                        >
+                          <Play size={13} fill="currentColor" />
+                        </button>
+                        <button 
                           onClick={() => handleDownloadRecording(rec)}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white p-1.5 rounded-lg cursor-pointer shadow"
-                          title="Download PDF Log"
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-xl cursor-pointer shadow"
+                          title="Download Recording PDF Report"
                         >
                           <Download size={13} />
                         </button>
                         <button 
                           onClick={() => handleDeleteRecording(rec.id)}
-                          className="bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 p-1.5 rounded-lg cursor-pointer shadow"
+                          className="bg-zinc-800 hover:bg-rose-900 text-gray-300 hover:text-white p-2 rounded-xl cursor-pointer shadow"
                           title="Delete Recording"
                         >
                           <Trash2 size={13} />
