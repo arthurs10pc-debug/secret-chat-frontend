@@ -396,7 +396,7 @@ export default function App() {
     setAdminRecordingsList(prev => prev.filter(r => r.id !== recId));
   };
 
-  // --- PASSWORD PIN GATE FOR WP UPGRADE VIEW WITH INSTANT AUTO-CLEAR & ANIMATION ---
+  // --- PASSWORD PIN GATE FOR WP UPGRADE VIEW WITH INSTANT AUTO-UNLOCK & AUTO-CLEAR ---
   const handleUpgradeClick = () => {
     setPinInput('');
     setPinError(false);
@@ -415,7 +415,7 @@ export default function App() {
         setIsWhatsAppView(true);
       } else {
         setPinError(true);
-        setPinInput(''); // Instant clean so user doesn't have to backspace manually
+        setPinInput(''); // Instant auto-clear on wrong password
       }
     }
   };
@@ -2704,7 +2704,7 @@ export default function App() {
         </aside>
       )}
 
-      {/* SECURITY PIN GATE MODAL FOR UPGRADE VIEW WITH SMOOTH ANIMATION */}
+      {/* SECURITY PIN GATE MODAL FOR UPGRADE VIEW WITH INSTANT AUTO-UNLOCK & ANIMATION */}
       {showPinModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-[#141414] border border-emerald-500/55 rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-5 text-center font-sans transform animate-in zoom-in-95 duration-200">
@@ -2715,7 +2715,7 @@ export default function App() {
             <div className="space-y-1">
               <h3 className="text-base font-black text-white">Security PIN Verification</h3>
               <p className="text-xs text-gray-400">
-                Enter your security PIN to access the upgraded WhatsApp view. ({role === 'parent' ? 'Admin PIN: 1111' : 'User PIN: 0000'})
+                Enter 4-digit PIN to access WP view ({role === 'parent' ? 'Admin: 1111' : 'User: 0000'})
               </p>
             </div>
 
@@ -2731,7 +2731,7 @@ export default function App() {
               />
 
               {pinError && (
-                <p className="text-xs text-rose-400 font-bold">Incorrect PIN! Automatically cleared. Try again.</p>
+                <p className="text-xs text-rose-400 font-bold">Incorrect PIN! Automatically cleared.</p>
               )}
 
               <div className="flex gap-2 pt-2">
@@ -2746,7 +2746,7 @@ export default function App() {
                   type="submit"
                   className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-3 rounded-xl cursor-pointer shadow"
                 >
-                  Unlock View
+                  Unlock
                 </button>
               </div>
             </form>
