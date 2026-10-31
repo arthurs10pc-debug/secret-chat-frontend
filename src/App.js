@@ -140,6 +140,11 @@ export default function App() {
   const [incomingGameRequest, setIncomingGameRequest] = useState(false);
   const [activeGame, setActiveGame] = useState(null);
 
+  // PWA Mobile Install Prompt State
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
+  const [showIosInstallGuide, setShowIosInstallGuide] = useState(false);
+
   // Togepi Live Chat Widget State inside Codex
   const [showTogepiMenu, setShowTogepiMenu] = useState(false);
   const [togepiInput, setTogepiInput] = useState('');
@@ -403,6 +408,29 @@ export default function App() {
       console.error("Microphone permission error:", err);
       alert("Microphone permission required for audio calls: " + err.message);
       return null;
+    }
+  };
+
+  // Handler: Install PWA on Mobile Devices (Android & iOS)
+  const handleInstallApp = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      try {
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          setIsAppInstalled(true);
+        }
+      } catch (err) {
+        console.warn("Install prompt error:", err);
+      }
+      setDeferredPrompt(null);
+    } else {
+      const isIos = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+      if (isIos) {
+        setShowIosInstallGuide(true);
+      } else {
+        alert("To install this app on your phone:\n\n1. Tap your browser menu (⋮ or Share)\n2. Select 'Add to Home screen' or 'Install App'");
+      }
     }
   };
 
@@ -1364,25 +1392,55 @@ export default function App() {
   }, [initGlobalPlayer]);
 
   useEffect(() => {
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
+    // 1. Register Service Worker on all browsers (including iOS Safari)
+    if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').then(async (reg) => {
         swRegistrationRef.current = reg;
-        try {
-          let subscription = await reg.pushManager.getSubscription();
-          if (!subscription) {
-            subscription = await reg.pushManager.subscribe({
-              userVisibleOnly: true,
-              applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
+        if ('PushManager' in window) {
+          try {
+            let subscription = await reg.pushManager.getSubscription();
+            if (!subscription) {
+              subscription = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array("BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZ_WJJjzWDMWJKEusEK66q5mt0oBN431Mnv31JA")
+              });
+            }
+            await fetch(`${SOCKET_URL}/api/save-subscription`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(subscription)
             });
+          } catch (err) {
+            console.warn("Push subscription failed or rejected:", err);
           }
-          await fetch(`${SOCKET_URL}/api/save-subscription`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(subscription)
-          });
-        } catch (e) {}
-      }).catch(() => {});
+        }
+      }).catch(err => {
+        console.warn("SW Registration Error:", err);
+      });
     }
+
+    // 2. Listen for PWA beforeinstallprompt on Android & Desktop
+    const handleBeforeInstall = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+
+    // 3. Detect if already running in standalone PWA mode
+    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+      setIsAppInstalled(true);
+    }
+
+    const handleAppInstalled = () => {
+      setIsAppInstalled(true);
+      setDeferredPrompt(null);
+    };
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
   }, []);
 
   useEffect(() => {
@@ -2598,7 +2656,7 @@ export default function App() {
 
       {/* UNIVERSAL INCOMING VOICE CALL OVERLAY (VISIBLE IN ALL VIEWS) */}
       {isIncomingCall && !isInAudioCall && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[999999] bg-[#1a2e26]/95 border-2 border-emerald-500 text-white p-3.5 px-6 rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.8)] backdrop-blur-md flex items-center gap-4 animate-in slide-in-from-top duration-300 font-sans">
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[999999] w-[94vw] max-w-md bg-[#1a2e26]/95 border-2 border-emerald-500 text-white p-3 sm:p-3.5 px-4 sm:px-6 rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.8)] backdrop-blur-md flex items-center justify-between gap-2.5 sm:gap-4 animate-in slide-in-from-top duration-300 font-sans">
           <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-400 flex items-center justify-center text-emerald-400 animate-pulse shrink-0">
             <Phone size={20} />
           </div>
@@ -2627,7 +2685,7 @@ export default function App() {
 
       {/* UNIVERSAL OUTGOING CALLING BANNER */}
       {isCalling && !isInAudioCall && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[999999] bg-[#141d24]/95 border-2 border-blue-500 text-white p-3 px-5 rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.8)] backdrop-blur-md flex items-center gap-4 animate-in slide-in-from-top duration-300 font-sans">
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[999999] w-[92vw] max-w-md bg-[#141d24]/95 border-2 border-blue-500 text-white p-3 px-4 sm:px-5 rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.8)] backdrop-blur-md flex items-center justify-between gap-3 animate-in slide-in-from-top duration-300 font-sans">
           <div className="w-8 h-8 rounded-full bg-blue-500/20 border border-blue-400 flex items-center justify-center text-blue-400 animate-pulse shrink-0">
             <Phone size={16} />
           </div>
@@ -2647,7 +2705,7 @@ export default function App() {
 
       {/* UNIVERSAL ACTIVE CALL FLOATING BAR (VISIBLE IN ALL VIEWS) */}
       {isInAudioCall && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[999999] bg-[#0c1813]/95 border-2 border-emerald-500/80 text-white p-2.5 px-5 rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.8)] backdrop-blur-md flex items-center gap-3.5 animate-in slide-in-from-top duration-300 font-sans">
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[999999] w-[95vw] max-w-lg bg-[#0c1813]/95 border-2 border-emerald-500/80 text-white p-2.5 px-3 sm:px-5 rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.8)] backdrop-blur-md flex items-center justify-between gap-2 sm:gap-3.5 animate-in slide-in-from-top duration-300 font-sans flex-wrap sm:flex-nowrap">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
             <span className="text-xs font-mono font-black text-emerald-300">
@@ -2907,6 +2965,19 @@ export default function App() {
                 className="p-2 text-gray-400 hover:text-amber-400 hover:bg-[#1a1a1a] rounded-xl cursor-pointer"
               >
                 <Download size={15} />
+              </button>
+            </div>
+          )}
+
+          {!isAppInstalled && (
+            <div className="px-3 py-2 border-t border-[#171717] bg-[#0c0c0c]">
+              <button
+                onClick={() => { handleInstallApp(); closeSidebarOnMobile(); }}
+                className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg cursor-pointer active:scale-95 transition-all"
+                title="Install ChatGPT on your phone"
+              >
+                <Download size={15} className="animate-bounce" />
+                <span>Install App on Mobile</span>
               </button>
             </div>
           )}
@@ -3206,6 +3277,44 @@ export default function App() {
       )}
 
       {/* SECURITY PIN GATE MODAL FOR UPGRADE VIEW WITH INSTANT AUTO-UNLOCK & ANIMATION */}
+      {/* IOS INSTALLATION HELPER GUIDE MODAL */}
+      {showIosInstallGuide && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-[#141414] border border-emerald-500/50 rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-4 font-sans text-center">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto text-2xl">
+              📱
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-black text-white">Install on iPhone / iPad</h3>
+              <p className="text-xs text-gray-400">Install as a full-screen app in 3 quick steps:</p>
+            </div>
+
+            <div className="space-y-3 text-left text-xs bg-[#1a1a1a] p-4 rounded-2xl border border-[#2a2a2a]">
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center text-[11px] shrink-0 mt-0.5">1</span>
+                <p className="text-gray-200">Tap the <strong className="text-emerald-400">Share button</strong> (square with up arrow) in the bottom bar of Safari.</p>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center text-[11px] shrink-0 mt-0.5">2</span>
+                <p className="text-gray-200">Scroll down and tap <strong className="text-emerald-400">"Add to Home Screen"</strong> (+ icon).</p>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center text-[11px] shrink-0 mt-0.5">3</span>
+                <p className="text-gray-200">Tap <strong className="text-white">Add</strong> in the top-right corner.</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowIosInstallGuide(false)}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-3 rounded-xl cursor-pointer shadow active:scale-95 transition-all"
+            >
+              Got it!
+            </button>
+          </div>
+        </div>
+      )}
+
       {showPinModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-[#141414] border border-emerald-500/55 rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-5 text-center font-sans transform animate-in zoom-in-95 duration-200">
@@ -3271,23 +3380,24 @@ export default function App() {
             </span>
 
             {role === 'parent' && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   onClick={() => setShowAdminRecordingsModal(true)}
-                  className="flex items-center gap-1.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-600/60 text-rose-300 px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all ml-1 cursor-pointer shadow active:scale-95 shrink-0"
+                  className="flex items-center gap-1.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-600/60 text-rose-300 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer shadow active:scale-95 shrink-0"
                   title="Admin Call Recordings Vault"
                 >
                   <Disc size={14} className="text-rose-400 animate-spin" style={{ animationDuration: '3s' }} />
-                  <span>Call Recordings</span>
+                  <span className="hidden md:inline">Call Recordings</span>
                 </button>
 
                 <button
                   onClick={downloadFullChatPDF}
                   title="Click to export chat PDF manually (Auto-downloads daily at 7:20 PM)"
-                  className="flex items-center gap-1.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all ml-2 cursor-pointer shadow-[0_0_10px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
+                  className="flex items-center gap-1.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer shadow-[0_0_10px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
                 >
                   <Timer size={15} className="text-emerald-400 animate-spin" style={{ animationDuration: '4s' }} />
-                  <span>7:20 PM: {countdownStr}</span>
+                  <span className="hidden md:inline">7:20 PM: {countdownStr}</span>
+                  <span className="md:hidden text-[11px] font-mono">7:20 PM</span>
                 </button>
               </div>
             )}
@@ -3384,8 +3494,8 @@ export default function App() {
 
         {/* ACTIVE PLUGIN GAME VIEW: LUDO ROYAL CLASH (MULTIPLAYER) */}
         {activeGame ? (
-          <section className="flex-1 overflow-y-auto px-2 sm:px-4 py-4 max-w-2xl w-full mx-auto space-y-3 scrollbar-none font-sans flex flex-col items-center justify-center">
-            <div className="w-full bg-[#121212] border-2 border-amber-500/50 rounded-3xl p-4 sm:p-6 shadow-2xl relative space-y-4 text-center">
+          <section className="flex-1 overflow-y-auto px-1 sm:px-4 py-2 sm:py-4 max-w-2xl w-full mx-auto space-y-3 scrollbar-none font-sans flex flex-col items-center justify-center">
+            <div className="w-full bg-[#121212] border-2 border-amber-500/50 rounded-3xl p-2.5 sm:p-6 shadow-2xl relative space-y-3 sm:space-y-4 text-center">
               
               {/* HEADER BAR */}
               <div className="flex items-center justify-between border-b border-[#262626] pb-3">
@@ -3469,7 +3579,7 @@ export default function App() {
               </div>
 
               {/* --- COLORFUL AUTHENTIC LUDO BOARD --- */}
-              <div className="w-full max-w-[420px] aspect-square mx-auto bg-[#f8fafc] border-4 border-amber-500/80 rounded-3xl p-2.5 shadow-[0_15px_40px_rgba(0,0,0,0.8)] relative select-none flex flex-col justify-between overflow-hidden">
+              <div className="w-full max-w-[390px] aspect-square mx-auto bg-[#f8fafc] border-4 border-amber-500/80 rounded-3xl p-2 shadow-[0_15px_40px_rgba(0,0,0,0.8)] relative select-none flex flex-col justify-between overflow-hidden">
                 
                 {/* TOP HALF: RED BASE | TOP ARM | GREEN BASE */}
                 <div className="h-[40%] flex justify-between gap-1.5">
