@@ -22,14 +22,7 @@ const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "🙏", "👌", 
 const HOVER_REACTIONS = ["👍", "❤️", "🥰", "😆", "😮", "😢", "➕"];
 
 const ARCADE_GAMES = [
-  { id: 'tictactoe', name: 'Tic Tac Toe (Ultimate Edition)', desc: 'Classic 3x3 grid tactical challenge' },
-  { id: 'pong', name: 'Pong (Retro Arcade)', desc: 'Retro paddle and ball rally duel' },
-  { id: 'airhockey', name: 'Air Hockey (Mini)', desc: 'Fast reflex puck-sliding showdown' },
-  { id: 'drawguess', name: 'Draw & Guess Mini', desc: 'Quick sketch and prompt guessing' },
-  { id: 'battleship', name: 'Battleship (Mini Grid)', desc: 'Target and sink enemy fleet' },
-  { id: 'ludo', name: 'Ludo (Quick Sprint)', desc: 'Fast token race to home plate' },
-  { id: 'pool', name: 'Pool / 8-Ball (Mini Cue)', desc: 'Pocket cue shots precision duel' },
-  { id: 'snakeladder', name: 'Snake & Ladder (Speed Sprint)', desc: 'Dice roll race to the top' }
+  { id: 'ludo', name: 'Ludo (Royal Clash)', desc: '2-Player Real-Time Multiplayer Board Game with Colorful Tokens & Animated 3D Dice' }
 ];
 
 const DEFAULT_RECENT_CHATS = [
@@ -109,18 +102,24 @@ export default function App() {
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
 
-  // Real WebRTC Audio Call States & MediaRecorder for MP3 format
+  // Real WebRTC Audio Call States & MediaRecorder for Audio Recording
   const [isInAudioCall, setIsInAudioCall] = useState(false);
   const [isIncomingCall, setIsIncomingCall] = useState(false);
+  const [isCalling, setIsCalling] = useState(false);
   const [isWhisperModeEnabled, setIsWhisperModeEnabled] = useState(false);
   const [isCallMuted, setIsCallMuted] = useState(false);
   const [callDurationSec, setCallDurationSec] = useState(0);
+  const callDurationRef = useRef(0);
   const callTimerRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
+  const remoteStreamRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const audioContextRef = useRef(null);
+  const audioMixerDestRef = useRef(null);
+  const pendingIceCandidatesRef = useRef([]);
 
   // Admin Call Recording Vault State
   const [showAdminRecordingsModal, setShowAdminRecordingsModal] = useState(false);
@@ -146,40 +145,26 @@ export default function App() {
   const [togepiInput, setTogepiInput] = useState('');
   const [togepiChatHistory, setTogepiChatHistory] = useState([]);
   const [incomingTogepiAlert, setIncomingTogepiAlert] = useState(null);
-  const [isTogepiVisible, setIsTogepiVisible] = useState(false);
-  const togepiHideTimerRef = useRef(null);
+  const [isTogepiVisible, setIsTogepiVisible] = useState(true);
 
-  // Live Scores & Game States (H vs A)
+  // Codex Cinema Delay Gap Sync State
+  const [syncDelayGapText, setSyncDelayGapText] = useState('');
+  const delayGapTimeoutRef = useRef(null);
+  const codexYTPlayerRef = useRef(null);
+  const togepiScrollRef = useRef(null);
+
+  // Live Scores & Ludo Royal Clash Game State (Player H = Red vs Player A = Green)
   const [scores, setScores] = useState({ H: 0, A: 0 });
   const [winnerMessage, setWinnerMessage] = useState('');
-
-  // 1. Tic Tac Toe State
-  const [tictactoeBoard, setTictactoeBoard] = useState(Array(9).fill(null));
-  const [isHNext, setIsHNext] = useState(true);
-
-  // 2. Ludo State
-  const [ludoPos, setLudoPos] = useState({ H: 0, A: 0 });
-  const [ludoTurn, setLudoTurn] = useState('H');
-  const [diceVal, setDiceVal] = useState(1);
-
-  // 3. Pong State
-  const [pongScore, setPongScore] = useState({ H: 0, A: 0 });
-
-  // 4. Air Hockey State
-  const [hockeyScore, setHockeyScore] = useState({ H: 0, A: 0 });
-
-  // 5. Battleship State
-  const [battleshipGrid, setBattleshipGrid] = useState(Array(9).fill('empty'));
-  const [battleshipHits, setBattleshipHits] = useState({ H: 0, A: 0 });
-
-  // 6. Pool State
-  const [poolBalls, setPoolBalls] = useState({ H: 0, A: 0 });
-
-  // 7. Snake & Ladder State
-  const [snakePos, setSnakePos] = useState({ H: 1, A: 1 });
-
-  // 8. Draw & Guess State
-  const [drawGuessWord] = useState('Golden Crown');
+  const [ludoTokens, setLudoTokens] = useState({
+    H: [-1, -1, -1, -1],
+    A: [-1, -1, -1, -1]
+  });
+  const [ludoTurn, setLudoTurn] = useState('H'); // 'H' (Admin) or 'A' (User)
+  const [diceVal, setDiceVal] = useState(6);
+  const [isDiceRolling, setIsDiceRolling] = useState(false);
+  const [ludoStatusMsg, setLudoStatusMsg] = useState('Welcome to Ludo Royal! Admin rolls first.');
+  const [movableTokens, setMovableTokens] = useState([]);
 
   // 7:20 PM Auto-Download Countdown Timer State
   const [countdownStr, setCountdownStr] = useState("00:00:00");
@@ -301,110 +286,95 @@ export default function App() {
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
-  // --- WEBRTC PEER CONNECTION & CALL RECORDING SETUP ---
+  // --- CODEX CINEMA YOUTUBE PLAYER SYNC ENGINE ---
   useEffect(() => {
-    if (isInAudioCall) {
-      setCallDurationSec(0);
-      audioChunksRef.current = [];
-
-      callTimerRef.current = setInterval(() => {
-        setCallDurationSec(prev => prev + 1);
-      }, 1000);
-
-      navigator.mediaDevices?.getUserMedia({ audio: true, video: false })
-        .then(stream => {
-          localStreamRef.current = stream;
-
-          const pc = new RTCPeerConnection({
-            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    if (codexEngine === 'youtube' && activeMovieYTId) {
+      let ytTimer = null;
+      const initCodexYT = () => {
+        if (!window.YT || !window.YT.Player) return;
+        try {
+          if (codexYTPlayerRef.current && typeof codexYTPlayerRef.current.destroy === 'function') {
+            codexYTPlayerRef.current.destroy();
+          }
+          codexYTPlayerRef.current = new window.YT.Player('codex-cinema-yt-player', {
+            videoId: activeMovieYTId,
+            playerVars: {
+              autoplay: 1,
+              controls: 1,
+              modestbranding: 1,
+              rel: 0,
+              enablejsapi: 1,
+              origin: window.location.origin
+            },
+            events: {
+              onReady: () => {
+                if (isMoviePlaying && codexYTPlayerRef.current?.playVideo) {
+                  codexYTPlayerRef.current.playVideo();
+                }
+              },
+              onStateChange: (event) => {
+                if (isMovieRemoteTriggerRef.current) return;
+                // 1 = PLAYING, 2 = PAUSED
+                if (event.data === 1) {
+                  setIsMoviePlaying(true);
+                  if (socketRef.current) {
+                    socketRef.current.emit('codex_movie_sync', {
+                      room: GLOBAL_ROOM,
+                      state: 'PLAY',
+                      currentTime: codexYTPlayerRef.current?.getCurrentTime() || 0,
+                      timestamp: Date.now()
+                    });
+                  }
+                } else if (event.data === 2) {
+                  setIsMoviePlaying(false);
+                  if (socketRef.current) {
+                    socketRef.current.emit('codex_movie_sync', {
+                      room: GLOBAL_ROOM,
+                      state: 'PAUSE',
+                      currentTime: codexYTPlayerRef.current?.getCurrentTime() || 0,
+                      timestamp: Date.now()
+                    });
+                  }
+                }
+              }
+            }
           });
-          peerConnectionRef.current = pc;
+        } catch (e) {
+          console.warn("Codex YT Player Init Error:", e);
+        }
+      };
 
-          stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      ytTimer = setInterval(() => {
+        const targetEl = document.getElementById('codex-cinema-yt-player');
+        if (window.YT && window.YT.Player && targetEl) {
+          initCodexYT();
+          clearInterval(ytTimer);
+        }
+      }, 300);
 
-          pc.ontrack = (event) => {
-            if (remoteAudioRef.current && event.streams[0]) {
-              remoteAudioRef.current.srcObject = event.streams[0];
-            }
-          };
-
-          pc.onicecandidate = (event) => {
-            if (event.candidate && socketRef.current) {
-              socketRef.current.emit('webrtc_ice_candidate', { room: GLOBAL_ROOM, candidate: event.candidate });
-            }
-          };
-
-          if (role === 'parent') {
-            pc.createOffer().then(offer => {
-              return pc.setLocalDescription(offer);
-            }).then(() => {
-              if (socketRef.current) {
-                socketRef.current.emit('webrtc_offer', { room: GLOBAL_ROOM, offer: pc.localDescription });
-              }
-            }).catch(console.error);
-          }
-
-          // Initialize MediaRecorder for MP3/Audio Recording
-          try {
-            const options = { mimeType: 'audio/mp3' };
-            if (!MediaRecorder.isTypeSupported('audio/mp3')) {
-              options.mimeType = 'audio/webm';
-            }
-            const mediaRecorder = new MediaRecorder(stream, options);
-            mediaRecorderRef.current = mediaRecorder;
-
-            mediaRecorder.ondataavailable = (event) => {
-              if (event.data && event.data.size > 0) {
-                audioChunksRef.current.push(event.data);
-              }
-            };
-
-            mediaRecorder.onstop = () => {
-              if (callDurationSec >= 3 && role === 'parent') {
-                const blobType = MediaRecorder.isTypeSupported('audio/mp3') ? 'audio/mp3' : 'audio/webm';
-                const audioBlob = new Blob(audioChunksRef.current, { type: blobType });
-                const audioUrl = URL.createObjectURL(audioBlob);
-
-                const newRec = {
-                  id: 'rec_' + Date.now(),
-                  title: `Call Session (${new Date().toLocaleDateString()})`,
-                  duration: formatCallTime(callDurationSec),
-                  date: new Date().toLocaleString(),
-                  size: `${(audioBlob.size / (1024 * 1024)).toFixed(2)} MB`,
-                  audioUrl,
-                  createdAt: Date.now()
-                };
-                setAdminRecordingsList(prev => [newRec, ...prev]);
-              }
-            };
-
-            mediaRecorder.start();
-          } catch (e) {
-            console.log("MediaRecorder note:", e);
-          }
-        })
-        .catch(err => alert("Microphone permission required for audio calls: " + err.message));
-    } else {
-      if (callTimerRef.current) clearInterval(callTimerRef.current);
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        try { mediaRecorderRef.current.stop(); } catch (e) {}
-      }
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-        peerConnectionRef.current = null;
-      }
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
-        localStreamRef.current = null;
-      }
+      return () => {
+        if (ytTimer) clearInterval(ytTimer);
+        if (codexYTPlayerRef.current && typeof codexYTPlayerRef.current.destroy === 'function') {
+          try { codexYTPlayerRef.current.destroy(); } catch (e) {}
+          codexYTPlayerRef.current = null;
+        }
+      };
     }
-    return () => {
-      if (callTimerRef.current) clearInterval(callTimerRef.current);
-    };
-  }, [isInAudioCall]);
+  }, [codexEngine, activeMovieYTId]);
 
   useEffect(() => {
-    localStorage.setItem('stealth_admin_call_recordings', JSON.stringify(adminRecordingsList));
+    if (togepiScrollRef.current) {
+      togepiScrollRef.current.scrollTop = togepiScrollRef.current.scrollHeight;
+    }
+  }, [togepiChatHistory, showTogepiMenu]);
+
+  // --- PERSIST CALL RECORDINGS TO LOCALSTORAGE ---
+  useEffect(() => {
+    try {
+      localStorage.setItem('stealth_admin_call_recordings', JSON.stringify(adminRecordingsList));
+    } catch (e) {
+      console.warn("Storage quota limit reached for recordings:", e);
+    }
   }, [adminRecordingsList]);
 
   const formatCallTime = (totalSec) => {
@@ -413,38 +383,227 @@ export default function App() {
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
-  const handleStartAudioCall = () => {
-    setIsInAudioCall(true);
-    playReceiveSound();
+  // Helper: Acquire Local Microphone Stream
+  const getLocalAudioStream = async () => {
+    if (localStreamRef.current && localStreamRef.current.active) {
+      return localStreamRef.current;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+        video: false
+      });
+      localStreamRef.current = stream;
+      return stream;
+    } catch (err) {
+      console.error("Microphone permission error:", err);
+      alert("Microphone permission required for audio calls: " + err.message);
+      return null;
+    }
+  };
+
+  // Helper: Setup WebRTC PeerConnection with ICE and Track listeners
+  const setupPeerConnection = (stream) => {
+    if (peerConnectionRef.current) {
+      try { peerConnectionRef.current.close(); } catch (e) {}
+    }
+
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ]
+    });
+    peerConnectionRef.current = pc;
+
+    if (stream) {
+      stream.getTracks().forEach(track => {
+        pc.addTrack(track, stream);
+      });
+    }
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate && socketRef.current) {
+        socketRef.current.emit('webrtc_ice_candidate', { room: GLOBAL_ROOM, candidate: event.candidate });
+      }
+    };
+
+    pc.ontrack = (event) => {
+      if (event.streams && event.streams[0]) {
+        const rStream = event.streams[0];
+        remoteStreamRef.current = rStream;
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.srcObject = rStream;
+          remoteAudioRef.current.play().catch(e => console.log("Audio autoplay note:", e));
+        }
+        // Connect incoming remote audio to the call recording mixer
+        if (audioContextRef.current && audioMixerDestRef.current) {
+          try {
+            const remoteSource = audioContextRef.current.createMediaStreamSource(rStream);
+            remoteSource.connect(audioMixerDestRef.current);
+          } catch (e) {}
+        }
+      }
+    };
+
+    return pc;
+  };
+
+  // Helper: Mix local mic and remote audio together for HD Call Recording
+  const startCallRecording = (stream) => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx();
+      audioContextRef.current = ctx;
+      const dest = ctx.createMediaStreamDestination();
+      audioMixerDestRef.current = dest;
+
+      if (stream) {
+        const localSource = ctx.createMediaStreamSource(stream);
+        localSource.connect(dest);
+      }
+      if (remoteStreamRef.current) {
+        const remoteSource = ctx.createMediaStreamSource(remoteStreamRef.current);
+        remoteSource.connect(dest);
+      }
+
+      let mimeType = 'audio/webm';
+      if (!MediaRecorder.isTypeSupported('audio/webm')) {
+        if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
+        else mimeType = '';
+      }
+
+      const recorder = mimeType ? new MediaRecorder(dest.stream, { mimeType }) : new MediaRecorder(dest.stream);
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const duration = callDurationRef.current;
+        if (duration >= 1 && audioChunksRef.current.length > 0) {
+          const blob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64Audio = reader.result;
+            const newRec = {
+              id: 'rec_' + Date.now(),
+              title: `Call Session (${new Date().toLocaleDateString()})`,
+              duration: formatCallTime(duration),
+              date: new Date().toLocaleString(),
+              size: `${(blob.size / (1024 * 1024)).toFixed(2)} MB`,
+              audioUrl: base64Audio,
+              createdAt: Date.now()
+            };
+            setAdminRecordingsList(prev => [newRec, ...prev]);
+          };
+          reader.readAsDataURL(blob);
+        }
+      };
+
+      recorder.start(1000);
+    } catch (e) {
+      console.log("MediaRecorder setup note:", e);
+    }
+  };
+
+  // User/Admin initiates audio call
+  const handleStartAudioCall = async () => {
+    const stream = await getLocalAudioStream();
+    if (!stream) return;
+    setIsCalling(true);
+    playSentSound();
     if (socketRef.current) {
       socketRef.current.emit('start_audio_call', { room: GLOBAL_ROOM, fromRole: role });
     }
   };
 
-  const handleAcceptIncomingCall = () => {
+  // Receiver accepts incoming audio call
+  const handleAcceptIncomingCall = async () => {
     setIsIncomingCall(false);
+    setIsCalling(false);
     setIsInAudioCall(true);
     playReceiveSound();
+
+    setCallDurationSec(0);
+    callDurationRef.current = 0;
+    if (callTimerRef.current) clearInterval(callTimerRef.current);
+    callTimerRef.current = setInterval(() => {
+      callDurationRef.current += 1;
+      setCallDurationSec(prev => prev + 1);
+    }, 1000);
+
+    const stream = await getLocalAudioStream();
+    if (!stream) return;
+
+    setupPeerConnection(stream);
+    startCallRecording(stream);
+
     if (socketRef.current) {
-      socketRef.current.emit('accept_audio_call', { room: GLOBAL_ROOM });
+      socketRef.current.emit('accept_audio_call', { room: GLOBAL_ROOM, role });
     }
   };
 
+  // End or decline active call
   const handleEndAudioCall = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try { mediaRecorderRef.current.stop(); } catch (e) {}
     }
+    if (callTimerRef.current) clearInterval(callTimerRef.current);
+
+    if (peerConnectionRef.current) {
+      try { peerConnectionRef.current.close(); } catch (e) {}
+      peerConnectionRef.current = null;
+    }
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      try { audioContextRef.current.close(); } catch (e) {}
+      audioContextRef.current = null;
+    }
+
+    remoteStreamRef.current = null;
+    audioMixerDestRef.current = null;
+    pendingIceCandidatesRef.current = [];
 
     setIsInAudioCall(false);
     setIsIncomingCall(false);
+    setIsCalling(false);
     setIsWhisperModeEnabled(false);
     setIsCallMuted(false);
+    setCallDurationSec(0);
+    callDurationRef.current = 0;
 
     if (socketRef.current) {
       socketRef.current.emit('end_audio_call', { room: GLOBAL_ROOM });
     }
   };
 
+  // Toggle Microphone Mute
+  const handleToggleCallMute = () => {
+    const newMuted = !isCallMuted;
+    setIsCallMuted(newMuted);
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach(track => {
+        track.enabled = !newMuted;
+      });
+    }
+  };
+
+  // Playback recorded call
   const handlePlayRecordingAudio = (rec) => {
     if (rec.audioUrl) {
       const audio = new Audio(rec.audioUrl);
@@ -454,11 +613,12 @@ export default function App() {
     }
   };
 
+  // Download recorded call as audio file
   const handleDownloadRecording = (rec) => {
     if (rec.audioUrl) {
       const a = document.createElement('a');
       a.href = rec.audioUrl;
-      a.download = `Call_Recording_${rec.id}.mp3`;
+      a.download = `Call_Recording_${rec.id}.webm`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -977,58 +1137,52 @@ export default function App() {
   };
 
   const handleSendTogepiMessage = (textToSend) => {
-    if (!textToSend.trim()) return;
-    const msgObj = { sender: role, text: textToSend.trim(), time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+    if (!textToSend || !textToSend.trim()) return;
+    const clean = textToSend.trim();
+    const msgObj = { 
+      sender: role, 
+      text: clean, 
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+    };
     setTogepiChatHistory(prev => [...prev, msgObj]);
     setTogepiInput('');
 
     if (socketRef.current) {
-      socketRef.current.emit('togepi_movie_chat', { room: GLOBAL_ROOM, senderRole: role, text: textToSend.trim() });
+      socketRef.current.emit('togepi_movie_chat', { room: GLOBAL_ROOM, senderRole: role, text: clean });
     }
     playSentSound();
   };
 
   const handleUniversalSyncRealign = () => {
-    if (socketRef.current) {
-      if (codexEngine === 'youtube' && activeMovieYTId) {
-        socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'youtube', ytId: activeMovieYTId, senderRole: role });
-        if (playerRef.current && typeof playerRef.current.playVideo === 'function') {
-          playerRef.current.unMute();
-          playerRef.current.playVideo();
-        }
-      } else if (codexEngine === 'gofile' && activeMovieSrc) {
-        socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'gofile', url: activeMovieSrc, senderRole: role });
-        if (html5VideoRef.current) {
-          html5VideoRef.current.play().catch(() => {});
-        }
-      } else if (codexEngine === 'embed' && activeEmbedUrl) {
-        socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'embed', embedUrl: activeEmbedUrl, imdbId: currentImdbId, senderRole: role });
-      } else if (codexEngine === 'local') {
-        socketRef.current.emit('codex_movie_load', { room: GLOBAL_ROOM, engine: 'local', senderRole: role });
-        if (html5VideoRef.current) {
-          html5VideoRef.current.play().catch(() => {});
-        }
+    let currTime = 0;
+    let currState = 'PAUSE';
+
+    if (codexEngine === 'youtube') {
+      if (codexYTPlayerRef.current && typeof codexYTPlayerRef.current.getCurrentTime === 'function') {
+        currTime = codexYTPlayerRef.current.getCurrentTime() || 0;
+        const s = codexYTPlayerRef.current.getPlayerState();
+        currState = s === 1 ? 'PLAY' : 'PAUSE';
       }
-      alert("✨ Force-synced! Playback state and timeline re-aligned on both sides.");
+    } else if (html5VideoRef.current) {
+      currTime = html5VideoRef.current.currentTime || 0;
+      currState = html5VideoRef.current.paused ? 'PAUSE' : 'PLAY';
+    }
+
+    setSyncDelayGapText('⚡ Realigned (0.0s gap)');
+    if (delayGapTimeoutRef.current) clearTimeout(delayGapTimeoutRef.current);
+    delayGapTimeoutRef.current = setTimeout(() => setSyncDelayGapText(''), 3500);
+
+    if (socketRef.current) {
+      socketRef.current.emit('codex_force_realign', {
+        room: GLOBAL_ROOM,
+        engine: codexEngine,
+        state: currState,
+        currentTime: currTime,
+        timestamp: Date.now(),
+        senderRole: role
+      });
     }
   };
-
-  useEffect(() => {
-    const handleScreenTouch = () => {
-      setIsTogepiVisible(true);
-      if (togepiHideTimerRef.current) clearTimeout(togepiHideTimerRef.current);
-      togepiHideTimerRef.current = setTimeout(() => {
-        if (!showTogepiMenu) {
-          setIsTogepiVisible(false);
-        }
-      }, 4000);
-    };
-    window.addEventListener('pointerdown', handleScreenTouch);
-    return () => {
-      window.removeEventListener('pointerdown', handleScreenTouch);
-      if (togepiHideTimerRef.current) clearTimeout(togepiHideTimerRef.current);
-    };
-  }, [showTogepiMenu]);
 
   useEffect(() => {
     const timerInterval = setInterval(() => {
@@ -1328,39 +1482,78 @@ export default function App() {
 
     socketRef.current.on('accept_audio_call', () => {
       setIsIncomingCall(false);
+      setIsCalling(false);
       setIsInAudioCall(true);
       playReceiveSound();
+
+      setCallDurationSec(0);
+      callDurationRef.current = 0;
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+      callTimerRef.current = setInterval(() => {
+        callDurationRef.current += 1;
+        setCallDurationSec(prev => prev + 1);
+      }, 1000);
+
+      // Caller creates offer and starts recording
+      (async () => {
+        const stream = localStreamRef.current || await getLocalAudioStream();
+        if (!stream) return;
+        const pc = setupPeerConnection(stream);
+        startCallRecording(stream);
+        try {
+          const offer = await pc.createOffer({ offerToReceiveAudio: true });
+          await pc.setLocalDescription(offer);
+          if (socketRef.current) {
+            socketRef.current.emit('webrtc_offer', { room: GLOBAL_ROOM, offer });
+          }
+        } catch (err) {
+          console.error("WebRTC create offer error:", err);
+        }
+      })();
     });
 
     socketRef.current.on('end_audio_call', () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try { mediaRecorderRef.current.stop(); } catch (e) {}
+      }
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+
+      if (peerConnectionRef.current) {
+        try { peerConnectionRef.current.close(); } catch (e) {}
+        peerConnectionRef.current = null;
+      }
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(t => t.stop());
+        localStreamRef.current = null;
+      }
+      if (audioContextRef.current) {
+        try { audioContextRef.current.close(); } catch (e) {}
+        audioContextRef.current = null;
+      }
+      remoteStreamRef.current = null;
+      audioMixerDestRef.current = null;
+      pendingIceCandidatesRef.current = [];
+
       setIsInAudioCall(false);
       setIsIncomingCall(false);
+      setIsCalling(false);
       setIsWhisperModeEnabled(false);
       setIsCallMuted(false);
+      setCallDurationSec(0);
+      callDurationRef.current = 0;
     });
 
     socketRef.current.on('webrtc_offer', async ({ offer }) => {
       try {
-        const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-        peerConnectionRef.current = pc;
+        const stream = localStreamRef.current || await getLocalAudioStream();
+        const pc = peerConnectionRef.current || setupPeerConnection(stream);
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
-        pc.ontrack = (event) => {
-          if (remoteAudioRef.current && event.streams[0]) {
-            remoteAudioRef.current.srcObject = event.streams[0];
-          }
-        };
-
-        pc.onicecandidate = (event) => {
-          if (event.candidate && socketRef.current) {
-            socketRef.current.emit('webrtc_ice_candidate', { room: GLOBAL_ROOM, candidate: event.candidate });
-          }
-        };
-
-        if (localStreamRef.current) {
-          localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current));
+        while (pendingIceCandidatesRef.current.length > 0) {
+          const c = pendingIceCandidatesRef.current.shift();
+          await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
         }
 
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
@@ -1368,24 +1561,32 @@ export default function App() {
           socketRef.current.emit('webrtc_answer', { room: GLOBAL_ROOM, answer });
         }
       } catch (e) {
-        console.error("WebRTC offer error:", e);
+        console.error("WebRTC offer handling error:", e);
       }
     });
 
     socketRef.current.on('webrtc_answer', async ({ answer }) => {
       try {
-        if (peerConnectionRef.current) {
-          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+        const pc = peerConnectionRef.current;
+        if (pc) {
+          await pc.setRemoteDescription(new RTCSessionDescription(answer));
+          while (pendingIceCandidatesRef.current.length > 0) {
+            const c = pendingIceCandidatesRef.current.shift();
+            await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+          }
         }
       } catch (e) {
-        console.error("WebRTC answer error:", e);
+        console.error("WebRTC answer handling error:", e);
       }
     });
 
     socketRef.current.on('webrtc_ice_candidate', async ({ candidate }) => {
       try {
-        if (peerConnectionRef.current && candidate) {
-          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        const pc = peerConnectionRef.current;
+        if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } else {
+          pendingIceCandidatesRef.current.push(candidate);
         }
       } catch (e) {
         console.error("ICE candidate error:", e);
@@ -1440,46 +1641,58 @@ export default function App() {
     socketRef.current.on('togepi_movie_chat', ({ senderRole, text }) => {
       const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
       if (senderRole !== myRole) {
-        setTogepiChatHistory(prev => [...prev, { sender: senderRole, text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+        setTogepiChatHistory(prev => [...prev, { 
+          sender: senderRole, 
+          text, 
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+        }]);
         setIncomingTogepiAlert({ sender: senderRole, text, time: Date.now() });
-        setIsTogepiVisible(true);
         playReceiveSound();
       }
     });
 
+    socketRef.current.on('codex_force_realign_broadcast', (data) => {
+      if (!data) return;
+      const latency = Math.max(0, (Date.now() - (data.timestamp || Date.now())) / 1000);
+      const target = (data.currentTime || 0) + (data.state === 'PLAY' ? latency : 0);
+
+      const currentVTime = html5VideoRef.current ? html5VideoRef.current.currentTime : (codexYTPlayerRef.current?.getCurrentTime() || 0);
+      const gap = Math.abs(currentVTime - target);
+      setSyncDelayGapText(`⚡ Realigned (-${gap.toFixed(1)}s gap fixed)`);
+      if (delayGapTimeoutRef.current) clearTimeout(delayGapTimeoutRef.current);
+      delayGapTimeoutRef.current = setTimeout(() => setSyncDelayGapText(''), 3500);
+
+      if (codexEngine === 'youtube' && codexYTPlayerRef.current && typeof codexYTPlayerRef.current.seekTo === 'function') {
+        codexYTPlayerRef.current.seekTo(target, true);
+        if (data.state === 'PLAY') codexYTPlayerRef.current.playVideo();
+        else codexYTPlayerRef.current.pauseVideo();
+      } else if (html5VideoRef.current) {
+        isMovieRemoteTriggerRef.current = true;
+        html5VideoRef.current.currentTime = target;
+        if (data.state === 'PLAY') {
+          html5VideoRef.current.play().catch(() => {});
+          setIsMoviePlaying(true);
+        } else {
+          html5VideoRef.current.pause();
+          setIsMoviePlaying(false);
+        }
+        setTimeout(() => { isMovieRemoteTriggerRef.current = false; }, 600);
+      }
+      playReceiveSound();
+    });
+
     socketRef.current.on('arcade_game_action_broadcast', (moveData) => {
-      if (moveData.gameId === 'tictactoe') {
-        setTictactoeBoard(moveData.board);
-        setIsHNext(moveData.isHNext);
-        setWinnerMessage(moveData.winner || '');
+      if (moveData.gameId === 'ludo') {
+        if (moveData.tokens) setLudoTokens(moveData.tokens);
+        if (moveData.turn) setLudoTurn(moveData.turn);
+        if (moveData.dice) setDiceVal(moveData.dice);
+        if (moveData.statusMsg) setLudoStatusMsg(moveData.statusMsg);
         if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'ludo') {
-        setLudoPos(moveData.pos);
-        setLudoTurn(moveData.turn);
-        setDiceVal(moveData.dice);
-        setWinnerMessage(moveData.winner || '');
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'pong') {
-        setPongScore(moveData.score);
-        if (moveData.winner) setWinnerMessage(moveData.winner);
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'airhockey') {
-        setHockeyScore(moveData.score);
-        if (moveData.winner) setWinnerMessage(moveData.winner);
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'battleship') {
-        setBattleshipGrid(moveData.grid);
-        setBattleshipHits(moveData.hits);
-        if (moveData.winner) setWinnerMessage(moveData.winner);
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'pool') {
-        setPoolBalls(moveData.balls);
-        if (moveData.winner) setWinnerMessage(moveData.winner);
-        if (moveData.scores) setScores(moveData.scores);
-      } else if (moveData.gameId === 'snakeladder') {
-        setSnakePos(moveData.pos);
-        if (moveData.winner) setWinnerMessage(moveData.winner);
-        if (moveData.scores) setScores(moveData.scores);
+        if (moveData.winner) {
+          setWinnerMessage(moveData.winner);
+          confetti({ particleCount: 90, spread: 100 });
+        }
+        playReceiveSound();
       }
     });
 
@@ -1642,11 +1855,25 @@ export default function App() {
     });
 
     socketRef.current.on('codex_movie_sync_broadcast', ({ state, currentTime, timestamp }) => {
-      if ((codexEngine === 'gofile' || codexEngine === 'local') && html5VideoRef.current) {
-        isMovieRemoteTriggerRef.current = true;
-        const latency = Math.max(0, (Date.now() - timestamp) / 1000);
-        const target = currentTime + (state === 'PLAY' ? latency : 0);
+      const latency = Math.max(0, (Date.now() - (timestamp || Date.now())) / 1000);
+      const target = (currentTime || 0) + (state === 'PLAY' ? latency : 0);
 
+      if (codexEngine === 'youtube' && codexYTPlayerRef.current && typeof codexYTPlayerRef.current.seekTo === 'function') {
+        isMovieRemoteTriggerRef.current = true;
+        const currentYT = codexYTPlayerRef.current.getCurrentTime() || 0;
+        if (Math.abs(currentYT - target) > 0.4) {
+          codexYTPlayerRef.current.seekTo(target, true);
+        }
+        if (state === 'PLAY') {
+          codexYTPlayerRef.current.playVideo();
+          setIsMoviePlaying(true);
+        } else {
+          codexYTPlayerRef.current.pauseVideo();
+          setIsMoviePlaying(false);
+        }
+        setTimeout(() => { isMovieRemoteTriggerRef.current = false; }, 600);
+      } else if ((codexEngine === 'gofile' || codexEngine === 'local') && html5VideoRef.current) {
+        isMovieRemoteTriggerRef.current = true;
         if (Math.abs(html5VideoRef.current.currentTime - target) > 0.4) {
           html5VideoRef.current.currentTime = target;
         }
@@ -1858,126 +2085,166 @@ export default function App() {
     }
   };
 
-  const checkTicTacToeWinner = (board) => {
-    const lines = [
-      [0,1,2], [3,4,5], [6,7,8],
-      [0,3,6], [1,4,7], [2,5,8],
-      [0,4,8], [2,4,6]
-    ];
-    for (let i = 0; i < lines.length; i++) {
-      const [a, b, c] = lines[i];
-      if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-        return board[a];
-      }
-    }
-    if (board.every(cell => cell !== null)) return 'Draw';
-    return null;
+  // --- LUDO ROYAL CLASH MULTIPLAYER ENGINE ---
+  const isSafeLudoTile = (tileIndex) => {
+    return tileIndex === 0 || tileIndex === 7 || tileIndex === 14 || tileIndex === 21;
   };
 
-  const handleTicTacToeClick = (idx) => {
-    const myTurn = (isCurrentAdmin && isHNext) || (!isCurrentAdmin && !isHNext);
-    if (!myTurn || tictactoeBoard[idx] || winnerMessage || activeGame?.id !== 'tictactoe') return;
-
-    const newBoard = [...tictactoeBoard];
-    newBoard[idx] = isHNext ? 'H' : 'A';
-    const nextState = !isHNext;
-    
-    const win = checkTicTacToeWinner(newBoard);
-    let newScores = { ...scores };
-    let winText = '';
-
-    if (win === 'H') {
-      winText = 'Player H (Admin) Wins! 🎉';
-      newScores.H += 1;
-      confetti({ particleCount: 90, spread: 100 });
-    } else if (win === 'A') {
-      winText = 'Player A (User) Wins! 🎉';
-      newScores.A += 1;
-      confetti({ particleCount: 90, spread: 100 });
-    } else if (win === 'Draw') {
-      winText = "It's a Draw! 🤝";
-    }
-
-    setTictactoeBoard(newBoard);
-    setIsHNext(nextState);
-    setWinnerMessage(winText);
-    setScores(newScores);
-
-    if (socketRef.current) {
-      socketRef.current.emit('arcade_game_action', {
-        gameId: 'tictactoe',
-        board: newBoard,
-        isHNext: nextState,
-        winner: winText,
-        scores: newScores
-      });
-    }
+  const getLudoMovableTokens = (player, roll, currentTokens) => {
+    const list = [];
+    const myTokens = currentTokens[player] || [-1, -1, -1, -1];
+    myTokens.forEach((pos, idx) => {
+      if (pos === -1) {
+        if (roll === 6) list.push(idx);
+      } else if (pos >= 0 && pos < 33) {
+        if (pos + roll <= 33) list.push(idx);
+      }
+    });
+    return list;
   };
 
   const handleLudoRoll = () => {
-    const myTurn = (isCurrentAdmin && ludoTurn === 'H') || (!isCurrentAdmin && ludoTurn === 'A');
-    if (!myTurn || winnerMessage) return;
+    const isMyTurn = (isCurrentAdmin && ludoTurn === 'H') || (!isCurrentAdmin && ludoTurn === 'A');
+    if (!isMyTurn || isDiceRolling || winnerMessage) return;
 
-    const roll = Math.floor(Math.random() * 6) + 1;
-    setDiceVal(roll);
-    const newPos = { ...ludoPos };
+    setIsDiceRolling(true);
+    playBubblePopSound();
+
+    setTimeout(() => {
+      const roll = Math.floor(Math.random() * 6) + 1;
+      setDiceVal(roll);
+      setIsDiceRolling(false);
+
+      const movable = getLudoMovableTokens(ludoTurn, roll, ludoTokens);
+      const activeName = ludoTurn === 'H' ? 'Admin (H)' : 'User (A)';
+
+      if (movable.length === 0) {
+        const nextTurn = ludoTurn === 'H' ? 'A' : 'H';
+        const msg = `🎲 ${activeName} rolled ${roll} - No moves possible! Next turn.`;
+        setLudoStatusMsg(msg);
+        setMovableTokens([]);
+
+        setTimeout(() => {
+          setLudoTurn(nextTurn);
+          if (socketRef.current) {
+            socketRef.current.emit('arcade_game_action', {
+              gameId: 'ludo',
+              tokens: ludoTokens,
+              turn: nextTurn,
+              dice: roll,
+              statusMsg: msg,
+              scores
+            });
+          }
+        }, 1200);
+      } else if (movable.length === 1) {
+        setMovableTokens([]);
+        executeLudoMove(ludoTurn, movable[0], roll);
+      } else {
+        setMovableTokens(movable);
+        setLudoStatusMsg(`🎲 ${activeName} rolled ${roll}! Select which token to advance.`);
+      }
+    }, 400);
+  };
+
+  const executeLudoMove = (player, tokenIdx, roll) => {
+    const newTokens = {
+      H: [...ludoTokens.H],
+      A: [...ludoTokens.A]
+    };
+    const currentPos = newTokens[player][tokenIdx];
+    let newPos = currentPos;
+    let isCapture = false;
+    let status = '';
+
+    if (currentPos === -1) {
+      newPos = player === 'H' ? 0 : 14;
+      status = `🚀 ${player === 'H' ? 'Admin (H)' : 'User (A)'} deployed Token #${tokenIdx + 1}!`;
+    } else {
+      newPos = Math.min(33, currentPos + roll);
+      status = `➡️ ${player === 'H' ? 'Admin (H)' : 'User (A)'} moved Token #${tokenIdx + 1} to step ${newPos}.`;
+    }
+
+    newTokens[player][tokenIdx] = newPos;
+
+    // Check opponent capture on standard track (0 to 27)
+    if (newPos >= 0 && newPos <= 27 && !isSafeLudoTile(newPos)) {
+      const opponent = player === 'H' ? 'A' : 'H';
+      newTokens[opponent] = newTokens[opponent].map((oppPos) => {
+        if (oppPos === newPos) {
+          isCapture = true;
+          return -1; // Reset opponent token to yard!
+        }
+        return oppPos;
+      });
+      if (isCapture) {
+        confetti({ particleCount: 80, spread: 90 });
+        playReceiveSound();
+        status = `⚔️ ${player === 'H' ? 'Admin' : 'User'} captured opponent token! Bonus turn granted!`;
+      }
+    }
+
+    // Check win condition: 2 or more tokens reached Home (33)
+    const homeCount = newTokens[player].filter(p => p === 33).length;
     let winText = '';
     let newScores = { ...scores };
 
-    if (ludoTurn === 'H') {
-      newPos.H = Math.min(30, newPos.H + roll);
-      if (newPos.H >= 30) {
-        winText = 'Player H (Admin) Won Ludo Sprint! 🏆';
-        newScores.H += 1;
-        confetti({ particleCount: 90, spread: 100 });
-      }
-    } else {
-      newPos.A = Math.min(30, newPos.A + roll);
-      if (newPos.A >= 30) {
-        winText = 'Player A (User) Won Ludo Sprint! 🏆';
-        newScores.A += 1;
-        confetti({ particleCount: 90, spread: 100 });
+    if (homeCount >= 2) {
+      winText = `🏆 ${player === 'H' ? 'Player H (Admin)' : 'Player A (User)'} Won Ludo Royal Clash! 🎉`;
+      newScores[player] += 1;
+      setScores(newScores);
+      setWinnerMessage(winText);
+      confetti({ particleCount: 120, spread: 130 });
+    }
+
+    // Determine next turn
+    let nextTurn = player;
+    if (!winText) {
+      if (roll === 6 || isCapture) {
+        nextTurn = player;
+        status += " (Bonus roll!)";
+      } else {
+        nextTurn = player === 'H' ? 'A' : 'H';
       }
     }
 
-    const nextTurn = ludoTurn === 'H' ? 'A' : 'H';
-    setLudoPos(newPos);
+    setLudoTokens(newTokens);
     setLudoTurn(nextTurn);
-    if (winText) {
-      setWinnerMessage(winText);
-      setScores(newScores);
-    }
+    setLudoStatusMsg(status);
+    setMovableTokens([]);
 
     if (socketRef.current) {
       socketRef.current.emit('arcade_game_action', {
         gameId: 'ludo',
-        pos: newPos,
+        tokens: newTokens,
         turn: nextTurn,
         dice: roll,
-        winner: winText,
-        scores: newScores
+        statusMsg: status,
+        scores: newScores,
+        winner: winText
       });
     }
   };
 
-  const handleGenericGameScore = (gameKey) => {
-    if (winnerMessage) return;
-    const scorer = isCurrentAdmin ? 'H' : 'A';
-    const winText = `Player ${scorer} (${isCurrentAdmin ? 'Admin (H)' : 'User (A)'}) Scored! 🎯`;
-    const newScores = {
-      ...scores,
-      [scorer]: scores[scorer] + 1
-    };
-    setScores(newScores);
-    setWinnerMessage(winText);
-    confetti({ particleCount: 70, spread: 80 });
+  const handleResetLudo = () => {
+    const initTokens = { H: [-1, -1, -1, -1], A: [-1, -1, -1, -1] };
+    setLudoTokens(initTokens);
+    setLudoTurn('H');
+    setDiceVal(6);
+    setWinnerMessage('');
+    setMovableTokens([]);
+    const resetMsg = 'Game reset! Admin (H) rolls first.';
+    setLudoStatusMsg(resetMsg);
 
     if (socketRef.current) {
       socketRef.current.emit('arcade_game_action', {
-        gameId: gameKey,
-        winner: winText,
-        scores: newScores,
-        score: newScores
+        gameId: 'ludo',
+        tokens: initTokens,
+        turn: 'H',
+        dice: 6,
+        statusMsg: resetMsg,
+        scores,
+        winner: ''
       });
     }
   };
@@ -2329,6 +2596,102 @@ export default function App() {
 
       <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
 
+      {/* UNIVERSAL INCOMING VOICE CALL OVERLAY (VISIBLE IN ALL VIEWS) */}
+      {isIncomingCall && !isInAudioCall && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[999999] bg-[#1a2e26]/95 border-2 border-emerald-500 text-white p-3.5 px-6 rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.8)] backdrop-blur-md flex items-center gap-4 animate-in slide-in-from-top duration-300 font-sans">
+          <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-400 flex items-center justify-center text-emerald-400 animate-pulse shrink-0">
+            <Phone size={20} />
+          </div>
+          <div className="text-left">
+            <p className="text-xs font-black text-white">Incoming Whisper Voice Call...</p>
+            <p className="text-[10px] text-emerald-300 font-mono">From {role === 'parent' ? 'User (A)' : 'Admin (H)'}</p>
+          </div>
+          <div className="flex items-center gap-2 ml-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleAcceptIncomingCall}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg cursor-pointer active:scale-95 transition-all flex items-center gap-1.5"
+            >
+              <Phone size={14} /> Answer
+            </button>
+            <button
+              type="button"
+              onClick={handleEndAudioCall}
+              className="bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg cursor-pointer active:scale-95 transition-all"
+            >
+              Decline
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* UNIVERSAL OUTGOING CALLING BANNER */}
+      {isCalling && !isInAudioCall && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[999999] bg-[#141d24]/95 border-2 border-blue-500 text-white p-3 px-5 rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.8)] backdrop-blur-md flex items-center gap-4 animate-in slide-in-from-top duration-300 font-sans">
+          <div className="w-8 h-8 rounded-full bg-blue-500/20 border border-blue-400 flex items-center justify-center text-blue-400 animate-pulse shrink-0">
+            <Phone size={16} />
+          </div>
+          <div className="text-left">
+            <p className="text-xs font-black text-white">Calling {role === 'parent' ? 'User (A)' : 'Admin (H)'}...</p>
+            <p className="text-[10px] text-gray-400 font-mono">Waiting for peer to answer</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleEndAudioCall}
+            className="bg-rose-600 hover:bg-rose-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all shrink-0 ml-2"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* UNIVERSAL ACTIVE CALL FLOATING BAR (VISIBLE IN ALL VIEWS) */}
+      {isInAudioCall && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[999999] bg-[#0c1813]/95 border-2 border-emerald-500/80 text-white p-2.5 px-5 rounded-2xl shadow-[0_10px_35px_rgba(0,0,0,0.8)] backdrop-blur-md flex items-center gap-3.5 animate-in slide-in-from-top duration-300 font-sans">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+            <span className="text-xs font-mono font-black text-emerald-300">
+              LIVE ({formatCallTime(callDurationSec)})
+            </span>
+            <span className="text-[9px] bg-rose-500/30 text-rose-300 border border-rose-500/50 px-1.5 py-0.5 rounded font-mono font-bold animate-pulse">
+              ● REC
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsWhisperModeEnabled(!isWhisperModeEnabled)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                isWhisperModeEnabled ? 'bg-emerald-600 text-white shadow' : 'bg-[#20342b] text-emerald-300 hover:text-white'
+              }`}
+            >
+              <Radio size={12} />
+              <span>{isWhisperModeEnabled ? 'Whisper ON' : 'Whisper'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleToggleCallMute}
+              className={`p-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                isCallMuted ? 'bg-rose-600 text-white' : 'bg-[#20342b] text-gray-300 hover:text-white'
+              }`}
+              title={isCallMuted ? "Unmute Mic" : "Mute Mic"}
+            >
+              {isCallMuted ? <MicOff size={14} /> : <Mic size={14} />}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleEndAudioCall}
+              className="bg-rose-600 hover:bg-rose-500 text-white px-3 py-1 rounded-lg text-xs font-bold cursor-pointer shadow active:scale-95 transition-all"
+            >
+              End Call
+            </button>
+          </div>
+        </div>
+      )}
+
       <div 
         style={{
           position: 'fixed',
@@ -2475,22 +2838,20 @@ export default function App() {
               </div>
             )}
 
-            {/* 8 GAMES LIST INSIDE PLUGINS MENU */}
+            {/* LUDO MULTIPLAYER LAUNCHER IN PLUGINS MENU */}
             {showArcadePlugins && (role === 'parent' || !incomingGameRequest) && (
-              <div className="pl-1.5 pr-1 py-1.5 space-y-1 bg-[#0c0c0c] rounded-xl border border-emerald-500/30 my-1">
-                <div className="text-[10px] font-bold text-emerald-400 px-2 py-0.5">ARCADE GAMES (8 ACTIVE)</div>
-                <div className="max-h-48 overflow-y-auto space-y-1 scrollbar-none pr-1">
-                  {ARCADE_GAMES.map((game) => (
-                    <button
-                      key={game.id}
-                      onClick={() => handleLaunchGame(game)}
-                      className="w-full text-left bg-[#141414] hover:bg-[#1f1f1f] border border-[#262626] p-2 rounded-lg transition-all cursor-pointer flex items-center justify-between group"
-                    >
-                      <span className="text-[11px] font-bold text-gray-200 group-hover:text-white truncate">{game.name}</span>
-                      <Play size={10} className="text-gray-400 group-hover:text-emerald-400 shrink-0 ml-1" />
-                    </button>
-                  ))}
+              <div className="p-2 space-y-2 bg-[#0c0c0c] rounded-xl border border-amber-500/40 my-1">
+                <div className="flex items-center justify-between text-[10px] font-bold text-amber-400 px-1">
+                  <span className="flex items-center gap-1">🎲 LUDO ROYALE</span>
+                  <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono">2-PLAYER</span>
                 </div>
+                <button
+                  onClick={() => handleLaunchGame(ARCADE_GAMES[0])}
+                  className="w-full bg-gradient-to-r from-amber-600 via-rose-600 to-emerald-600 hover:from-amber-500 hover:to-emerald-500 text-white p-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg cursor-pointer active:scale-95 transition-all"
+                >
+                  <Gamepad2 size={15} className="animate-spin" style={{ animationDuration: '4s' }} />
+                  <span>Play Ludo (H vs A)</span>
+                </button>
               </div>
             )}
 
@@ -2947,6 +3308,17 @@ export default function App() {
             />
             {role === 'parent' && <span className="text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded font-mono">ADMIN (H)</span>}
             
+            {/* VOICE CALL INITIATION BUTTON */}
+            <button 
+              type="button"
+              onClick={handleStartAudioCall}
+              className="flex items-center gap-1.5 bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-600/50 text-emerald-300 hover:text-white px-2.5 py-1 rounded-xl text-xs font-bold cursor-pointer transition-all shadow active:scale-95"
+              title="Start Whisper Voice Call"
+            >
+              <Phone size={13} className={isInAudioCall ? 'animate-pulse text-emerald-400' : ''} />
+              <span>Call</span>
+            </button>
+            
             <button className="hidden sm:flex items-center gap-1.5 text-white hover:text-gray-200 cursor-pointer font-medium">
               <Sparkles size={15} className="text-blue-400" />
               <span>Upgrade</span>
@@ -3010,252 +3382,337 @@ export default function App() {
           </div>
         )}
 
-        {/* ACTIVE PLUGIN GAME VIEW */}
+        {/* ACTIVE PLUGIN GAME VIEW: LUDO ROYAL CLASH (MULTIPLAYER) */}
         {activeGame ? (
-          <section className="flex-1 overflow-y-auto px-4 py-6 max-w-3xl w-full mx-auto space-y-4 scrollbar-none font-sans flex flex-col items-center justify-center">
-            <div className="w-full bg-[#121212] border-2 border-emerald-500/40 rounded-3xl p-6 shadow-2xl relative space-y-5 text-center">
-              <div className="flex items-center justify-between border-b border-[#222] pb-3">
+          <section className="flex-1 overflow-y-auto px-2 sm:px-4 py-4 max-w-2xl w-full mx-auto space-y-3 scrollbar-none font-sans flex flex-col items-center justify-center">
+            <div className="w-full bg-[#121212] border-2 border-amber-500/50 rounded-3xl p-4 sm:p-6 shadow-2xl relative space-y-4 text-center">
+              
+              {/* HEADER BAR */}
+              <div className="flex items-center justify-between border-b border-[#262626] pb-3">
                 <div className="flex items-center gap-2">
-                  <Gamepad2 size={22} className="text-emerald-400 animate-bounce" />
-                  <h2 className="text-base font-black text-white">{activeGame.name}</h2>
+                  <span className="text-2xl animate-bounce">🎲</span>
+                  <div className="text-left">
+                    <h2 className="text-base font-black text-white flex items-center gap-2">
+                      <span>Ludo Royal Clash</span>
+                      <span className="text-[10px] bg-amber-500 text-black px-2 py-0.5 rounded-full font-bold">LIVE 2P</span>
+                    </h2>
+                    <p className="text-[11px] text-gray-400">Player H (Red) vs Player A (Green)</p>
+                  </div>
                 </div>
-                <button 
-                  onClick={() => setActiveGame(null)} 
-                  className="bg-zinc-800 hover:bg-zinc-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all"
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleResetLudo}
+                    className="bg-[#222] hover:bg-[#333] text-amber-400 p-2 rounded-xl text-xs font-bold cursor-pointer transition-all border border-[#333]"
+                    title="Reset Board"
+                  >
+                    <RotateCcw size={14} />
+                  </button>
+                  <button 
+                    onClick={() => setActiveGame(null)} 
+                    className="bg-zinc-800 hover:bg-zinc-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+
+              {/* LIVE SCOREBOARD & TURN INDICATOR */}
+              <div className="grid grid-cols-2 gap-3 text-xs font-mono">
+                <div className={`p-2.5 rounded-2xl border transition-all flex items-center justify-between px-4 ${
+                  ludoTurn === 'H' 
+                    ? 'bg-red-950/60 border-red-500 text-red-200 ring-2 ring-red-500/50 shadow-lg shadow-red-900/30 animate-pulse' 
+                    : 'bg-[#181818] border-[#2c2c2c] text-gray-400'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3.5 h-3.5 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]" />
+                    <span className="font-bold">Admin (H)</span>
+                  </div>
+                  <div className="flex items-center gap-1 font-bold text-sm">
+                    <Trophy size={14} className="text-amber-400" />
+                    <span>{scores.H}</span>
+                  </div>
+                </div>
+
+                <div className={`p-2.5 rounded-2xl border transition-all flex items-center justify-between px-4 ${
+                  ludoTurn === 'A' 
+                    ? 'bg-emerald-950/60 border-emerald-500 text-emerald-200 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-900/30 animate-pulse' 
+                    : 'bg-[#181818] border-[#2c2c2c] text-gray-400'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" />
+                    <span className="font-bold">User (A)</span>
+                  </div>
+                  <div className="flex items-center gap-1 font-bold text-sm">
+                    <Trophy size={14} className="text-amber-400" />
+                    <span>{scores.A}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* WINNER BANNER */}
+              {winnerMessage && (
+                <div className="bg-gradient-to-r from-amber-500/30 via-emerald-500/30 to-amber-500/30 border-2 border-amber-400 text-amber-200 py-3 px-4 rounded-2xl text-xs font-black animate-bounce shadow-xl flex items-center justify-center gap-2">
+                  <Trophy size={18} className="text-amber-400 animate-spin" />
+                  <span>{winnerMessage}</span>
+                  <button
+                    onClick={handleResetLudo}
+                    className="ml-3 bg-amber-500 hover:bg-amber-400 text-black px-3 py-1 rounded-lg text-xs font-bold cursor-pointer"
+                  >
+                    Play Again
+                  </button>
+                </div>
+              )}
+
+              {/* STATUS BAR */}
+              <div className="bg-[#181818] border border-[#262626] p-2 rounded-xl text-xs font-medium text-amber-300">
+                {ludoStatusMsg}
+              </div>
+
+              {/* --- COLORFUL AUTHENTIC LUDO BOARD --- */}
+              <div className="w-full max-w-[420px] aspect-square mx-auto bg-[#f8fafc] border-4 border-amber-500/80 rounded-3xl p-2.5 shadow-[0_15px_40px_rgba(0,0,0,0.8)] relative select-none flex flex-col justify-between overflow-hidden">
+                
+                {/* TOP HALF: RED BASE | TOP ARM | GREEN BASE */}
+                <div className="h-[40%] flex justify-between gap-1.5">
+                  {/* RED BASE (ADMIN H) */}
+                  <div className="w-[40%] h-full bg-gradient-to-br from-red-600 via-rose-600 to-red-700 rounded-2xl p-2 border-2 border-red-800 shadow-md flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-[11px] font-black text-white px-1">
+                      <span>RED BASE</span>
+                      <span>👑 H</span>
+                    </div>
+                    <div className="bg-white/90 rounded-xl p-2 h-[75%] grid grid-cols-2 gap-2 place-items-center shadow-inner">
+                      {[0, 1, 2, 3].map((tIdx) => {
+                        const inYard = ludoTokens.H[tIdx] === -1;
+                        const isMovable = movableTokens.includes(tIdx) && ludoTurn === 'H';
+                        return (
+                          <div 
+                            key={tIdx} 
+                            onClick={() => {
+                              if (isMovable && ((isCurrentAdmin && ludoTurn === 'H') || (!isCurrentAdmin && ludoTurn === 'A'))) {
+                                executeLudoMove('H', tIdx, diceVal);
+                              }
+                            }}
+                            className={`w-8 h-8 rounded-full border-2 border-dashed border-red-300 flex items-center justify-center transition-transform ${
+                              inYard ? 'bg-red-100' : 'bg-gray-100 opacity-40'
+                            } ${isMovable ? 'cursor-pointer scale-110 ring-4 ring-amber-400 animate-bounce' : ''}`}
+                            title={`Token H${tIdx + 1}`}
+                          >
+                            {inYard && (
+                              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-red-500 to-red-700 text-white text-[11px] font-black flex items-center justify-center shadow-md border border-white">
+                                H{tIdx + 1}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* TOP ARM TILES */}
+                  <div className="w-[18%] h-full bg-[#e2e8f0] rounded-xl border border-gray-300 p-1 flex flex-col justify-between">
+                    <div className="text-[9px] font-black text-gray-500 text-center uppercase tracking-tighter">Safe Spot</div>
+                    <div className="w-full flex-1 flex flex-col justify-around py-1">
+                      <div className="h-6 w-full rounded bg-amber-400/30 border border-amber-400 flex items-center justify-center text-amber-600 text-xs font-bold" title="Safe Star Cell">
+                        ★
+                      </div>
+                      <div className="text-[10px] text-gray-400 text-center font-mono font-bold">28 Tiles</div>
+                      <div className="h-6 w-full rounded bg-emerald-100 border border-emerald-300 flex items-center justify-center text-emerald-600 text-xs font-bold">
+                        ↓
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* GREEN BASE (USER A) */}
+                  <div className="w-[40%] h-full bg-gradient-to-br from-emerald-600 via-teal-600 to-emerald-700 rounded-2xl p-2 border-2 border-emerald-800 shadow-md flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-[11px] font-black text-white px-1">
+                      <span>GREEN BASE</span>
+                      <span>👑 A</span>
+                    </div>
+                    <div className="bg-white/90 rounded-xl p-2 h-[75%] grid grid-cols-2 gap-2 place-items-center shadow-inner">
+                      {[0, 1, 2, 3].map((tIdx) => {
+                        const inYard = ludoTokens.A[tIdx] === -1;
+                        const isMovable = movableTokens.includes(tIdx) && ludoTurn === 'A';
+                        return (
+                          <div 
+                            key={tIdx} 
+                            onClick={() => {
+                              if (isMovable && ((isCurrentAdmin && ludoTurn === 'H') || (!isCurrentAdmin && ludoTurn === 'A'))) {
+                                executeLudoMove('A', tIdx, diceVal);
+                              }
+                            }}
+                            className={`w-8 h-8 rounded-full border-2 border-dashed border-emerald-300 flex items-center justify-center transition-transform ${
+                              inYard ? 'bg-emerald-100' : 'bg-gray-100 opacity-40'
+                            } ${isMovable ? 'cursor-pointer scale-110 ring-4 ring-amber-400 animate-bounce' : ''}`}
+                            title={`Token A${tIdx + 1}`}
+                          >
+                            {inYard && (
+                              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-[11px] font-black flex items-center justify-center shadow-md border border-white">
+                                A{tIdx + 1}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* MIDDLE HALF: RED RUNWAY | CENTER HOME TRIANGLE | GREEN RUNWAY */}
+                <div className="h-[20%] flex justify-between items-center gap-1.5 my-1">
+                  {/* RED RUNWAY COLUMN */}
+                  <div className="w-[40%] h-full bg-red-100 rounded-xl border border-red-300 flex items-center justify-around px-2">
+                    <span className="text-[10px] font-bold text-red-600">Start ★</span>
+                    <span className="text-xs text-red-500 font-bold">➔ ➔ ➔</span>
+                  </div>
+
+                  {/* CENTER HOME CROWN */}
+                  <div className="w-[18%] h-full bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 rounded-2xl border-2 border-amber-600 shadow-lg flex flex-col items-center justify-center p-1 text-center">
+                    <span className="text-xl">👑</span>
+                    <span className="text-[8px] font-black text-amber-950 uppercase">HOME</span>
+                  </div>
+
+                  {/* GREEN RUNWAY COLUMN */}
+                  <div className="w-[40%] h-full bg-emerald-100 rounded-xl border border-emerald-300 flex items-center justify-around px-2">
+                    <span className="text-xs text-emerald-500 font-bold">⬅ ⬅ ⬅</span>
+                    <span className="text-[10px] font-bold text-emerald-600">★ Start</span>
+                  </div>
+                </div>
+
+                {/* ACTIVE TOKENS ON FIELD TRAY */}
+                <div className="bg-white rounded-2xl p-2.5 border-2 border-gray-200 shadow-inner flex flex-col gap-1.5 text-left">
+                  <div className="flex items-center justify-between text-[11px] font-black text-gray-600">
+                    <span>ACTIVE TOKENS ON BOARD</span>
+                    <span className="text-[9px] text-gray-400">Click highlighted token to move</span>
+                  </div>
+                  
+                  {/* ACTIVE TOKENS ROW */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {/* RED PLAYER ACTIVE */}
+                    <div className="space-y-1">
+                      <div className="text-[10px] font-bold text-red-600 flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-red-500" />
+                        <span>H (Red):</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {ludoTokens.H.map((pos, tIdx) => {
+                          if (pos === -1) return null;
+                          const isMovable = movableTokens.includes(tIdx) && ludoTurn === 'H';
+                          const isHome = pos === 33;
+                          return (
+                            <button
+                              key={tIdx}
+                              disabled={!isMovable || !(isCurrentAdmin ? ludoTurn === 'H' : ludoTurn === 'A')}
+                              onClick={() => executeLudoMove('H', tIdx, diceVal)}
+                              className={`p-1.5 px-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow ${
+                                isHome 
+                                  ? 'bg-amber-500 text-black border border-amber-600' 
+                                  : 'bg-red-600 hover:bg-red-500 text-white'
+                              } ${isMovable ? 'cursor-pointer ring-4 ring-amber-400 scale-105 animate-pulse' : 'opacity-85'}`}
+                            >
+                              <span>H{tIdx + 1}</span>
+                              <span className="text-[10px] opacity-90 font-mono">[{isHome ? '👑 HOME' : `Step ${pos}/33`}]</span>
+                            </button>
+                          );
+                        })}
+                        {ludoTokens.H.every(p => p === -1) && (
+                          <span className="text-[11px] text-gray-400 italic">All in base (Roll 6 to launch)</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* GREEN PLAYER ACTIVE */}
+                    <div className="space-y-1">
+                      <div className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <span>A (Green):</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {ludoTokens.A.map((pos, tIdx) => {
+                          if (pos === -1) return null;
+                          const isMovable = movableTokens.includes(tIdx) && ludoTurn === 'A';
+                          const isHome = pos === 33;
+                          return (
+                            <button
+                              key={tIdx}
+                              disabled={!isMovable || !(isCurrentAdmin ? ludoTurn === 'H' : ludoTurn === 'A')}
+                              onClick={() => executeLudoMove('A', tIdx, diceVal)}
+                              className={`p-1.5 px-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow ${
+                                isHome 
+                                  ? 'bg-amber-500 text-black border border-amber-600' 
+                                  : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                              } ${isMovable ? 'cursor-pointer ring-4 ring-amber-400 scale-105 animate-pulse' : 'opacity-85'}`}
+                            >
+                              <span>A{tIdx + 1}</span>
+                              <span className="text-[10px] opacity-90 font-mono">[{isHome ? '👑 HOME' : `Step ${pos}/33`}]</span>
+                            </button>
+                          );
+                        })}
+                        {ludoTokens.A.every(p => p === -1) && (
+                          <span className="text-[11px] text-gray-400 italic">All in base (Roll 6 to launch)</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* BOTTOM HALF: YELLOW DECOR | BOTTOM TRACK | BLUE DECOR */}
+                <div className="h-[22%] flex justify-between gap-1.5 mt-1">
+                  <div className="w-[40%] h-full bg-gradient-to-br from-amber-400 to-yellow-500 rounded-2xl p-2 border border-amber-600 flex items-center justify-center opacity-85 shadow-sm">
+                    <span className="text-[11px] font-black text-amber-950">⭐ ROYAL LUDO</span>
+                  </div>
+
+                  <div className="w-[18%] h-full bg-[#e2e8f0] rounded-xl border border-gray-300 flex items-center justify-center">
+                    <span className="text-amber-500 font-bold text-sm">★</span>
+                  </div>
+
+                  <div className="w-[40%] h-full bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl p-2 border border-blue-700 flex items-center justify-center opacity-85 shadow-sm">
+                    <span className="text-[11px] font-black text-white">CLASSIC 2026</span>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* 3D ANIMATED DICE CONTROLLER BOX */}
+              <div className="bg-[#141414] border-2 border-[#2c2c2c] p-4 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xl max-w-md mx-auto">
+                <div className="flex items-center gap-3.5">
+                  {/* 3D DICE */}
+                  <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 via-amber-500 to-yellow-600 text-black font-black text-3xl flex items-center justify-center shadow-xl border-2 border-white/60 transition-transform ${
+                    isDiceRolling ? 'rotate-180 scale-110 animate-spin' : 'hover:scale-105'
+                  }`}>
+                    {diceVal}
+                  </div>
+                  <div className="text-left space-y-0.5">
+                    <p className="text-xs font-black text-white flex items-center gap-1.5">
+                      <span>Current Turn:</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        ludoTurn === 'H' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'
+                      }`}>
+                        {ludoTurn === 'H' ? 'Player H (Admin)' : 'Player A (User)'}
+                      </span>
+                    </p>
+                    <p className="text-[11px] text-gray-400 font-mono">
+                      {(isCurrentAdmin && ludoTurn === 'H') || (!isCurrentAdmin && ludoTurn === 'A')
+                        ? "✨ Your Turn to Roll!"
+                        : "⏳ Opponent's Turn..."}
+                    </p>
+                  </div>
+                </div>
+
+                {/* ROLL BUTTON */}
+                <button
+                  type="button"
+                  disabled={!((isCurrentAdmin && ludoTurn === 'H') || (!isCurrentAdmin && ludoTurn === 'A')) || isDiceRolling || winnerMessage}
+                  onClick={handleLudoRoll}
+                  className={`w-full sm:w-auto px-6 py-3.5 rounded-2xl text-xs font-black flex items-center justify-center gap-2 shadow-xl transition-all cursor-pointer ${
+                    ((isCurrentAdmin && ludoTurn === 'H') || (!isCurrentAdmin && ludoTurn === 'A')) && !winnerMessage
+                      ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-black ring-4 ring-amber-500/30 active:scale-95'
+                      : 'bg-[#222] text-gray-500 cursor-not-allowed opacity-60'
+                  }`}
                 >
-                  Close Game
+                  <Dices size={18} className={isDiceRolling ? 'animate-spin' : ''} />
+                  <span>{isDiceRolling ? 'Rolling...' : 'Roll Dice'}</span>
                 </button>
               </div>
 
-              {/* LIVE SCOREBOARD */}
-              <div className="flex items-center justify-between bg-[#0a0a0a] border border-[#222] px-4 py-2.5 rounded-2xl text-xs font-mono">
-                <span className="text-blue-400 font-bold">Admin (H): {scores.H}</span>
-                <span className="text-emerald-400 animate-pulse font-bold">LIVE SCOREBOARD</span>
-                <span className="text-rose-400 font-bold">User (A): {scores.A}</span>
-              </div>
-
-              {winnerMessage && (
-                <div className="bg-amber-500/20 border border-amber-500 text-amber-300 py-2.5 px-4 rounded-xl text-xs font-bold animate-bounce">
-                  {winnerMessage}
-                </div>
-              )}
-
-              {/* 1. TIC TAC TOE */}
-              {activeGame.id === 'tictactoe' && (
-                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto shadow-inner">
-                  <div className="text-xs font-bold text-gray-200">
-                    Turn: <span className={`px-2.5 py-1 rounded-lg text-white font-mono ${isHNext ? 'bg-blue-600' : 'bg-rose-600'}`}>{isHNext ? 'Player H (Admin)' : 'Player A (User)'}</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    {tictactoeBoard.map((val, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => handleTicTacToeClick(idx)}
-                        className={`h-24 rounded-2xl text-3xl font-black flex items-center justify-center transition-all cursor-pointer shadow-xl transform active:scale-95 ${
-                          val === 'H' ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-blue-500/30' : val === 'A' ? 'bg-gradient-to-br from-rose-600 to-pink-600 text-white shadow-rose-500/30' : 'bg-[#1a1a1a] hover:bg-[#252525] text-gray-600 border border-[#333]'
-                        }`}
-                      >
-                        {val}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => {
-                      setTictactoeBoard(Array(9).fill(null));
-                      setIsHNext(true);
-                      setWinnerMessage('');
-                      if (socketRef.current) socketRef.current.emit('arcade_game_action', { gameId: 'tictactoe', board: Array(9).fill(null), isHNext: true, winner: '' });
-                    }}
-                    className="text-xs text-amber-400 hover:underline flex items-center gap-1 mx-auto pt-2 cursor-pointer"
-                  >
-                    <RotateCcw size={13} /> Reset Board
-                  </button>
-                </div>
-              )}
-
-              {/* 2. LUDO SPRINT */}
-              {activeGame.id === 'ludo' && (
-                <div className="space-y-5 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-md mx-auto">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className={`p-3 rounded-2xl border flex flex-col items-center justify-center gap-1 ${ludoTurn === 'H' ? 'bg-blue-600/30 border-blue-500 text-white animate-pulse shadow-lg shadow-blue-500/20' : 'bg-[#1a1a1a] border-[#333] text-gray-400'}`}>
-                      <span className="w-3 h-3 rounded-full bg-red-500 inline-block" />
-                      <span className="text-xs font-bold">Player H (Admin)</span>
-                      <span className="text-xs font-mono font-black text-amber-300">Pos: {ludoPos.H} / 30</span>
-                    </div>
-
-                    <div className={`p-3 rounded-2xl border flex flex-col items-center justify-center gap-1 ${ludoTurn === 'A' ? 'bg-rose-600/30 border-rose-500 text-white animate-pulse shadow-lg shadow-rose-500/20' : 'bg-[#1a1a1a] border-[#333] text-gray-400'}`}>
-                      <span className="w-3 h-3 rounded-full bg-green-500 inline-block" />
-                      <span className="text-xs font-bold">Player A (User)</span>
-                      <span className="text-xs font-mono font-black text-amber-300">Pos: {ludoPos.A} / 30</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-[#141414] border border-[#262626] p-4 rounded-2xl flex items-center justify-between shadow-inner">
-                    <div className="text-sm font-extrabold text-amber-400 flex items-center gap-3">
-                      <Dices size={24} className="text-amber-500 animate-spin" />
-                      <span>Dice Roll:</span>
-                      <span className="w-12 h-12 rounded-2xl bg-amber-500 text-black font-black text-2xl flex items-center justify-center shadow-lg">{diceVal}</span>
-                    </div>
-                    <button
-                      onClick={handleLudoRoll}
-                      className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-6 py-3 rounded-2xl text-xs font-black shadow-lg cursor-pointer active:scale-95 transition-all"
-                    >
-                      Roll ({ludoTurn === 'H' ? 'Admin Turn' : 'User Turn'})
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* 3. PONG RETRO ARCADE */}
-              {activeGame.id === 'pong' && (
-                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
-                  <p className="text-xs text-gray-300">Pong Rally Score: <strong className="text-blue-400">H: {pongScore.H}</strong> | <strong className="text-rose-400">A: {pongScore.A}</strong></p>
-                  <div className="h-32 bg-black border border-[#333] rounded-xl flex items-center justify-center relative overflow-hidden">
-                    <div className="absolute w-3 h-3 bg-emerald-400 rounded-full animate-ping" />
-                    <span className="text-[11px] text-gray-500 font-mono">Ball in live rally...</span>
-                  </div>
-                  <button
-                    onClick={() => handleGenericGameScore('pong')}
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
-                  >
-                    Hit Ball / Score Point 🏓
-                  </button>
-                </div>
-              )}
-
-              {/* 4. AIR HOCKEY */}
-              {activeGame.id === 'airhockey' && (
-                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
-                  <p className="text-xs text-gray-300">Goals: <strong className="text-blue-400">H: {hockeyScore.H}</strong> | <strong className="text-rose-400">A: {hockeyScore.A}</strong></p>
-                  <div className="h-32 bg-gradient-to-b from-indigo-950 to-blue-950 border border-blue-500/40 rounded-xl flex items-center justify-center">
-                    <span className="text-xs text-cyan-300 font-bold">Neon Ice Arena Active</span>
-                  </div>
-                  <button
-                    onClick={() => handleGenericGameScore('airhockey')}
-                    className="w-full bg-cyan-600 hover:bg-cyan-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
-                  >
-                    Shoot Puck & Goal! ⚡
-                  </button>
-                </div>
-              )}
-
-              {/* 5. BATTLESHIP */}
-              {activeGame.id === 'battleship' && (
-                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
-                  <p className="text-xs text-gray-300">Hits: <strong className="text-blue-400">H: {battleshipHits.H}</strong> | <strong className="text-rose-400">A: {battleshipHits.A}</strong> (Target 3)</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {battleshipGrid.map((st, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => {
-                          if (winnerMessage || battleshipGrid[idx] !== 'empty') return;
-                          const newGrid = [...battleshipGrid];
-                          const isHit = idx === 2 || idx === 5 || idx === 7;
-                          newGrid[idx] = isHit ? 'hit' : 'miss';
-                          const currentHits = { ...battleshipHits };
-                          const activeP = isCurrentAdmin ? 'H' : 'A';
-                          let winText = '';
-                          let newScores = { ...scores };
-
-                          if (isHit) {
-                            currentHits[activeP] += 1;
-                            if (currentHits[activeP] >= 3) {
-                              winText = `Player ${activeP} Sunk All Battleships! ⚓`;
-                              newScores[activeP] += 1;
-                              confetti({ particleCount: 90, spread: 100 });
-                            }
-                          }
-                          setBattleshipGrid(newGrid);
-                          setBattleshipHits(currentHits);
-                          if (winText) {
-                            setWinnerMessage(winText);
-                            setScores(newScores);
-                          }
-                          if (socketRef.current) {
-                            socketRef.current.emit('arcade_game_action', { gameId: 'battleship', grid: newGrid, hits: currentHits, winner: winText, scores: newScores });
-                          }
-                        }}
-                        className={`h-16 rounded-xl font-bold text-xs flex items-center justify-center cursor-pointer transition-all ${
-                          st === 'hit' ? 'bg-rose-600 text-white' : st === 'miss' ? 'bg-zinc-700 text-gray-300' : 'bg-[#1e1e1e] hover:bg-[#282828] text-gray-400 border border-[#333]'
-                        }`}
-                      >
-                        {st === 'empty' ? `Grid #${idx+1}` : st.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 6. POOL 8-BALL */}
-              {activeGame.id === 'pool' && (
-                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
-                  <p className="text-xs text-gray-300">Pocketed Balls: <strong className="text-blue-400">H: {poolBalls.H}</strong> | <strong className="text-rose-400">A: {poolBalls.A}</strong></p>
-                  <div className="h-28 bg-[#064e3b] border-4 border-[#1e293b] rounded-xl flex items-center justify-center">
-                    <span className="text-xs text-emerald-300 font-bold">🎱 Billiards Table Ready</span>
-                  </div>
-                  <button
-                    onClick={() => handleGenericGameScore('pool')}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
-                  >
-                    Take Cue Shot & Pocket Ball 🎱
-                  </button>
-                </div>
-              )}
-
-              {/* 7. SNAKE & LADDER */}
-              {activeGame.id === 'snakeladder' && (
-                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
-                  <p className="text-xs text-gray-300">Position -> Admin (H): <strong className="text-blue-400">{snakePos.H}</strong> | User (A): <strong className="text-rose-400">{snakePos.A}</strong> / 30</p>
-                  <button
-                    onClick={() => {
-                      if (winnerMessage) return;
-                      const activeP = isCurrentAdmin ? 'H' : 'A';
-                      const roll = Math.floor(Math.random() * 6) + 1;
-                      const newPos = { ...snakePos };
-                      let winText = '';
-                      let newScores = { ...scores };
-
-                      let pos = newPos[activeP] + roll;
-                      if (pos === 14) pos = 28;
-                      if (pos === 22) pos = 8;
-                      if (pos >= 30) {
-                        pos = 30;
-                        winText = `Player ${activeP} Reached Top First! 🐍`;
-                        newScores[activeP] += 1;
-                        confetti({ particleCount: 90, spread: 100 });
-                      }
-                      newPos[activeP] = pos;
-                      setSnakePos(newPos);
-                      if (winText) {
-                        setWinnerMessage(winText);
-                        setScores(newScores);
-                      }
-                      if (socketRef.current) {
-                        socketRef.current.emit('arcade_game_action', { gameId: 'snakeladder', pos: newPos, winner: winText, scores: newScores });
-                      }
-                    }}
-                    className="w-full bg-purple-600 hover:bg-purple-500 text-white py-3 rounded-xl text-xs font-bold cursor-pointer shadow"
-                  >
-                    Roll Speed Sprint Dice 🎲
-                  </button>
-                </div>
-              )}
-
-              {/* 8. DRAW & GUESS */}
-              {activeGame.id === 'drawguess' && (
-                <div className="space-y-4 bg-[#0a0a0a] border border-[#222] p-6 rounded-2xl max-w-sm mx-auto">
-                  <p className="text-xs text-amber-400 font-mono">Secret Prompt: <strong>{drawGuessWord}</strong></p>
-                  <div className="h-32 bg-white rounded-xl flex items-center justify-center text-black font-bold text-sm shadow-inner">
-                    🎨 Sketch Canvas Active
-                  </div>
-                  <button
-                    onClick={() => handleGenericGameScore('drawguess')}
-                    className="w-full bg-pink-600 hover:bg-pink-500 text-white py-2.5 rounded-xl text-xs font-bold cursor-pointer"
-                  >
-                    Guess Correct & Score Point! ✨
-                  </button>
-                </div>
-              )}
             </div>
           </section>
         ) : (
@@ -3891,13 +4348,31 @@ export default function App() {
                 {/* --- VIDEO CONTAINER WITH UNIVERSAL WHITE DOT & TOGEPI OVERLAY --- */}
                 <div className="w-full bg-[#0a0a0a] border border-[#242424] rounded-2xl overflow-hidden relative shadow-2xl flex items-center justify-center min-h-[220px] sm:min-h-[380px]">
                   
-                  {/* WHITE DOT RE-SYNC BUTTON FOR ALL 4 OPTIONS */}
-                  <button
-                    type="button"
-                    onClick={handleUniversalSyncRealign}
-                    className="absolute top-3 left-3 z-[99999] w-3 h-3 rounded-full bg-white/80 hover:bg-white shadow-[0_0_10px_rgba(255,255,255,0.9)] cursor-pointer active:scale-90 transition-all border border-black/60"
-                    title="Click to force re-sync and align playback!"
-                  />
+                  {/* WHITE DOT UNIVERSAL DELAY GAP SYNC */}
+                  <div className="absolute top-3 left-3 z-[99999] flex items-center gap-2 pointer-events-auto">
+                    <button
+                      type="button"
+                      onClick={handleUniversalSyncRealign}
+                      className="w-4 h-4 rounded-full bg-white hover:bg-white shadow-[0_0_12px_rgba(255,255,255,1)] ring-2 ring-white/60 cursor-pointer active:scale-90 transition-all flex items-center justify-center border border-black/50 group"
+                      title="White Dot: Click to calculate & force-sync video delay gap between both viewers!"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-black/40 group-hover:scale-0 transition-transform" />
+                    </button>
+                    {syncDelayGapText ? (
+                      <span className="bg-black/90 backdrop-blur-md text-emerald-300 border border-emerald-500/50 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold shadow-xl animate-in fade-in duration-200">
+                        {syncDelayGapText}
+                      </span>
+                    ) : (
+                      <button 
+                        type="button"
+                        onClick={handleUniversalSyncRealign}
+                        className="hidden sm:inline-block bg-black/70 backdrop-blur-sm text-gray-300 border border-white/10 px-2 py-0.5 rounded-full text-[10px] font-mono opacity-60 hover:opacity-100 transition-opacity cursor-pointer"
+                        title="Click to fix delay gap"
+                      >
+                        ⚡ Sync Gap
+                      </button>
+                    )}
+                  </div>
 
                   {codexEngine === 'gofile' ? (
                     activeMovieSrc ? (
@@ -3926,13 +4401,9 @@ export default function App() {
                     )
                   ) : codexEngine === 'youtube' ? (
                     activeMovieYTId ? (
-                      <iframe 
-                        src={`https://www.youtube.com/embed/${activeMovieYTId}?autoplay=1&controls=1&modestbranding=1&rel=0`}
-                        title="Codex YouTube"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        className="w-full h-[45vh] sm:h-[65vh] rounded-2xl border-none"
-                      />
+                      <div className="w-full h-[45vh] sm:h-[65vh] rounded-2xl overflow-hidden bg-black flex items-center justify-center">
+                        <div id="codex-cinema-yt-player" className="w-full h-full" />
+                      </div>
                     ) : (
                       <div className="text-center p-6 space-y-2 text-gray-500">
                         <Film size={36} className="mx-auto opacity-30 text-blue-400" />
@@ -4001,24 +4472,54 @@ export default function App() {
                     )
                   )}
 
+                  {/* --- IN-CINEMA LIVE NOTIFICATION BANNER (VISIBLE WHEN TOGEPI MENU CLOSED) --- */}
+                  {incomingTogepiAlert && !showTogepiMenu && (
+                    <div 
+                      onClick={() => { setShowTogepiMenu(true); setIncomingTogepiAlert(null); }}
+                      className="absolute top-3 right-16 z-[99999] max-w-xs bg-black/90 backdrop-blur-md border border-amber-400/80 rounded-2xl px-3.5 py-2 flex items-center gap-2.5 shadow-2xl cursor-pointer hover:scale-105 active:scale-95 transition-all animate-in slide-in-from-top-3 duration-200 pointer-events-auto"
+                    >
+                      <span className="text-base shrink-0 animate-bounce">🐣</span>
+                      <div className="flex flex-col text-left truncate">
+                        <span className="text-[10px] text-amber-400 font-bold uppercase">{incomingTogepiAlert.sender === 'parent' ? 'Admin' : 'User'}:</span>
+                        <span className="text-xs text-white truncate max-w-[170px]">{incomingTogepiAlert.text}</span>
+                      </div>
+                      <span className="text-[10px] text-amber-300 font-bold bg-amber-400/20 px-2 py-0.5 rounded-lg border border-amber-400/40 shrink-0">Reply</span>
+                    </div>
+                  )}
+
                   {/* --- ABSOLUTE BOTTOM-RIGHT TOGEPI WIDGET (STAYS ON FULLSCREEN) --- */}
                   <div className="absolute bottom-4 right-4 z-[999999] flex flex-col items-end pointer-events-auto">
                     {showTogepiMenu && (
-                      <div className="w-68 sm:w-76 bg-[#121212]/95 border border-amber-400/50 rounded-2xl p-3 shadow-2xl backdrop-blur-md mb-2 space-y-2.5 text-left animate-in zoom-in-95 duration-150">
+                      <div className="w-72 sm:w-80 bg-[#121212]/95 border border-amber-400/60 rounded-2xl p-3 shadow-2xl backdrop-blur-md mb-2 space-y-2.5 text-left animate-in zoom-in-95 duration-150">
                         <div className="flex items-center justify-between border-b border-[#262626] pb-1.5">
                           <div className="flex items-center gap-1.5">
                             <span className="text-sm">🐣</span>
-                            <span className="text-[11px] font-bold text-amber-300">Togepi Live Chat</span>
+                            <span className="text-xs font-bold text-amber-300">Togepi In-Cinema Chat</span>
                           </div>
-                          <button onClick={() => setShowTogepiMenu(false)} className="text-gray-400 hover:text-white p-0.5 cursor-pointer"><X size={13} /></button>
+                          <button onClick={() => setShowTogepiMenu(false)} className="text-gray-400 hover:text-white p-0.5 cursor-pointer"><X size={14} /></button>
                         </div>
 
-                        <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1 scrollbar-none text-[11px]">
+                        {/* Quick Reaction Emoji Bar */}
+                        <div className="flex items-center justify-between gap-1 pb-1 border-b border-[#222]">
+                          {['🍿', '🎬', '😂', '😱', '❤️', '🤫', '🔥', '👏'].map((emoji, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => handleSendTogepiMessage(emoji)}
+                              className="text-sm hover:scale-125 active:scale-90 transition-transform cursor-pointer p-0.5"
+                              title={`React ${emoji}`}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div ref={togepiScrollRef} className="max-h-44 overflow-y-auto space-y-1.5 pr-1 scrollbar-none text-[11px]">
                           {togepiChatHistory.length === 0 ? (
-                            <p className="text-[10px] text-gray-500 text-center py-3 italic">Send live chat while watching!</p>
+                            <p className="text-[10px] text-gray-500 text-center py-4 italic">Send live reactions & chat while watching!</p>
                           ) : (
                             togepiChatHistory.map((msg, mIdx) => (
-                              <div key={mIdx} className={`p-1.5 rounded-lg flex flex-col max-w-[85%] ${msg.sender === role ? 'bg-amber-500/20 text-amber-200 ml-auto items-end text-right' : 'bg-[#1e1e1e] text-gray-200 mr-auto items-start text-left'}`}>
+                              <div key={mIdx} className={`p-1.5 px-2.5 rounded-xl flex flex-col max-w-[85%] ${msg.sender === role ? 'bg-amber-500/20 text-amber-200 border border-amber-500/30 ml-auto items-end text-right' : 'bg-[#1e1e1e] text-gray-200 border border-[#333] mr-auto items-start text-left'}`}>
                                 <span className="text-[8px] font-bold text-gray-400 uppercase">{msg.sender === role ? 'You' : (msg.sender === 'parent' ? 'Admin' : 'User')} ({msg.time})</span>
                                 <span className="font-medium mt-0.5 break-words">{msg.text}</span>
                               </div>
@@ -4026,21 +4527,21 @@ export default function App() {
                           )}
                         </div>
 
-                        <div className="flex gap-1 pt-1">
+                        <div className="flex gap-1.5 pt-1">
                           <input 
                             type="text"
                             value={togepiInput}
                             onChange={(e) => setTogepiInput(e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSendTogepiMessage(togepiInput); } }}
-                            placeholder="Type message..."
-                            className="flex-1 bg-[#181818] border border-[#333] text-white px-2.5 py-1.5 rounded-lg text-[11px] outline-none focus:border-amber-400"
+                            placeholder="Type movie reaction..."
+                            className="flex-1 bg-[#181818] border border-[#333] text-white px-3 py-1.5 rounded-xl text-xs outline-none focus:border-amber-400"
                           />
                           <button 
                             type="button"
                             onClick={() => handleSendTogepiMessage(togepiInput)}
-                            className="bg-amber-500 hover:bg-amber-400 text-black px-2.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer flex items-center justify-center shrink-0 active:scale-95"
+                            className="bg-amber-500 hover:bg-amber-400 text-black px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center justify-center shrink-0 active:scale-95 shadow"
                           >
-                            <Send size={12} />
+                            <Send size={13} />
                           </button>
                         </div>
                       </div>
@@ -4048,17 +4549,20 @@ export default function App() {
 
                     <button
                       type="button"
-                      onClick={() => setShowTogepiMenu(!showTogepiMenu)}
-                      className={`w-9 h-9 rounded-full hover:scale-110 active:scale-95 transition-all duration-300 cursor-pointer flex items-center justify-center relative group drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)] ${isTogepiVisible || showTogepiMenu ? 'opacity-100' : 'opacity-20 hover:opacity-100'}`}
-                      title="Togepi Movie Chat"
+                      onClick={() => {
+                        setShowTogepiMenu(!showTogepiMenu);
+                        if (incomingTogepiAlert) setIncomingTogepiAlert(null);
+                      }}
+                      className="w-10 h-10 rounded-full hover:scale-110 active:scale-95 transition-all duration-300 cursor-pointer flex items-center justify-center relative group drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] opacity-95 hover:opacity-100"
+                      title="Togepi In-Cinema Chat"
                     >
                       <img 
                         src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='48' fill='%23fef08a' stroke='%23ca8a04' stroke-width='4'/><path d='M30 40 Q50 20 70 40 Z' fill='%23f97316'/><path d='M25 60 Q50 35 75 60 Z' fill='%233b82f6'/><circle cx='40' cy='45' r='5' fill='%23000'/><circle cx='60' cy='45' r='5' fill='%23000'/></svg>" 
                         alt="Togepi" 
-                        className="w-9 h-9 rounded-full object-cover border-2 border-amber-400 shadow-lg bg-black"
+                        className="w-10 h-10 rounded-full object-cover border-2 border-amber-400 shadow-lg bg-black"
                       />
                       {incomingTogepiAlert && (
-                        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-rose-500 text-white rounded-full text-[8px] font-black flex items-center justify-center animate-ping">!</span>
+                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full text-[9px] font-black flex items-center justify-center animate-ping">!</span>
                       )}
                     </button>
                   </div>
