@@ -1277,7 +1277,10 @@ export default function App() {
 
   useEffect(() => {
     roleRef.current = role;
-  }, [role]);
+    if (viewMode === 'admin_dashboard' && role !== 'parent') {
+      setViewMode('real_gpt');
+    }
+  }, [role, viewMode]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -2783,8 +2786,13 @@ export default function App() {
           `}
         >
           <div className="h-14 flex items-center justify-between px-3.5 pt-1.5 shrink-0">
-            <span className="font-semibold text-base tracking-tight text-white flex items-center gap-1.5">
-              ChatGPT
+            <span className="font-semibold text-base tracking-tight text-white flex items-center gap-2">
+              <span className="w-7 h-7 rounded-full bg-[#10a37f] flex items-center justify-center p-1 text-white shadow-sm shrink-0">
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                  <path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/>
+                </svg>
+              </span>
+              <span>ChatGPT</span>
             </span>
             <div className="flex items-center gap-2.5 text-[#9b9b9b]">
               <Search size={18} className="cursor-pointer hover:text-white" />
@@ -2983,15 +2991,43 @@ export default function App() {
           )}
 
           <div className="p-3 border-t border-[#171717] flex items-center justify-between text-xs bg-[#000000]">
-            <div className="flex items-center gap-2.5 overflow-hidden">
-              <div className="w-8 h-8 rounded-full bg-[#1e293b] border border-[#333] flex items-center justify-center text-white text-xs font-bold shrink-0">
-                {role === 'parent' ? 'H' : 'A'}
+            {/* ADMIN ONLY CLICKABLE PROFILE TO OPEN SEPARATE DASHBOARD */}
+            <div 
+              onClick={() => {
+                if (role === 'parent') {
+                  setViewMode('admin_dashboard');
+                  closeSidebarOnMobile();
+                }
+              }}
+              className={`flex items-center gap-2.5 overflow-hidden transition-all ${
+                role === 'parent' 
+                  ? 'cursor-pointer hover:bg-[#1a1a1a] p-1.5 -ml-1.5 rounded-xl group select-none ring-1 ring-transparent hover:ring-amber-500/40 active:scale-95' 
+                  : ''
+              }`}
+              title={role === 'parent' ? "Click to open Admin Dashboard" : "User Profile"}
+            >
+              <div className={`w-8 h-8 rounded-full border flex items-center justify-center text-xs font-bold shrink-0 transition-transform ${
+                role === 'parent' 
+                  ? 'bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 border-amber-400 text-black shadow-md group-hover:scale-105' 
+                  : 'bg-[#1e293b] border-[#333] text-white'
+              }`}>
+                {role === 'parent' ? '👑' : 'A'}
               </div>
-              <div className="truncate">
-                <p className="text-white font-medium truncate">
-                  {role === 'parent' ? 'Admin (H)' : 'User (A)'}
+              <div className="truncate text-left">
+                <p className={`font-medium truncate flex items-center gap-1.5 ${
+                  role === 'parent' ? 'text-amber-400 group-hover:text-amber-300 font-bold' : 'text-white'
+                }`}>
+                  <span>{role === 'parent' ? 'Admin (H)' : 'User (A)'}</span>
+                  {role === 'parent' && (
+                    <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1 py-0.2 rounded font-mono font-bold animate-pulse">
+                      DASHBOARD ➔
+                    </span>
+                  )}
                 </p>
-                <p className="text-[10px] text-gray-400">Free</p>
+                <p className="text-[10px] text-gray-400 flex items-center gap-1">
+                  <span>Free</span>
+                  {role === 'parent' && <span className="text-amber-500/80 font-mono">• Click to open</span>}
+                </p>
               </div>
             </div>
             {/* UPGRADE BUTTON REQUIRING PIN GATE */}
@@ -4099,6 +4135,198 @@ export default function App() {
               </section>
             )}
 
+            {/* --- SEPARATE DEDICATED ADMIN DASHBOARD (ADMIN PARENT ONLY) --- */}
+            {viewMode === 'admin_dashboard' && role === 'parent' && (
+              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-5 max-w-5xl w-full mx-auto space-y-5 scrollbar-none font-sans animate-in fade-in duration-200">
+                
+                {/* DASHBOARD HERO HEADER */}
+                <div className="bg-gradient-to-r from-[#181818] via-[#1f1912] to-[#181818] border-2 border-amber-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl relative overflow-hidden">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-black flex items-center justify-center text-2xl shadow-xl border-2 border-amber-300 font-black shrink-0">
+                        👑
+                      </div>
+                      <div className="text-left space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <h1 className="text-lg sm:text-xl font-black text-white">Admin Command Center</h1>
+                          <span className="text-[10px] bg-amber-500 text-black px-2 py-0.5 rounded-full font-bold">SUPERUSER</span>
+                        </div>
+                        <p className="text-xs text-amber-300/80 font-mono">
+                          Session Verified • Administrator (H) • Master Access
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setViewMode('real_gpt')}
+                        className="bg-[#242424] hover:bg-[#333] border border-[#3a3a3a] text-white px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 active:scale-95 shadow"
+                      >
+                        <span>← Return to Chat</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => window.location.reload()}
+                        className="bg-amber-500 hover:bg-amber-400 text-black p-2 rounded-xl text-xs font-bold cursor-pointer transition-all shadow"
+                        title="Reload Dashboard"
+                      >
+                        <RefreshCw size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* OVERVIEW SYSTEM METRIC CARDS (4 TILES) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 text-left font-sans">
+                  
+                  {/* CARD 1: CALL RECORDINGS VAULT */}
+                  <div className="bg-[#121212] border border-rose-500/40 p-4 rounded-2xl shadow-lg space-y-2 hover:border-rose-500/70 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-rose-400 flex items-center gap-1.5">
+                        <Disc size={15} className="animate-spin" style={{ animationDuration: '4s' }} />
+                        Call Recordings
+                      </span>
+                      <span className="text-[10px] bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded-full font-mono">
+                        {adminRecordingsList.length} VAULT
+                      </span>
+                    </div>
+                    <p className="text-xl font-black text-white font-mono">{adminRecordingsList.length} Audio Files</p>
+                    <p className="text-[11px] text-gray-400">Mixed dual-channel HD recordings stored with 24h retention.</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminRecordingsModal(true)}
+                      className="w-full bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-200 text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow mt-1"
+                    >
+                      Open Recordings Vault
+                    </button>
+                  </div>
+
+                  {/* CARD 2: ANSWER PENDING QUESTIONS */}
+                  <div className="bg-[#121212] border border-amber-500/40 p-4 rounded-2xl shadow-lg space-y-2 hover:border-amber-500/70 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                        <AlertCircle size={15} />
+                        Answer Pending
+                      </span>
+                      <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-mono">
+                        {pendingMessages.length} PENDING
+                      </span>
+                    </div>
+                    <p className="text-xl font-black text-white font-mono">{pendingMessages.length} Flagged</p>
+                    <p className="text-[11px] text-gray-400">Auto-downloads daily PDF report at 7:20 PM automatically.</p>
+                    <div className="flex gap-1.5 mt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowPendingModal(true)}
+                        className="flex-1 bg-[#222] hover:bg-[#2c2c2c] text-white text-xs font-bold py-2 rounded-xl cursor-pointer transition-all border border-[#333]"
+                      >
+                        View List
+                      </button>
+                      <button
+                        type="button"
+                        onClick={downloadPendingPDF}
+                        className="bg-amber-600 hover:bg-amber-500 text-black text-xs font-bold px-3 py-2 rounded-xl cursor-pointer transition-all shadow"
+                        title="Download Pending PDF Now"
+                      >
+                        <Download size={13} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* CARD 3: LUDO ROYALE ARENA */}
+                  <div className="bg-[#121212] border border-emerald-500/40 p-4 rounded-2xl shadow-lg space-y-2 hover:border-emerald-500/70 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                        <Gamepad2 size={15} />
+                        Ludo Royale
+                      </span>
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono">
+                        2-PLAYER
+                      </span>
+                    </div>
+                    <p className="text-xl font-black text-white font-mono">H: {scores.H} vs A: {scores.A}</p>
+                    <p className="text-[11px] text-gray-400">Real-time socket synchronized multiplayer board arena.</p>
+                    <button
+                      type="button"
+                      onClick={() => setActiveGame(ARCADE_GAMES[0])}
+                      className="w-full bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-200 text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow mt-1"
+                    >
+                      Launch Ludo Arena
+                    </button>
+                  </div>
+
+                  {/* CARD 4: CODEX VIDEO CINEMA */}
+                  <div className="bg-[#121212] border border-blue-500/40 p-4 rounded-2xl shadow-lg space-y-2 hover:border-blue-500/70 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
+                        <Tv size={15} />
+                        Codex Cinema
+                      </span>
+                      <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full font-mono">
+                        WHITE DOT
+                      </span>
+                    </div>
+                    <p className="text-xl font-black text-white font-mono">{codexEngine.toUpperCase()}</p>
+                    <p className="text-[11px] text-gray-400">Frame delay gap calculator & Togepi live chat overlay.</p>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('codex')}
+                      className="w-full bg-blue-950/80 hover:bg-blue-900 border border-blue-700/60 text-blue-200 text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow mt-1"
+                    >
+                      Open Cinema
+                    </button>
+                  </div>
+
+                </div>
+
+                {/* MAIN DYNAMIC ADMIN WORKSPACE PANEL (READY FOR NEXT INSTRUCTIONS) */}
+                <div className="bg-[#121212] border-2 border-[#262626] rounded-3xl p-6 sm:p-8 text-center space-y-4 shadow-2xl relative overflow-hidden">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto text-2xl animate-pulse">
+                    ⚡
+                  </div>
+                  <div className="max-w-lg mx-auto space-y-1.5">
+                    <h2 className="text-base sm:text-lg font-black text-white">Admin Operations Workspace</h2>
+                    <p className="text-xs sm:text-sm text-gray-400">
+                      This dedicated dashboard is set up exclusively for Admin (H).
+                    </p>
+                    <div className="inline-block bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono px-3 py-1.5 rounded-xl font-semibold mt-2">
+                      💡 Status: Awaiting your instructions for next tools & features!
+                    </div>
+                  </div>
+
+                  {/* QUICK UTILITY ACTION BAR */}
+                  <div className="flex flex-wrap items-center justify-center gap-2.5 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsBotOpen(true)}
+                      className="bg-[#1c1c1c] hover:bg-[#282828] border border-[#333] text-gray-200 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all shadow flex items-center gap-2"
+                    >
+                      <Bot size={14} className="text-emerald-400" />
+                      <span>Bubble Alert Assistant</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={downloadFullChatPDF}
+                      className="bg-[#1c1c1c] hover:bg-[#282828] border border-[#333] text-gray-200 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all shadow flex items-center gap-2"
+                    >
+                      <Download size={14} className="text-amber-400" />
+                      <span>Instant Full Chat PDF</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStartAudioCall}
+                      className="bg-[#1c1c1c] hover:bg-[#282828] border border-[#333] text-gray-200 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all shadow flex items-center gap-2"
+                    >
+                      <Phone size={14} className="text-emerald-400" />
+                      <span>Initiate Whisper Call</span>
+                    </button>
+                  </div>
+                </div>
+
+              </section>
+            )}
+
             {viewMode === 'images_archive' && (
               <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-3 scrollbar-none font-sans">
                 <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
@@ -4680,7 +4908,8 @@ export default function App() {
               </section>
             )}
 
-            <div className="px-3 sm:px-6 lg:px-8 pb-3 sm:pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
+            {viewMode !== 'admin_dashboard' && (
+              <div className="px-3 sm:px-6 lg:px-8 pb-3 sm:pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
               {replyTarget && (
                 <div className="mb-2 bg-[#1a1a1a] border border-[#333] px-3.5 py-1.5 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-150">
                   <div className="flex items-center gap-2 overflow-hidden">
@@ -4804,6 +5033,7 @@ export default function App() {
                 </div>
               </form>
             </div>
+          )}
           </>
         )}
 

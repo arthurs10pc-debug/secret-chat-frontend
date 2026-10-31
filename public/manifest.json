@@ -9,6 +9,12 @@
       "type": "image/x-icon"
     },
     {
+      "src": "chatgpt-logo.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512",
+      "purpose": "any maskable"
+    },
+    {
       "src": "logo192.png",
       "type": "image/png",
       "sizes": "192x192",
@@ -24,7 +30,7 @@
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "theme_color": "#000000",
+  "theme_color": "#10a37f",
   "background_color": "#000000",
   "categories": ["utilities", "productivity"]
 }
