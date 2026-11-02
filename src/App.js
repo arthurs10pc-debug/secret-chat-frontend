@@ -1610,6 +1610,7 @@ export default function App() {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').then(async (reg) => {
         swRegistrationRef.current = reg;
+        try { reg.update(); } catch (e) {}
         if ('PushManager' in window) {
           try {
             let subscription = await reg.pushManager.getSubscription();

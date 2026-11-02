@@ -1,5 +1,5 @@
 // Progressive Web App Service Worker with Push Notifications & Offline Caching
-const CACHE_NAME = 'stealth-chat-v1';
+const CACHE_NAME = 'stealth-chat-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -73,8 +73,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: 'https://chat.openai.com/favicon.ico',
-    badge: 'https://chat.openai.com/favicon.ico',
+    icon: '/favicon.ico',
+    badge: '/favicon.ico',
     vibrate: [200, 100, 200],
     tag: 'stealth_background_alert',
     renotify: true
