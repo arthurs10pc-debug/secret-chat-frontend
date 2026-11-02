@@ -9,7 +9,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2
+  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2, Heart, Coins, Award, Scale, Gift, SlidersHorizontal, Bell, BellRing, Filter, CheckCircle2, XCircle
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -41,6 +41,183 @@ const DEFAULT_RECENT_CHATS = [
   "Tablet as Second Screen",
   "Bike Comparison Suggestion",
   "Punjabi Thali Search"
+];
+
+const DEFAULT_LOVE_LEDGER = [
+  {
+    id: 'lb_1',
+    sl: 1,
+    description: 'Announcement Read',
+    earnedAt: '02/11/2026 01:33 PM',
+    expireDate: '05/12/2026',
+    points: 1.50,
+    type: 'credit',
+    remarks: 'Announcement Read before 10 Hours',
+    status: 'Confirmed'
+  },
+  {
+    id: 'lb_2',
+    sl: 2,
+    description: 'Morning Sweet Text',
+    earnedAt: '02/11/2026 09:38 AM',
+    expireDate: '05/12/2026',
+    points: 2.00,
+    type: 'credit',
+    remarks: 'Check-in sweet Good Morning before 09:00 AM',
+    status: 'Confirmed'
+  },
+  {
+    id: 'lb_3',
+    sl: 3,
+    description: 'Monthly Punctuality Reward',
+    earnedAt: '01/11/2026 05:30 AM',
+    expireDate: '05/12/2026',
+    points: 15.00,
+    type: 'credit',
+    remarks: 'Great job! Perfect weekend punctuality, zero late arrivals or absences',
+    status: 'Confirmed'
+  },
+  {
+    id: 'lb_4',
+    sl: 4,
+    description: 'Dry Replies ("Hmm", "Ok")',
+    earnedAt: '31/10/2026 07:37 PM',
+    expireDate: '05/11/2026',
+    points: -2.00,
+    type: 'debit',
+    remarks: 'Sent dry reply during sweet conversation',
+    status: 'Deducted'
+  },
+  {
+    id: 'lb_5',
+    sl: 5,
+    description: 'Meal Check-in',
+    earnedAt: '31/10/2026 01:15 PM',
+    expireDate: '05/11/2026',
+    points: 2.00,
+    type: 'credit',
+    remarks: 'Caring "Had lunch?" reminder sent on time',
+    status: 'Confirmed'
+  },
+  {
+    id: 'lb_6',
+    sl: 6,
+    description: 'Late Reply / Ghosting',
+    earnedAt: '30/10/2026 07:38 PM',
+    expireDate: '05/11/2026',
+    points: -5.00,
+    type: 'debit',
+    remarks: 'Disappeared for >2 hours without prior notice',
+    status: 'Deducted'
+  },
+  {
+    id: 'lb_7',
+    sl: 7,
+    description: 'Compliment Drop',
+    earnedAt: '30/10/2026 02:45 PM',
+    expireDate: '05/11/2026',
+    points: 3.00,
+    type: 'credit',
+    remarks: 'Spontaneous sweet romantic compliment',
+    status: 'Confirmed'
+  },
+  {
+    id: 'lb_8',
+    sl: 8,
+    description: 'Seen & Ignored',
+    earnedAt: '29/10/2026 05:20 PM',
+    expireDate: '05/11/2026',
+    points: -3.00,
+    type: 'debit',
+    remarks: 'Message read but left unreplied for >1 hour',
+    status: 'Deducted'
+  },
+  {
+    id: 'lb_9',
+    sl: 9,
+    description: 'Romantic Song Recommendation',
+    earnedAt: '28/10/2026 10:14 PM',
+    expireDate: '05/11/2026',
+    points: 5.00,
+    type: 'credit',
+    remarks: 'Recommended beautiful love track for sync listening',
+    status: 'Confirmed'
+  },
+  {
+    id: 'lb_10',
+    sl: 10,
+    description: 'Late Night Romantic Paragraph',
+    earnedAt: '27/10/2026 11:45 PM',
+    expireDate: '05/11/2026',
+    points: 10.00,
+    type: 'credit',
+    remarks: 'Heartfelt emotional paragraph before sleeping',
+    status: 'Confirmed'
+  }
+];
+
+const ROMANTIC_WISH_STORE = [
+  {
+    id: 'wish_voicenote',
+    title: 'Voice Note on Demand',
+    cost: 20.00,
+    icon: '🎙️',
+    description: 'A personalized cute voice note with sweet romantic nicknames and compliments on demand.'
+  },
+  {
+    id: 'wish_icecream',
+    title: 'Ice Cream / Dessert Treat',
+    cost: 40.00,
+    icon: '🍦',
+    description: 'Guaranteed favorite ice cream flavor or dessert delivered or enjoyed together.'
+  },
+  {
+    id: 'wish_movie',
+    title: 'Codex Cinema Movie Choice',
+    cost: 75.00,
+    icon: '🎬',
+    description: 'Full sovereign pick of the next romantic movie or show to stream synchronized together.'
+  },
+  {
+    id: 'wish_custom',
+    title: 'Custom Romantic Wish',
+    cost: 120.00,
+    icon: '✨',
+    description: 'Any personal cute favor, romantic request, or surprise granted without hesitation.'
+  },
+  {
+    id: 'wish_dinner',
+    title: 'Candlelight Dinner Date',
+    cost: 250.00,
+    icon: '🥂',
+    description: 'A fully planned and organized romantic dinner date with VIP royal couple treatment.'
+  }
+];
+
+const LOVE_EARNING_RULES = [
+  { sno: 1, task: 'Daily Morning Sweet Text', criteria: 'Send sweet Good Morning message before 9:00 AM', reward: '+2.00' },
+  { sno: 2, task: 'Instant Reply', criteria: 'Reply within 5 minutes of incoming message', reward: '+1.00' },
+  { sno: 3, task: 'Compliment Drop', criteria: 'Spontaneous, genuine romantic compliment during conversation', reward: '+3.00' },
+  { sno: 4, task: 'Meal Check-in', criteria: 'Caring "Had food?" reminder sent before 2:00 PM / 9:00 PM', reward: '+2.00' },
+  { sno: 5, task: 'Virtual Hug / Kiss Emoji', criteria: 'Sharing cute romantic emojis, stickers, or kisses in chat', reward: '+1.00' },
+  { sno: 6, task: 'Romantic Song / Movie Suggestion', criteria: 'Suggesting a quality romantic track or movie to enjoy together', reward: '+5.00' },
+  { sno: 7, task: 'Late Night Romantic Paragraph', criteria: 'Writing a heartfelt, emotional paragraph at night before bed', reward: '+10.00' },
+  { sno: 8, task: '100% Weekend Availability', criteria: 'Spending dedicated quality time without gaps on weekends', reward: '+10.00' },
+  { sno: 9, task: 'Anniversary / Milestone Reminder', criteria: 'Remembering and wishing special date or anniversary in advance', reward: '+15.00' },
+  { sno: 10, task: 'Apology without Ego', criteria: 'Promptly apologizing with love and zero ego after misunderstanding', reward: '+5.00' },
+  { sno: 11, task: 'Surprise Cute Selfie', criteria: 'Sending a spontaneous smile or cute picture', reward: '+3.00' },
+  { sno: 12, task: 'Patient Listening', criteria: 'Listening to full story/rant with empathy without interrupting', reward: '+5.00' },
+  { sno: 13, task: 'Future Date Planning', criteria: 'Suggesting and planning a fun upcoming date idea together', reward: '+8.00' }
+];
+
+const LOVE_DEDUCTION_RULES = [
+  { sno: 1, infraction: 'Seen & Ignored (Left on Read)', criteria: 'Message seen but left unreplied for more than 1 hour', penalty: '-3.00' },
+  { sno: 2, infraction: 'Late Reply / Ghosting', criteria: 'Disappearing for hours without giving prior heads-up', penalty: '-5.00' },
+  { sno: 3, infraction: 'Dry Replies ("Hmm", "Ok", "K")', criteria: 'Replying with dry 1-word answers to long sweet messages', penalty: '-2.00' },
+  { sno: 4, infraction: 'Fighting / Rudeness', criteria: 'Using harsh tone, anger, or unromantic rudeness in chat', penalty: '-10.00' },
+  { sno: 5, infraction: 'Forgetting Special Dates', criteria: 'Forgetting important anniversaries, milestones, or birthdays', penalty: '-20.00' },
+  { sno: 6, infraction: 'Sleeping Without "Good Night"', criteria: 'Falling asleep without wishing sweet Good Night', penalty: '-3.00' },
+  { sno: 7, infraction: 'Broken Romantic Promise', criteria: 'Cancelling a promised call or romantic activity without reason', penalty: '-8.00' }
 ];
 
 const cleanOriginalText = (raw) => {
@@ -174,6 +351,40 @@ export default function App() {
   // 7:20 PM Auto-Download Countdown Timer State
   const [countdownStr, setCountdownStr] = useState("00:00:00");
   const autoDownloadedRef = useRef(false);
+
+  // Love Balance & Karma Currency State
+  const [loveBalance, setLoveBalance] = useState(() => {
+    try {
+      const saved = localStorage.getItem('stealth_love_balance');
+      return saved !== null ? parseFloat(saved) : 18.00;
+    } catch {
+      return 18.00;
+    }
+  });
+
+  const [loveLedger, setLoveLedger] = useState(() => {
+    try {
+      const saved = localStorage.getItem('stealth_love_ledger');
+      return saved ? JSON.parse(saved) : DEFAULT_LOVE_LEDGER;
+    } catch {
+      return DEFAULT_LOVE_LEDGER;
+    }
+  });
+
+  const [showLoveBalanceModal, setShowLoveBalanceModal] = useState(false);
+  const [loveModalTab, setLoveModalTab] = useState('passbook'); // 'passbook' | 'redeem' | 'rules'
+  const [loveSourceFilter, setLoveSourceFilter] = useState('All');
+  const [loveStatusFilter, setLoveStatusFilter] = useState('All');
+  const [adminLbAmount, setAdminLbAmount] = useState('');
+  const [adminLbReason, setAdminLbReason] = useState('');
+
+  // Mobile Notification Permission State
+  const [notificationPermission, setNotificationPermission] = useState(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission;
+    }
+    return 'default';
+  });
 
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem('stealth_conversations');
@@ -1446,37 +1657,56 @@ export default function App() {
     };
   }, []);
 
+  // Persist Love Balance to LocalStorage
   useEffect(() => {
-    if (role === 'parent' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission();
+    try {
+      localStorage.setItem('stealth_love_balance', loveBalance.toString());
+      localStorage.setItem('stealth_love_ledger', JSON.stringify(loveLedger));
+    } catch (e) {
+      console.warn("Storage quota limit reached for love balance:", e);
+    }
+  }, [loveBalance, loveLedger]);
+
+  const requestNotificationAccess = useCallback(async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const perm = await Notification.requestPermission();
+        setNotificationPermission(perm);
+        return perm;
+      } catch (e) {
+        console.warn('Notification permission error:', e);
       }
     }
-  }, [role]);
+    return 'denied';
+  }, []);
 
-  const triggerParentMobileNotification = useCallback((incomingText) => {
-    const isParent = (roleRef.current || localStorage.getItem('stealth_role')) === 'parent';
-    if (!isParent || !('Notification' in window) || Notification.permission !== 'granted') return;
-
-    const userMsgs = stealthMessagesRef.current
-      .filter(m => m.senderRole === 'user')
-      .map(m => m.isMedia ? "[Photo Asset]" : m.text);
-
-    if (incomingText) {
-      userMsgs.push(incomingText);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then(perm => {
+          setNotificationPermission(perm);
+        }).catch(() => {});
+      } else {
+        setNotificationPermission(Notification.permission);
+      }
     }
+  }, []);
 
-    const last3 = userMsgs.slice(-3);
-    const bodyFormatted = last3.length > 0 
-      ? last3.map(t => `• ${t.length > 40 ? t.substring(0, 37) + '...' : t}`).join('\n')
-      : "• New incoming message";
+  const triggerMobileNotification = useCallback((incomingText, senderRole) => {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
-    const title = `ChatGPT • (A)`;
+    const senderTag = senderRole === 'parent' ? '(H)' : '(A)';
+    const title = `ChatGPT • ${senderTag}`;
+
+    const bodyText = incomingText 
+      ? `• ${incomingText.length > 50 ? incomingText.substring(0, 47) + '...' : incomingText}`
+      : '• New message received';
+
     const options = {
-      body: bodyFormatted,
-      icon: 'https://chat.openai.com/favicon.ico',
-      badge: 'https://chat.openai.com/favicon.ico',
-      tag: 'stealth_parent_stream',
+      body: bodyText,
+      icon: '/favicon.ico',
+      badge: '/favicon.ico',
+      tag: 'stealth_chat_message',
       renotify: true,
       vibrate: [200, 100, 200]
     };
@@ -1489,6 +1719,67 @@ export default function App() {
       } catch (e) {}
     }
   }, []);
+
+  const handleLoveBalanceTransaction = useCallback((amount, type, reason, isBroadcast = false) => {
+    const numAmount = Math.abs(parseFloat(amount) || 0);
+    if (numAmount === 0) return;
+    const finalDelta = type === 'credit' ? numAmount : -numAmount;
+
+    setLoveBalance(prev => {
+      const nextBal = Math.max(0, parseFloat((prev + finalDelta).toFixed(2)));
+      return nextBal;
+    });
+
+    const nowStr = new Date().toLocaleString('en-GB', { 
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true 
+    });
+    const expDate = new Date();
+    expDate.setMonth(expDate.getMonth() + 1);
+    const expStr = expDate.toLocaleDateString('en-GB');
+
+    const newEntry = {
+      id: 'lb_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      sl: 1,
+      description: reason || (type === 'credit' ? 'Love Karma Reward' : 'Love Karma Deduction'),
+      earnedAt: nowStr,
+      expireDate: expStr,
+      points: type === 'credit' ? numAmount : -numAmount,
+      type: type,
+      remarks: reason || (type === 'credit' ? 'Sweet romance karma credited' : 'Karma deduction applied'),
+      status: type === 'credit' ? 'Confirmed' : (type === 'redeem' ? 'Redeemed' : 'Deducted')
+    };
+
+    setLoveLedger(prev => [newEntry, ...prev.map((e, idx) => ({ ...e, sl: idx + 2 }))]);
+
+    if (type === 'credit' && !isBroadcast) {
+      try {
+        confetti({ particleCount: 50, spread: 70, origin: { y: 0.4 } });
+      } catch (e) {}
+    }
+
+    if (!isBroadcast && socketRef.current) {
+      socketRef.current.emit('love_balance_action', {
+        room: GLOBAL_ROOM,
+        amount: numAmount,
+        type: type,
+        reason: reason,
+        senderRole: roleRef.current || 'admin',
+        timestamp: Date.now()
+      });
+    }
+  }, []);
+
+  const handleRedeemWish = (wish) => {
+    if (loveBalance < wish.cost) {
+      alert(`Insufficient Love Balance! You have ₹ ${loveBalance.toFixed(2)}, but need ₹ ${wish.cost.toFixed(2)}. Earn more Love Balance through sweet messages and caring gestures!`);
+      return;
+    }
+    handleLoveBalanceTransaction(wish.cost, 'redeem', `Redeemed: ${wish.title}`);
+    try {
+      confetti({ particleCount: 70, spread: 80, origin: { y: 0.5 } });
+    } catch (e) {}
+  };
 
   useEffect(() => {
     stealthMessagesRef.current = stealthMessages;
@@ -1995,9 +2286,7 @@ export default function App() {
           socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: myCurrentRole });
         }
 
-        if (data.senderRole === 'user') {
-          triggerParentMobileNotification(formatted.isMedia ? "[Photo Asset]" : text);
-        }
+        triggerMobileNotification(formatted.isMedia ? "[Photo Asset]" : text, data.senderRole);
       }
     });
 
@@ -2026,10 +2315,21 @@ export default function App() {
       setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, flaggedPending } : m));
     });
 
+    socketRef.current.on('love_balance_broadcast', (data) => {
+      if (data && data.senderRole !== (roleRef.current || localStorage.getItem('stealth_role'))) {
+        handleLoveBalanceTransaction(data.amount, data.type, data.reason, true);
+        if (data.type === 'credit') {
+          try {
+            confetti({ particleCount: 50, spread: 70, origin: { y: 0.4 } });
+          } catch (e) {}
+        }
+      }
+    });
+
     return () => {
       if (socketRef.current) socketRef.current.disconnect();
     };
-  }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerParentMobileNotification, codexEngine]);
+  }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerMobileNotification, handleLoveBalanceTransaction, codexEngine]);
 
   const handleAdminSendRequest = () => {
     if (socketRef.current) {
@@ -2787,7 +3087,7 @@ export default function App() {
         >
           <div className="h-14 flex items-center justify-between px-3.5 pt-1.5 shrink-0">
             <span className="font-semibold text-base tracking-tight text-white flex items-center gap-2">
-              <span className="w-7 h-7 rounded-full bg-[#10a37f] flex items-center justify-center p-1 text-white shadow-sm shrink-0">
+              <span className="w-7 h-7 rounded-full bg-black border border-[#333] flex items-center justify-center p-1 text-white shadow-sm shrink-0">
                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                   <path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/>
                 </svg>
@@ -3419,11 +3719,11 @@ export default function App() {
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   onClick={() => setShowAdminRecordingsModal(true)}
-                  className="flex items-center gap-1.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-600/60 text-rose-300 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer shadow active:scale-95 shrink-0"
+                  className="hidden md:flex items-center gap-1.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-600/60 text-rose-300 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer shadow active:scale-95 shrink-0"
                   title="Admin Call Recordings Vault"
                 >
                   <Disc size={14} className="text-rose-400 animate-spin" style={{ animationDuration: '3s' }} />
-                  <span className="hidden md:inline">Call Recordings</span>
+                  <span>Call Recordings</span>
                 </button>
 
                 <button
@@ -3464,10 +3764,43 @@ export default function App() {
               <Phone size={13} className={isInAudioCall ? 'animate-pulse text-emerald-400' : ''} />
               <span>Call</span>
             </button>
-            
+
+            {/* LOVE BALANCE BUTTON PILL (RIGHT OF CALL, LEFT OF UPGRADE) */}
+            <button
+              type="button"
+              onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+              className="flex items-center gap-1 bg-emerald-950/50 hover:bg-emerald-900/70 border border-emerald-500/60 hover:border-emerald-400 text-emerald-300 hover:text-white px-2 sm:px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all shadow-[0_0_12px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
+              title="Open Love Balance Passbook & Wish Store"
+            >
+              <span className="text-emerald-400 font-sans font-black text-sm">₹</span>
+              <span>{Number(loveBalance || 0).toFixed(2)}</span>
+              <span className="hidden sm:inline font-sans font-semibold text-[11px] text-emerald-300/90 ml-0.5">Love Balance</span>
+            </button>
+
+            {/* UPGRADE BUTTON (SPARKLES REMOVED) */}
             <button className="hidden sm:flex items-center gap-1.5 text-white hover:text-gray-200 cursor-pointer font-medium">
-              <Sparkles size={15} className="text-blue-400" />
               <span>Upgrade</span>
+            </button>
+
+            {/* MOBILE NOTIFICATION TOGGLE / STATUS */}
+            <button
+              type="button"
+              onClick={async () => {
+                const res = await requestNotificationAccess();
+                if (res === 'granted') {
+                  alert("Mobile Notifications Activated! Instant alerts will notify on incoming secret messages.");
+                } else if (res === 'denied') {
+                  alert("Notifications blocked in browser settings. Please enable notifications in site permissions.");
+                }
+              }}
+              className={`p-1.5 rounded-xl cursor-pointer transition-all ${
+                notificationPermission === 'granted'
+                  ? 'text-emerald-400 hover:text-emerald-300'
+                  : 'text-amber-400 hover:text-amber-300 animate-pulse'
+              }`}
+              title={notificationPermission === 'granted' ? "Mobile Notifications: ACTIVE" : "Click to Turn ON Mobile Notifications"}
+            >
+              {notificationPermission === 'granted' ? <Bell size={15} /> : <BellRing size={15} />}
             </button>
             
             <button className="p-1.5 text-white hover:text-gray-200 cursor-pointer">
@@ -4137,10 +4470,10 @@ export default function App() {
 
             {/* --- SEPARATE DEDICATED ADMIN DASHBOARD (ADMIN PARENT ONLY) --- */}
             {viewMode === 'admin_dashboard' && role === 'parent' && (
-              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-5 max-w-5xl w-full mx-auto space-y-5 scrollbar-none font-sans animate-in fade-in duration-200">
+              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-5 max-w-6xl w-full mx-auto space-y-5 scrollbar-none font-sans animate-in fade-in duration-200">
                 
                 {/* DASHBOARD HERO HEADER */}
-                <div className="bg-gradient-to-r from-[#181818] via-[#1f1912] to-[#181818] border-2 border-amber-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl relative overflow-hidden">
+                <div className="bg-gradient-to-r from-[#161616] via-[#1c1813] to-[#161616] border-2 border-amber-500/50 rounded-3xl p-4 sm:p-6 shadow-2xl relative overflow-hidden">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
                     <div className="flex items-center gap-3.5">
                       <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-black flex items-center justify-center text-2xl shadow-xl border-2 border-amber-300 font-black shrink-0">
@@ -4177,155 +4510,498 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* OVERVIEW SYSTEM METRIC CARDS (4 TILES) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 text-left font-sans">
+                {/* 4 DISTINCT CLEAN MODULAR PARTS */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 text-left font-sans">
                   
-                  {/* CARD 1: CALL RECORDINGS VAULT */}
-                  <div className="bg-[#121212] border border-rose-500/40 p-4 rounded-2xl shadow-lg space-y-2 hover:border-rose-500/70 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-rose-400 flex items-center gap-1.5">
-                        <Disc size={15} className="animate-spin" style={{ animationDuration: '4s' }} />
-                        Call Recordings
-                      </span>
-                      <span className="text-[10px] bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded-full font-mono">
-                        {adminRecordingsList.length} VAULT
-                      </span>
-                    </div>
-                    <p className="text-xl font-black text-white font-mono">{adminRecordingsList.length} Audio Files</p>
-                    <p className="text-[11px] text-gray-400">Mixed dual-channel HD recordings stored with 24h retention.</p>
-                    <button
-                      type="button"
-                      onClick={() => setShowAdminRecordingsModal(true)}
-                      className="w-full bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-200 text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow mt-1"
-                    >
-                      Open Recordings Vault
-                    </button>
-                  </div>
+                  {/* PART 1: LOVE BALANCE CENTRAL ENGINE & CONTROLLER */}
+                  <div className="bg-[#121212] border-2 border-pink-500/40 hover:border-pink-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col justify-between space-y-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between border-b border-[#222] pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-xl bg-pink-500/10 border border-pink-500/30 flex items-center justify-center text-pink-400 font-bold text-lg">
+                            💖
+                          </div>
+                          <div>
+                            <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                              <span>Part 1: Love Balance Engine</span>
+                              <span className="text-[10px] bg-pink-500/20 text-pink-300 border border-pink-500/30 px-2 py-0.5 rounded-full font-mono">LIVE CONTROL</span>
+                            </h3>
+                            <p className="text-[11px] text-gray-400">Award sweet karma rewards & manage relationship rules</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-gray-400">Current Balance</div>
+                          <div className="text-lg sm:text-xl font-black text-emerald-400 font-mono">₹ {Number(loveBalance || 0).toFixed(2)}</div>
+                        </div>
+                      </div>
 
-                  {/* CARD 2: ANSWER PENDING QUESTIONS */}
-                  <div className="bg-[#121212] border border-amber-500/40 p-4 rounded-2xl shadow-lg space-y-2 hover:border-amber-500/70 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
-                        <AlertCircle size={15} />
-                        Answer Pending
-                      </span>
-                      <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-mono">
-                        {pendingMessages.length} PENDING
-                      </span>
+                      {/* QUICK REWARDS & DEDUCTIONS */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-gray-300">
+                          <span className="text-emerald-400 flex items-center gap-1">✨ Quick Awards (+Points):</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleLoveBalanceTransaction(2, 'credit', 'Morning Sweet Text (Before 9 AM)')}
+                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            title="Morning Sweet Text (+₹2.00)"
+                          >
+                            +₹2 Morning Text
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLoveBalanceTransaction(1, 'credit', 'Instant Reply (< 5 mins)')}
+                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            title="Instant Reply (+₹1.00)"
+                          >
+                            +₹1 Fast Reply
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLoveBalanceTransaction(3, 'credit', 'Compliment Drop')}
+                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            title="Compliment Drop (+₹3.00)"
+                          >
+                            +₹3 Compliment
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLoveBalanceTransaction(5, 'credit', 'Romantic Song / Movie')}
+                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            title="Romantic Song / Movie (+₹5.00)"
+                          >
+                            +₹5 Song/Movie
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLoveBalanceTransaction(10, 'credit', 'Late Night Romantic Paragraph')}
+                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            title="Late Night Romantic Paragraph (+₹10.00)"
+                          >
+                            +₹10 Paragraph
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLoveBalanceTransaction(15, 'credit', 'Special Milestone / Anniversary')}
+                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            title="Special Date / Milestone (+₹15.00)"
+                          >
+                            +₹15 Milestone
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-gray-300 pt-1">
+                          <span className="text-rose-400 flex items-center gap-1">💔 Quick Deductions (-Points):</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleLoveBalanceTransaction(2, 'debit', 'Dry Replies ("Hmm", "Ok")')}
+                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            title="Dry Reply (-₹2.00)"
+                          >
+                            -₹2 Dry Reply
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLoveBalanceTransaction(3, 'debit', 'Seen & Ignored (>1 hr)')}
+                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            title="Seen & Ignored (-₹3.00)"
+                          >
+                            -₹3 Seen & Left
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLoveBalanceTransaction(3, 'debit', 'Slept without Good Night')}
+                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            title="Slept without Good Night (-₹3.00)"
+                          >
+                            -₹3 Slept w/o GN
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLoveBalanceTransaction(5, 'debit', 'Late Reply / Ghosting')}
+                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            title="Late Reply (-₹5.00)"
+                          >
+                            -₹5 Late Reply
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLoveBalanceTransaction(10, 'debit', 'Rudeness / Harsh Words')}
+                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            title="Rudeness (-₹10.00)"
+                          >
+                            -₹10 Rude Tone
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleLoveBalanceTransaction(20, 'debit', 'Forgetting Anniversary / Date')}
+                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            title="Forgetting Date (-₹20.00)"
+                          >
+                            -₹20 Forgot Date
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* CUSTOM TRANSACTION FORM */}
+                      <div className="bg-[#181818] border border-[#282828] p-3 rounded-2xl space-y-2">
+                        <div className="text-[11px] font-bold text-gray-300 flex items-center justify-between">
+                          <span>Custom Adjustment:</span>
+                          <span className="text-[10px] text-gray-500">Instant Real-time Sync</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            value={adminLbAmount}
+                            onChange={(e) => setAdminLbAmount(e.target.value)}
+                            placeholder="Points (e.g. 5.0)"
+                            className="bg-[#121212] border border-[#333] text-white text-xs px-3 py-1.5 rounded-xl outline-none focus:border-pink-500 font-mono"
+                          />
+                          <input
+                            type="text"
+                            value={adminLbReason}
+                            onChange={(e) => setAdminLbReason(e.target.value)}
+                            placeholder="Remark / Gesture Reason"
+                            className="bg-[#121212] border border-[#333] text-white text-xs px-3 py-1.5 rounded-xl outline-none focus:border-pink-500"
+                          />
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!adminLbAmount) return;
+                              handleLoveBalanceTransaction(parseFloat(adminLbAmount), 'credit', adminLbReason || 'Admin Sweet Reward');
+                              setAdminLbAmount('');
+                              setAdminLbReason('');
+                            }}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 rounded-xl cursor-pointer shadow active:scale-95 transition-all text-center"
+                          >
+                            + Credit (+₹)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!adminLbAmount) return;
+                              handleLoveBalanceTransaction(parseFloat(adminLbAmount), 'debit', adminLbReason || 'Admin Karma Deduction');
+                              setAdminLbAmount('');
+                              setAdminLbReason('');
+                            }}
+                            className="flex-1 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold py-1.5 rounded-xl cursor-pointer shadow active:scale-95 transition-all text-center"
+                          >
+                            - Deduct (-₹)
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-xl font-black text-white font-mono">{pendingMessages.length} Flagged</p>
-                    <p className="text-[11px] text-gray-400">Auto-downloads daily PDF report at 7:20 PM automatically.</p>
-                    <div className="flex gap-1.5 mt-1">
+
+                    {/* PASSBOOK & WISH STORE LAUNCHERS */}
+                    <div className="flex gap-2 pt-2 border-t border-[#222]">
                       <button
                         type="button"
-                        onClick={() => setShowPendingModal(true)}
-                        className="flex-1 bg-[#222] hover:bg-[#2c2c2c] text-white text-xs font-bold py-2 rounded-xl cursor-pointer transition-all border border-[#333]"
+                        onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                        className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
                       >
-                        View List
+                        <Coins size={14} className="text-amber-400" />
+                        <span>Open Passbook</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('redeem'); }}
+                        className="flex-1 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
+                      >
+                        <Gift size={14} />
+                        <span>Wish Store</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('rules'); }}
+                        className="bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-gray-300 text-xs font-bold px-3 py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow"
+                        title="English Rules Guide"
+                      >
+                        📖
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* PART 2: CALL RECORDINGS VAULT & AUDIO HUB */}
+                  <div className="bg-[#121212] border-2 border-rose-500/40 hover:border-rose-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col justify-between space-y-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between border-b border-[#222] pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 font-bold text-lg">
+                            <Disc size={18} className="animate-spin" style={{ animationDuration: '4s' }} />
+                          </div>
+                          <div>
+                            <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                              <span>Part 2: Call Recordings Vault</span>
+                              <span className="text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded-full font-mono">
+                                {adminRecordingsList.length} STORED
+                              </span>
+                            </h3>
+                            <p className="text-[11px] text-gray-400">Mixed dual-channel HD recordings with 24h retention</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleStartAudioCall}
+                          className="bg-rose-950 hover:bg-rose-900 border border-rose-600/60 text-rose-300 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all shadow flex items-center gap-1.5 active:scale-95"
+                        >
+                          <Phone size={12} />
+                          <span>Call Now</span>
+                        </button>
+                      </div>
+
+                      {/* RECORDINGS LIST PREVIEW */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-gray-400">
+                          <span>Recent Audio Recordings:</span>
+                          <span className="text-[10px] text-gray-500">Auto-expires after 24 hours</span>
+                        </div>
+
+                        <div className="max-h-48 overflow-y-auto space-y-2 scrollbar-none pr-1">
+                          {adminRecordingsList.length === 0 ? (
+                            <div className="bg-[#181818] border border-[#262626] rounded-2xl p-6 text-center text-xs text-gray-500 space-y-1">
+                              <p>No call recordings stored in vault yet.</p>
+                              <p className="text-[11px] text-gray-600">Start an encrypted whisper call to automatically record and preserve audio.</p>
+                            </div>
+                          ) : (
+                            adminRecordingsList.slice(0, 4).map((rec) => (
+                              <div key={rec.id} className="bg-[#181818] border border-[#2a2a2a] p-3 rounded-2xl flex items-center justify-between gap-2">
+                                <div className="space-y-0.5 min-w-0">
+                                  <p className="text-xs font-bold text-gray-200 truncate">{rec.title || 'Voice Call Recording'}</p>
+                                  <p className="text-[10px] text-gray-400 font-mono">
+                                    {rec.duration || '0:00'} • {new Date(rec.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {rec.audioUrl && (
+                                    <audio controls src={rec.audioUrl} className="h-7 w-28 sm:w-36 outline-none" />
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteRecording(rec.id)}
+                                    className="text-gray-500 hover:text-rose-400 p-1.5 cursor-pointer rounded-lg hover:bg-[#252525] transition-colors"
+                                    title="Delete Recording"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* VAULT MODAL ACTION */}
+                    <div className="pt-2 border-t border-[#222]">
+                      <button
+                        type="button"
+                        onClick={() => setShowAdminRecordingsModal(true)}
+                        className="w-full bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-200 text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-2"
+                      >
+                        <Disc size={14} className="text-rose-400 animate-spin" />
+                        <span>Open Dedicated Audio Vault ({adminRecordingsList.length})</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* PART 3: ANSWER PENDING & 7:20 PM PDF AUTO-EXPORT */}
+                  <div className="bg-[#121212] border-2 border-amber-500/40 hover:border-amber-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col justify-between space-y-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between border-b border-[#222] pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-lg">
+                            <AlertCircle size={18} />
+                          </div>
+                          <div>
+                            <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                              <span>Part 3: Answer Pending & PDF</span>
+                              <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-mono">
+                                {pendingMessages.length} PENDING
+                              </span>
+                            </h3>
+                            <p className="text-[11px] text-gray-400">Flagged questions & 7:20 PM daily auto-export scheduler</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[10px] text-gray-400">Daily Export In</div>
+                          <div className="text-xs sm:text-sm font-black text-amber-400 font-mono flex items-center gap-1 justify-end">
+                            <Timer size={12} className="animate-spin" />
+                            <span>{countdownStr}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* PENDING LIST PREVIEW */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-gray-400">
+                          <span>Flagged Questions ({pendingMessages.length}):</span>
+                          <span className="text-[10px] text-emerald-400">Auto-downloads PDF at 7:20 PM</span>
+                        </div>
+
+                        <div className="max-h-48 overflow-y-auto space-y-2 scrollbar-none pr-1">
+                          {pendingMessages.length === 0 ? (
+                            <div className="bg-[#181818] border border-[#262626] rounded-2xl p-6 text-center text-xs text-gray-500 space-y-1">
+                              <p>All questions answered! Zero pending flags.</p>
+                              <p className="text-[11px] text-gray-600">Flag important questions in secret chat to highlight and review here.</p>
+                            </div>
+                          ) : (
+                            pendingMessages.slice(0, 4).map((msg) => (
+                              <div key={msg._id} className="bg-[#181818] border border-[#2a2a2a] p-3 rounded-2xl flex items-center justify-between gap-2">
+                                <div className="space-y-0.5 min-w-0">
+                                  <p className="text-xs font-semibold text-gray-200 truncate">{msg.text}</p>
+                                  <p className="text-[10px] text-gray-400 font-mono">
+                                    By {msg.senderRole === 'parent' ? 'Admin (H)' : 'User (A)'} • {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleFlagPending(msg._id)}
+                                  className="bg-emerald-950 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer transition-all active:scale-95 shrink-0"
+                                >
+                                  Resolve
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* PDF EXPORT ACTION BUTTONS */}
+                    <div className="flex gap-2 pt-2 border-t border-[#222]">
+                      <button
+                        type="button"
+                        onClick={downloadFullChatPDF}
+                        className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
+                      >
+                        <Download size={14} className="text-amber-400" />
+                        <span>Instant Full Chat PDF</span>
                       </button>
                       <button
                         type="button"
                         onClick={downloadPendingPDF}
-                        className="bg-amber-600 hover:bg-amber-500 text-black text-xs font-bold px-3 py-2 rounded-xl cursor-pointer transition-all shadow"
-                        title="Download Pending PDF Now"
+                        className="flex-1 bg-amber-600 hover:bg-amber-500 text-black text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
                       >
-                        <Download size={13} />
+                        <FileDown size={14} />
+                        <span>Export Pending PDF</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowPendingModal(true)}
+                        className="bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-gray-300 text-xs font-bold px-3 py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow"
+                        title="View All Pending Questions"
+                      >
+                        🔍
                       </button>
                     </div>
                   </div>
 
-                  {/* CARD 3: LUDO ROYALE ARENA */}
-                  <div className="bg-[#121212] border border-emerald-500/40 p-4 rounded-2xl shadow-lg space-y-2 hover:border-emerald-500/70 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                        <Gamepad2 size={15} />
-                        Ludo Royale
-                      </span>
-                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono">
-                        2-PLAYER
-                      </span>
+                  {/* PART 4: REAL-TIME ARENA & MEDIA HUB */}
+                  <div className="bg-[#121212] border-2 border-blue-500/40 hover:border-blue-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col justify-between space-y-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between border-b border-[#222] pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold text-lg">
+                            <Gamepad2 size={18} />
+                          </div>
+                          <div>
+                            <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                              <span>Part 4: Real-time Arena & Media</span>
+                              <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-full font-mono">
+                                2-PLAYER & CINEMA
+                              </span>
+                            </h3>
+                            <p className="text-[11px] text-gray-400">Ludo Royale Clash board arena & Codex synchronized cinema</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[10px] text-gray-400">Ludo Score</div>
+                          <div className="text-xs sm:text-sm font-black text-amber-400 font-mono">H: {scores.H} vs A: {scores.A}</div>
+                        </div>
+                      </div>
+
+                      {/* ARENA & CINEMA SPLIT CARDS */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {/* LUDO ROYALE CARD */}
+                        <div className="bg-[#181818] border border-[#2a2a2a] p-3.5 rounded-2xl space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                              <span>🎲</span>
+                              <span>Ludo Royale 2P</span>
+                            </span>
+                            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono">
+                              ACTIVE
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-400 leading-tight">
+                            Turn-based socket board game with animated 3D dice and live token tracking.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setActiveGame(ARCADE_GAMES[0])}
+                            className="w-full bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-200 text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow mt-1"
+                          >
+                            Launch Ludo Arena
+                          </button>
+                        </div>
+
+                        {/* CODEX CINEMA CARD */}
+                        <div className="bg-[#181818] border border-[#2a2a2a] p-3.5 rounded-2xl space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
+                              <Tv size={14} />
+                              <span>Codex Cinema</span>
+                            </span>
+                            <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full font-mono">
+                              WHITE DOT
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-400 leading-tight">
+                            Synchronized video player with frame delay gap calculator & Togepi live chat.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setViewMode('codex')}
+                            className="w-full bg-blue-950/80 hover:bg-blue-900 border border-blue-700/60 text-blue-200 text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow mt-1"
+                          >
+                            Open Cinema
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-xl font-black text-white font-mono">H: {scores.H} vs A: {scores.A}</p>
-                    <p className="text-[11px] text-gray-400">Real-time socket synchronized multiplayer board arena.</p>
-                    <button
-                      type="button"
-                      onClick={() => setActiveGame(ARCADE_GAMES[0])}
-                      className="w-full bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-200 text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow mt-1"
-                    >
-                      Launch Ludo Arena
-                    </button>
-                  </div>
 
-                  {/* CARD 4: CODEX VIDEO CINEMA */}
-                  <div className="bg-[#121212] border border-blue-500/40 p-4 rounded-2xl shadow-lg space-y-2 hover:border-blue-500/70 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
-                        <Tv size={15} />
-                        Codex Cinema
-                      </span>
-                      <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full font-mono">
-                        WHITE DOT
-                      </span>
-                    </div>
-                    <p className="text-xl font-black text-white font-mono">{codexEngine.toUpperCase()}</p>
-                    <p className="text-[11px] text-gray-400">Frame delay gap calculator & Togepi live chat overlay.</p>
-                    <button
-                      type="button"
-                      onClick={() => setViewMode('codex')}
-                      className="w-full bg-blue-950/80 hover:bg-blue-900 border border-blue-700/60 text-blue-200 text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow mt-1"
-                    >
-                      Open Cinema
-                    </button>
-                  </div>
-
-                </div>
-
-                {/* MAIN DYNAMIC ADMIN WORKSPACE PANEL (READY FOR NEXT INSTRUCTIONS) */}
-                <div className="bg-[#121212] border-2 border-[#262626] rounded-3xl p-6 sm:p-8 text-center space-y-4 shadow-2xl relative overflow-hidden">
-                  <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto text-2xl animate-pulse">
-                    ⚡
-                  </div>
-                  <div className="max-w-lg mx-auto space-y-1.5">
-                    <h2 className="text-base sm:text-lg font-black text-white">Admin Operations Workspace</h2>
-                    <p className="text-xs sm:text-sm text-gray-400">
-                      This dedicated dashboard is set up exclusively for Admin (H).
-                    </p>
-                    <div className="inline-block bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono px-3 py-1.5 rounded-xl font-semibold mt-2">
-                      💡 Status: Awaiting your instructions for next tools & features!
+                    {/* QUICK MEDIA CONTROLS */}
+                    <div className="flex gap-2 pt-2 border-t border-[#222]">
+                      <button
+                        type="button"
+                        onClick={handleAdminSendRequest}
+                        className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
+                      >
+                        <span>🎯 Invite User (A) to Ludo</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCalcDelayGap}
+                        className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-gray-200 text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
+                        title="Calculate Frame Sync Gap"
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
+                        <span>Sync White Dot</span>
+                      </button>
                     </div>
                   </div>
 
-                  {/* QUICK UTILITY ACTION BAR */}
-                  <div className="flex flex-wrap items-center justify-center gap-2.5 pt-3">
-                    <button
-                      type="button"
-                      onClick={() => setIsBotOpen(true)}
-                      className="bg-[#1c1c1c] hover:bg-[#282828] border border-[#333] text-gray-200 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all shadow flex items-center gap-2"
-                    >
-                      <Bot size={14} className="text-emerald-400" />
-                      <span>Bubble Alert Assistant</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={downloadFullChatPDF}
-                      className="bg-[#1c1c1c] hover:bg-[#282828] border border-[#333] text-gray-200 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all shadow flex items-center gap-2"
-                    >
-                      <Download size={14} className="text-amber-400" />
-                      <span>Instant Full Chat PDF</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleStartAudioCall}
-                      className="bg-[#1c1c1c] hover:bg-[#282828] border border-[#333] text-gray-200 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all shadow flex items-center gap-2"
-                    >
-                      <Phone size={14} className="text-emerald-400" />
-                      <span>Initiate Whisper Call</span>
-                    </button>
-                  </div>
                 </div>
 
               </section>
-            )}
+            )}}
 
             {viewMode === 'images_archive' && (
               <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-3 scrollbar-none font-sans">
@@ -5124,6 +5800,416 @@ export default function App() {
               >
                 Done (Save to Images)
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* --- LOVE BALANCE MASTER MODAL (PASSBOOK, WISH STORE, RULES ENGINE) --- */}
+        {showLoveBalanceModal && (
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
+            <div className="bg-[#121212] border border-emerald-500/40 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden font-sans text-left">
+              
+              {/* MODAL HEADER */}
+              <div className="p-4 sm:p-5 border-b border-[#222] flex items-center justify-between bg-[#161616]">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xl">
+                    ₹
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                      <span>Love Balance</span>
+                      <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-2 py-0.5 rounded-full">
+                        ₹ {Number(loveBalance || 0).toFixed(2)}
+                      </span>
+                    </h2>
+                    <p className="text-xs text-gray-400">Romantic Karma & Wish Fulfillment Ledger</p>
+                  </div>
+                </div>
+
+                {/* TAB BUTTONS & CLOSE */}
+                <div className="flex items-center gap-2">
+                  <div className="hidden sm:flex bg-[#1f1f1f] border border-[#2e2e2e] p-1 rounded-xl text-xs font-semibold">
+                    <button
+                      onClick={() => setLoveModalTab('passbook')}
+                      className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                        loveModalTab === 'passbook' ? 'bg-blue-600 text-white shadow font-bold' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      Passbook Ledger
+                    </button>
+                    <button
+                      onClick={() => setLoveModalTab('redeem')}
+                      className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                        loveModalTab === 'redeem' ? 'bg-pink-600 text-white shadow font-bold' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      Redeem Wishes
+                    </button>
+                    <button
+                      onClick={() => setLoveModalTab('rules')}
+                      className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                        loveModalTab === 'rules' ? 'bg-emerald-600 text-white shadow font-bold' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      Rules Engine
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => setShowLoveBalanceModal(false)}
+                    className="text-gray-400 hover:text-white p-2 rounded-xl hover:bg-[#222] transition-colors cursor-pointer"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+
+              {/* MOBILE TAB BAR */}
+              <div className="sm:hidden grid grid-cols-3 bg-[#161616] border-b border-[#222] p-1.5 text-xs font-semibold gap-1 text-center">
+                <button
+                  onClick={() => setLoveModalTab('passbook')}
+                  className={`py-1.5 rounded-lg transition-all cursor-pointer ${
+                    loveModalTab === 'passbook' ? 'bg-blue-600 text-white font-bold' : 'text-gray-400'
+                  }`}
+                >
+                  Passbook
+                </button>
+                <button
+                  onClick={() => setLoveModalTab('redeem')}
+                  className={`py-1.5 rounded-lg transition-all cursor-pointer ${
+                    loveModalTab === 'redeem' ? 'bg-pink-600 text-white font-bold' : 'text-gray-400'
+                  }`}
+                >
+                  Wishes
+                </button>
+                <button
+                  onClick={() => setLoveModalTab('rules')}
+                  className={`py-1.5 rounded-lg transition-all cursor-pointer ${
+                    loveModalTab === 'rules' ? 'bg-emerald-600 text-white font-bold' : 'text-gray-400'
+                  }`}
+                >
+                  Rules
+                </button>
+              </div>
+
+              {/* MODAL BODY (SCROLLABLE) */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 scrollbar-thin">
+                
+                {/* TAB 1: PASSBOOK LEDGER */}
+                {loveModalTab === 'passbook' && (
+                  <div className="space-y-4">
+                    {/* 4 TOP SUMMARY CARDS MATCHING SCREENSHOT */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3.5 font-sans">
+                      
+                      {/* CARD 1: AVAILABLE BALANCE (BLUE) */}
+                      <div className="bg-blue-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-2 relative overflow-hidden">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">Available Balance</span>
+                          <span className="text-sm">🤝</span>
+                        </div>
+                        <div className="text-xl sm:text-2xl font-black font-mono">
+                          {Number(loveBalance || 0).toFixed(2)}
+                        </div>
+                      </div>
+
+                      {/* CARD 2: RECENT WITHDRAWAL / REDEEMED (AMBER) */}
+                      <div className="bg-amber-500 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-2 relative overflow-hidden">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">Recent Redeemed</span>
+                          <span className="text-sm">🪙</span>
+                        </div>
+                        <div className="text-xl sm:text-2xl font-black font-mono">
+                          {loveLedger.filter(e => e.status === 'Redeemed').reduce((sum, e) => sum + Math.abs(e.points), 0).toFixed(2)}
+                        </div>
+                      </div>
+
+                      {/* CARD 3: TOTAL DEDUCTION (RED) */}
+                      <div className="bg-rose-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-2 relative overflow-hidden">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">Total Deduction</span>
+                          <span className="text-sm">⚖️</span>
+                        </div>
+                        <div className="text-xl sm:text-2xl font-black font-mono">
+                          -{(loveLedger.filter(e => e.type === 'debit' && e.status !== 'Redeemed').reduce((sum, e) => sum + Math.abs(e.points), 0)).toFixed(2)}
+                        </div>
+                      </div>
+
+                      {/* CARD 4: TOTAL KARMA PAYOUTS (GREEN) */}
+                      <div className="bg-emerald-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-2 relative overflow-hidden">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">Total Love Payouts</span>
+                          <span className="text-sm">💰</span>
+                        </div>
+                        <div className="text-xl sm:text-2xl font-black font-mono">
+                          {loveLedger.filter(e => e.type === 'credit').reduce((sum, e) => sum + Math.abs(e.points), 0).toFixed(2)}
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* FILTER & WITHDRAW ROW */}
+                    <div className="bg-[#181818] border border-[#282828] p-3 sm:p-4 rounded-2xl space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                        <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
+                          <span className="text-blue-400 font-bold">●</span>
+                          <span>Love Balance Ledger Transactions</span>
+                        </h4>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setLoveModalTab('redeem')}
+                            className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5"
+                          >
+                            <span>Redeem Wish</span>
+                          </button>
+                          <span className="text-[10px] text-gray-500 font-mono hidden md:inline">Synced Real-time</span>
+                        </div>
+                      </div>
+
+                      {/* FILTER BAR */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                        <div>
+                          <label className="text-[10px] text-gray-400 block mb-1">Source</label>
+                          <select
+                            value={loveSourceFilter}
+                            onChange={(e) => setLoveSourceFilter(e.target.value)}
+                            className="w-full bg-[#121212] border border-[#333] text-gray-200 p-2 rounded-xl outline-none"
+                          >
+                            <option value="All">All Sources</option>
+                            <option value="credit">Rewards (Credit)</option>
+                            <option value="debit">Deductions (Debit)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-400 block mb-1">Status</label>
+                          <select
+                            value={loveStatusFilter}
+                            onChange={(e) => setLoveStatusFilter(e.target.value)}
+                            className="w-full bg-[#121212] border border-[#333] text-gray-200 p-2 rounded-xl outline-none"
+                          >
+                            <option value="All">All Statuses</option>
+                            <option value="Confirmed">Confirmed</option>
+                            <option value="Deducted">Deducted</option>
+                            <option value="Redeemed">Redeemed</option>
+                          </select>
+                        </div>
+                        <div className="col-span-2 sm:col-span-2 flex items-end gap-2">
+                          <button
+                            onClick={() => { setLoveSourceFilter('All'); setLoveStatusFilter('All'); }}
+                            className="bg-[#262626] hover:bg-[#333] text-gray-300 text-xs px-3 py-2 rounded-xl cursor-pointer"
+                          >
+                            Reset Filters
+                          </button>
+                          <span className="text-[11px] text-gray-500 self-center">
+                            Showing {
+                              loveLedger.filter(e => {
+                                if (loveSourceFilter !== 'All' && e.type !== loveSourceFilter) return false;
+                                if (loveStatusFilter !== 'All' && e.status !== loveStatusFilter) return false;
+                                return true;
+                              }).length
+                            } entries
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* PASSBOOK DATA TABLE */}
+                    <div className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs font-sans min-w-[650px]">
+                          <thead className="bg-[#121212] text-gray-400 uppercase text-[10px] font-mono border-b border-[#262626]">
+                            <tr>
+                              <th className="py-2.5 px-3">SL</th>
+                              <th className="py-2.5 px-3">Description</th>
+                              <th className="py-2.5 px-3">Earned At</th>
+                              <th className="py-2.5 px-3">Expire Date</th>
+                              <th className="py-2.5 px-3">Points</th>
+                              <th className="py-2.5 px-3">Remarks</th>
+                              <th className="py-2.5 px-3 text-right">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#242424] text-gray-300">
+                            {loveLedger
+                              .filter(e => {
+                                if (loveSourceFilter !== 'All' && e.type !== loveSourceFilter) return false;
+                                if (loveStatusFilter !== 'All' && e.status !== loveStatusFilter) return false;
+                                return true;
+                              })
+                              .map((row, idx) => (
+                                <tr key={row.id || idx} className="hover:bg-[#202020] transition-colors">
+                                  <td className="py-2.5 px-3 font-mono text-gray-400">{row.sl || idx + 1}</td>
+                                  <td className="py-2.5 px-3 font-bold text-white">{row.description}</td>
+                                  <td className="py-2.5 px-3 font-mono text-[11px] text-gray-400">{row.earnedAt}</td>
+                                  <td className="py-2.5 px-3 font-mono text-[11px] text-gray-400">{row.expireDate || '—'}</td>
+                                  <td className="py-2.5 px-3 font-mono font-bold">
+                                    <span className={`px-2 py-0.5 rounded-full text-[11px] ${
+                                      row.points > 0 
+                                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                                        : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                                    }`}>
+                                      {row.points > 0 ? `+${row.points.toFixed(2)}` : row.points.toFixed(2)}
+                                    </span>
+                                  </td>
+                                  <td className="py-2.5 px-3 text-gray-400 text-[11px] max-w-[200px] truncate" title={row.remarks}>
+                                    {row.remarks || '—'}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-right">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                      row.status === 'Confirmed' 
+                                        ? 'bg-emerald-600 text-white' 
+                                        : (row.status === 'Redeemed' ? 'bg-amber-600 text-white' : 'bg-zinc-700 text-gray-300')
+                                    }`}>
+                                      {row.status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2: REDEEM WISH STORE */}
+                {loveModalTab === 'redeem' && (
+                  <div className="space-y-4">
+                    <div className="bg-gradient-to-r from-pink-950/40 via-purple-950/40 to-pink-950/40 border border-pink-500/30 rounded-2xl p-4 sm:p-5 flex items-center justify-between">
+                      <div className="space-y-1">
+                        <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                          <span>Romantic Wish Store</span>
+                          <span className="text-xs bg-pink-500/20 text-pink-300 border border-pink-500/40 px-2 py-0.5 rounded-full">INSTANT CLAIM</span>
+                        </h3>
+                        <p className="text-xs text-gray-300">Exchange your earned Love Balance for sweet promises and real dates!</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[11px] text-gray-400">Your Wallet</div>
+                        <div className="text-lg sm:text-xl font-black text-emerald-400 font-mono">₹ {Number(loveBalance || 0).toFixed(2)}</div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      {ROMANTIC_WISH_STORE.map((wish) => {
+                        const canAfford = loveBalance >= wish.cost;
+                        return (
+                          <div key={wish.id} className="bg-[#181818] border border-[#2a2a2a] hover:border-pink-500/50 rounded-2xl p-4 flex flex-col justify-between space-y-3 shadow transition-colors">
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-2xl">{wish.icon}</span>
+                                <span className="text-sm font-mono font-black text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 rounded-xl">
+                                  ₹ {wish.cost.toFixed(2)}
+                                </span>
+                              </div>
+                              <h4 className="text-sm font-bold text-white">{wish.title}</h4>
+                              <p className="text-xs text-gray-400 leading-relaxed">{wish.description}</p>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRedeemWish(wish)}
+                              className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow active:scale-95 ${
+                                canAfford 
+                                  ? 'bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white' 
+                                  : 'bg-zinc-800 text-gray-500 cursor-not-allowed border border-[#333]'
+                              }`}
+                            >
+                              {canAfford ? `Redeem for ₹ ${wish.cost.toFixed(2)}` : `Need ₹ ${(wish.cost - loveBalance).toFixed(2)} More`}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 3: RULES ENGINE GUIDE (ALL IN ENGLISH) */}
+                {loveModalTab === 'rules' && (
+                  <div className="space-y-5">
+                    {/* INTRO HERO */}
+                    <div className="bg-gradient-to-r from-blue-950/40 via-indigo-950/40 to-blue-950/40 border border-blue-500/30 rounded-2xl p-4 sm:p-5 space-y-2">
+                      <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                        <span>Karma Rules Engine • Official Policy</span>
+                        <span className="text-xs bg-blue-500/20 text-blue-300 border border-blue-500/40 px-2 py-0.5 rounded-full font-mono">100% ENGLISH</span>
+                      </h3>
+                      <p className="text-xs text-gray-300 leading-relaxed">
+                        The Love Balance system converts romantic gestures and thoughtful habits into points in real time. Good habits earn Love Balance, while unromantic behaviors or neglect deduct points.
+                      </p>
+                    </div>
+
+                    {/* REWARD EARNING RULES */}
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-black text-emerald-400 flex items-center gap-2">
+                        <span>✨ 3. Reward Earning Structure (Love Karma Rules Engine)</span>
+                      </h4>
+                      <div className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs font-sans min-w-[550px]">
+                            <thead className="bg-[#121212] text-gray-400 uppercase text-[10px] font-mono border-b border-[#262626]">
+                              <tr>
+                                <th className="py-2.5 px-3 w-12">S.NO</th>
+                                <th className="py-2.5 px-3">GESTURE / TASK TYPE</th>
+                                <th className="py-2.5 px-3">CRITERIA</th>
+                                <th className="py-2.5 px-3 text-right">REWARD POINTS</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#242424] text-gray-300">
+                              {LOVE_EARNING_RULES.map((rule) => (
+                                <tr key={rule.sno} className="hover:bg-[#202020] transition-colors">
+                                  <td className="py-2.5 px-3 font-mono text-gray-400">{rule.sno}</td>
+                                  <td className="py-2.5 px-3 font-bold text-white">{rule.task}</td>
+                                  <td className="py-2.5 px-3 text-gray-400 text-xs">{rule.criteria}</td>
+                                  <td className="py-2.5 px-3 text-right">
+                                    <span className="bg-blue-600 text-white font-mono font-bold px-2.5 py-0.5 rounded-full text-xs shadow-sm">
+                                      {rule.reward}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* DEDUCTION RULES */}
+                    <div className="space-y-3 pt-2">
+                      <h4 className="text-sm font-black text-rose-400 flex items-center gap-2">
+                        <span>💔 4. Love Karma Deductions Engine</span>
+                      </h4>
+                      <div className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs font-sans min-w-[550px]">
+                            <thead className="bg-[#121212] text-gray-400 uppercase text-[10px] font-mono border-b border-[#262626]">
+                              <tr>
+                                <th className="py-2.5 px-3 w-12">S.NO</th>
+                                <th className="py-2.5 px-3">INFRACTION TYPE</th>
+                                <th className="py-2.5 px-3">CRITERIA</th>
+                                <th className="py-2.5 px-3 text-right">PENALTY POINTS</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#242424] text-gray-300">
+                              {LOVE_DEDUCTION_RULES.map((rule) => (
+                                <tr key={rule.sno} className="hover:bg-[#202020] transition-colors">
+                                  <td className="py-2.5 px-3 font-mono text-gray-400">{rule.sno}</td>
+                                  <td className="py-2.5 px-3 font-bold text-rose-200">{rule.infraction}</td>
+                                  <td className="py-2.5 px-3 text-gray-400 text-xs">{rule.criteria}</td>
+                                  <td className="py-2.5 px-3 text-right">
+                                    <span className="bg-rose-600 text-white font-mono font-bold px-2.5 py-0.5 rounded-full text-xs shadow-sm">
+                                      {rule.penalty}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+
+              </div>
+
             </div>
           </div>
         )}
