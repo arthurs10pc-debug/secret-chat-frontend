@@ -4863,7 +4863,7 @@ export default function App() {
                                 </div>
                                 <button
                                   type="button"
-                                  onClick={() => toggleFlagPending(msg._id)}
+                                  onClick={(e) => togglePendingFlag(e, msg)}
                                   className="bg-emerald-950 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer transition-all active:scale-95 shrink-0"
                                 >
                                   Resolve
@@ -4989,7 +4989,7 @@ export default function App() {
                       </button>
                       <button
                         type="button"
-                        onClick={handleCalcDelayGap}
+                        onClick={handleUniversalSyncRealign}
                         className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-gray-200 text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
                         title="Calculate Frame Sync Gap"
                       >
