@@ -391,6 +391,43 @@ export default function App() {
   const [adminOverrideVal, setAdminOverrideVal] = useState('');
 
   // Mobile Notification Permission State
+  // Touch Swipe Gesture State for Mobile Sidebar (Left-to-Right Opens)
+  const sidebarSwipeStartXRef = useRef(0);
+  const sidebarSwipeStartYRef = useRef(0);
+  const sidebarSwipeCurrentXRef = useRef(0);
+  const sidebarSwipeCurrentYRef = useRef(0);
+
+  const handleSidebarTouchStart = useCallback((e) => {
+    if (!e.touches || e.touches.length === 0) return;
+    sidebarSwipeStartXRef.current = e.touches[0].clientX;
+    sidebarSwipeStartYRef.current = e.touches[0].clientY;
+    sidebarSwipeCurrentXRef.current = e.touches[0].clientX;
+    sidebarSwipeCurrentYRef.current = e.touches[0].clientY;
+  }, []);
+
+  const handleSidebarTouchMove = useCallback((e) => {
+    if (!e.touches || e.touches.length === 0) return;
+    sidebarSwipeCurrentXRef.current = e.touches[0].clientX;
+    sidebarSwipeCurrentYRef.current = e.touches[0].clientY;
+  }, []);
+
+  const handleSidebarTouchEnd = useCallback(() => {
+    const deltaX = sidebarSwipeCurrentXRef.current - sidebarSwipeStartXRef.current;
+    const deltaY = sidebarSwipeCurrentYRef.current - sidebarSwipeStartYRef.current;
+
+    // Check if horizontal swipe is dominant (more horizontal than vertical)
+    if (Math.abs(deltaX) > Math.abs(deltaY) * 1.3 && Math.abs(deltaX) > 45) {
+      // Swipe from Left to Right (swiping right) -> Open Sidebar
+      if (deltaX > 45) {
+        setSidebarOpen(true);
+      }
+      // Swipe from Right to Left (swiping left) -> Close Sidebar
+      else if (deltaX < -45) {
+        setSidebarOpen(false);
+      }
+    }
+  }, []);
+
   const [notificationPermission, setNotificationPermission] = useState(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       return Notification.permission;
@@ -1709,7 +1746,7 @@ export default function App() {
   const triggerMobileNotification = useCallback((incomingText, senderRole) => {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
-    const senderTag = senderRole === 'parent' ? '(H)' : '(A)';
+    const senderTag = senderRole === 'parent' ? 'Darsh' : 'Dora';
     const title = `ChatGPT • ${senderTag}`;
 
     const bodyText = incomingText 
@@ -1753,7 +1790,7 @@ export default function App() {
     expDate.setMonth(expDate.getMonth() + 1);
     const expStr = expDate.toLocaleDateString('en-GB');
 
-    const targetLabel = target === 'user' ? 'Partner (A)' : 'Admin (H)';
+    const targetLabel = target === 'user' ? 'Dora' : 'Darsh';
     const newEntry = {
       id: 'lb_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
       sl: 1,
@@ -1826,7 +1863,7 @@ export default function App() {
         timestamp: Date.now()
       });
     }
-    alert(`Success: ${target === 'user' ? 'Partner (A)' : 'Admin (H)'} Love Balance set to ₹ ${val.toFixed(2)}.`);
+    alert(`Success: ${target === 'user' ? 'Dora' : 'Darsh'} Love Balance set to ₹ ${val.toFixed(2)}.`);
   }, []);
 
   const handleSendLoveNudge = useCallback((target) => {
@@ -1835,11 +1872,11 @@ export default function App() {
         room: GLOBAL_ROOM,
         action: 'LOVE_NUDGE',
         target: target,
-        message: target === 'user' ? "💖 Admin (H) sent you a sweet Love Nudge!" : "💖 Partner (A) sent you a Love Nudge!",
+        message: target === 'user' ? "💖 Darsh sent you a sweet Love Nudge!" : "💖 Dora sent you a Love Nudge!",
         senderRole: roleRef.current || 'admin',
         timestamp: Date.now()
       });
-      alert(`Love Nudge dispatched to ${target === 'user' ? 'Partner (A)' : 'Admin (H)'}!`);
+      alert(`Love Nudge dispatched to ${target === 'user' ? 'Dora' : 'Darsh'}!`);
     }
   }, []);
 
@@ -2399,14 +2436,14 @@ export default function App() {
           setLoveBalance(0);
           setAdminLoveBalance(0);
         }
-        alert("🧹 Love Balance passbook history cleared by Admin (H)!");
+        alert("🧹 Love Balance passbook history cleared by Darsh!");
       } else if (data.action === 'OVERRIDE_BALANCE') {
         if (data.target === 'user') {
           setLoveBalance(data.newBalance);
         } else if (data.target === 'admin') {
           setAdminLoveBalance(data.newBalance);
         }
-        alert(`⚡ Love Balance updated to ₹ ${data.newBalance.toFixed(2)} by Admin (H)!`);
+        alert(`⚡ Love Balance updated to ₹ ${data.newBalance.toFixed(2)} by Darsh!`);
       } else if (data.action === 'LOVE_NUDGE') {
         try {
           confetti({ particleCount: 60, spread: 70, origin: { y: 0.4 } });
@@ -2430,7 +2467,7 @@ export default function App() {
   const handleAdminSendRequest = () => {
     if (socketRef.current) {
       socketRef.current.emit('admin_send_arcade_request');
-      alert("Arcade game request dispatched to User (A)!");
+      alert("Ludo game request dispatched to Dora!");
     }
   };
 
@@ -2573,7 +2610,7 @@ export default function App() {
       setIsDiceRolling(false);
 
       const movable = getLudoMovableTokens(ludoTurn, roll, ludoTokens);
-      const activeName = ludoTurn === 'H' ? 'Admin (H)' : 'User (A)';
+      const activeName = ludoTurn === 'H' ? 'Darsh' : 'Dora';
 
       if (movable.length === 0) {
         const nextTurn = ludoTurn === 'H' ? 'A' : 'H';
@@ -2616,10 +2653,10 @@ export default function App() {
 
     if (currentPos === -1) {
       newPos = player === 'H' ? 0 : 14;
-      status = `🚀 ${player === 'H' ? 'Admin (H)' : 'User (A)'} deployed Token #${tokenIdx + 1}!`;
+      status = `🚀 ${player === 'H' ? 'Darsh' : 'Dora'} deployed Token #${tokenIdx + 1}!`;
     } else {
       newPos = Math.min(33, currentPos + roll);
-      status = `➡️ ${player === 'H' ? 'Admin (H)' : 'User (A)'} moved Token #${tokenIdx + 1} to step ${newPos}.`;
+      status = `➡️ ${player === 'H' ? 'Darsh' : 'Dora'} moved Token #${tokenIdx + 1} to step ${newPos}.`;
     }
 
     newTokens[player][tokenIdx] = newPos;
@@ -2690,7 +2727,7 @@ export default function App() {
     setDiceVal(6);
     setWinnerMessage('');
     setMovableTokens([]);
-    const resetMsg = 'Game reset! Admin (H) rolls first.';
+    const resetMsg = 'Game reset! Darsh rolls first.';
     setLudoStatusMsg(resetMsg);
 
     if (socketRef.current) {
@@ -3061,7 +3098,7 @@ export default function App() {
           </div>
           <div className="text-left">
             <p className="text-xs font-black text-white">Incoming Whisper Voice Call...</p>
-            <p className="text-[10px] text-emerald-300 font-mono">From {role === 'parent' ? 'User (A)' : 'Admin (H)'}</p>
+            <p className="text-[10px] text-emerald-300 font-mono">From {role === 'parent' ? 'Dora' : 'Darsh'}</p>
           </div>
           <div className="flex items-center gap-2 ml-2 shrink-0">
             <button
@@ -3089,7 +3126,7 @@ export default function App() {
             <Phone size={16} />
           </div>
           <div className="text-left">
-            <p className="text-xs font-black text-white">Calling {role === 'parent' ? 'User (A)' : 'Admin (H)'}...</p>
+            <p className="text-xs font-black text-white">Calling {role === 'parent' ? 'Dora' : 'Darsh'}...</p>
             <p className="text-[10px] text-gray-400 font-mono">Waiting for peer to answer</p>
           </div>
           <button
@@ -3757,7 +3794,7 @@ export default function App() {
             <div className="space-y-1">
               <h3 className="text-base font-black text-white">Security PIN Verification</h3>
               <p className="text-xs text-gray-400">
-                Enter 4-digit PIN to access WP view ({role === 'parent' ? 'Admin: 1111' : 'User: 0000'})
+                Enter 4-digit PIN to access WP view (Darsh: 1111 | Dora: 0000)
               </p>
             </div>
 
@@ -3796,7 +3833,20 @@ export default function App() {
         </div>
       )}
 
-      <main className="flex-1 flex flex-col relative bg-[#000000] overflow-hidden min-w-0">
+      <main 
+        onTouchStart={handleSidebarTouchStart}
+        onTouchMove={handleSidebarTouchMove}
+        onTouchEnd={handleSidebarTouchEnd}
+        className="flex-1 flex flex-col relative bg-[#000000] overflow-hidden min-w-0"
+      >
+        {/* MOBILE LEFT EDGE SWIPE SENSOR (TOUCH FROM LEFT TO OPEN SIDEBAR) */}
+        <div 
+          className="fixed inset-y-0 left-0 w-6 z-20 md:hidden pointer-events-auto"
+          onTouchStart={handleSidebarTouchStart}
+          onTouchMove={handleSidebarTouchMove}
+          onTouchEnd={handleSidebarTouchEnd}
+          title="Swipe right from edge to open chats"
+        />
         <header className="h-14 flex items-center justify-between px-4 shrink-0 z-10 border-b border-[#141414]">
           <div className="flex items-center gap-2.5 overflow-hidden">
             <button 
@@ -3849,7 +3899,7 @@ export default function App() {
                   : (hasUnreadSecret ? 'Unread Secret Message Pending!' : 'Server Connected')
               } 
             />
-            {role === 'parent' && <span className="text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded font-mono">ADMIN (H)</span>}
+            {role === 'parent' && <span className="text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded font-mono">DARSH</span>}
             
             {/* VOICE CALL INITIATION BUTTON */}
             <button 
@@ -3971,7 +4021,7 @@ export default function App() {
                       <span>Ludo Royal Clash</span>
                       <span className="text-[10px] bg-amber-500 text-black px-2 py-0.5 rounded-full font-bold">LIVE 2P</span>
                     </h2>
-                    <p className="text-[11px] text-gray-400">Player H (Red) vs Player A (Green)</p>
+                    <p className="text-[11px] text-gray-400">Darsh (Red) vs Dora (Green)</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -4000,7 +4050,7 @@ export default function App() {
                 }`}>
                   <div className="flex items-center gap-2">
                     <span className="w-3.5 h-3.5 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]" />
-                    <span className="font-bold">Admin (H)</span>
+                    <span className="font-bold">Darsh (Red)</span>
                   </div>
                   <div className="flex items-center gap-1 font-bold text-sm">
                     <Trophy size={14} className="text-amber-400" />
@@ -4015,7 +4065,7 @@ export default function App() {
                 }`}>
                   <div className="flex items-center gap-2">
                     <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" />
-                    <span className="font-bold">User (A)</span>
+                    <span className="font-bold">Dora (Green)</span>
                   </div>
                   <div className="flex items-center gap-1 font-bold text-sm">
                     <Trophy size={14} className="text-amber-400" />
@@ -4578,10 +4628,10 @@ export default function App() {
                       <div className="text-left space-y-0.5">
                         <div className="flex items-center gap-2">
                           <h1 className="text-base sm:text-lg font-black text-white">Admin Command Center</h1>
-                          <span className="text-[10px] bg-amber-500 text-black px-2 py-0.2 rounded-full font-bold">SUPERUSER</span>
+                          <span className="text-[10px] bg-amber-500 text-black px-2 py-0.2 rounded-full font-bold">DARSH</span>
                         </div>
                         <p className="text-[11px] text-amber-300/80 font-mono">
-                          Session Verified • Administrator (H) • Master Access
+                          Session Verified • Darsh (Superuser) • Master Access
                         </p>
                       </div>
                     </div>
@@ -4632,18 +4682,18 @@ export default function App() {
                               <span>Part 1: Love Balance Engine</span>
                               <span className="text-[9px] bg-pink-500/20 text-pink-300 border border-pink-500/30 px-1.5 py-0.2 rounded font-mono">2-WAY</span>
                             </h3>
-                            <p className="text-[10px] text-gray-400">Control & award points for Partner (A) and Admin (H)</p>
+                            <p className="text-[10px] text-gray-400">Control & award points for Dora and Darsh</p>
                           </div>
                         </div>
 
                         {/* DUAL BALANCES DISPLAY */}
                         <div className="flex items-center gap-1.5 text-right">
                           <div className="bg-[#181818] border border-pink-500/30 px-2 py-0.5 rounded-xl">
-                            <div className="text-[9px] text-gray-400">Partner (A)</div>
+                            <div className="text-[9px] text-gray-400">Dora</div>
                             <div className="text-xs sm:text-sm font-black text-emerald-400 font-mono">₹ {Number(loveBalance || 0).toFixed(2)}</div>
                           </div>
                           <div className="bg-[#181818] border border-blue-500/30 px-2 py-0.5 rounded-xl">
-                            <div className="text-[9px] text-gray-400">Admin (H)</div>
+                            <div className="text-[9px] text-gray-400">Darsh</div>
                             <div className="text-xs sm:text-sm font-black text-blue-400 font-mono">₹ {Number(adminLoveBalance || 0).toFixed(2)}</div>
                           </div>
                         </div>
@@ -4660,7 +4710,7 @@ export default function App() {
                               : 'text-gray-400 hover:text-white'
                           }`}
                         >
-                          <span>👤 Part 1A: For Partner (A)</span>
+                          <span>💕 Part 1A: For Dora</span>
                           <span className="text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono">₹ {Number(loveBalance || 0).toFixed(2)}</span>
                         </button>
                         <button
@@ -4672,7 +4722,7 @@ export default function App() {
                               : 'text-gray-400 hover:text-white'
                           }`}
                         >
-                          <span>👑 Part 1B: For Admin (H)</span>
+                          <span>👑 Part 1B: For Darsh</span>
                           <span className="text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono">₹ {Number(adminLoveBalance || 0).toFixed(2)}</span>
                         </button>
                       </div>
@@ -4681,7 +4731,7 @@ export default function App() {
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-[10px] font-semibold text-gray-300">
                           <span className="text-emerald-400 flex items-center gap-1">
-                            ✨ Quick Awards to {activeLbTarget === 'user' ? 'Partner (A)' : 'Admin (H)'} (+₹):
+                            ✨ Quick Awards to {activeLbTarget === 'user' ? 'Dora' : 'Darsh'} (+₹):
                           </span>
                         </div>
                         <div className="grid grid-cols-3 gap-1">
@@ -4737,7 +4787,7 @@ export default function App() {
 
                         <div className="flex items-center justify-between text-[10px] font-semibold text-gray-300 pt-0.5">
                           <span className="text-rose-400 flex items-center gap-1">
-                            💔 Quick Deductions from {activeLbTarget === 'user' ? 'Partner (A)' : 'Admin (H)'} (-₹):
+                            💔 Quick Deductions from {activeLbTarget === 'user' ? 'Dora' : 'Darsh'} (-₹):
                           </span>
                         </div>
                         <div className="grid grid-cols-3 gap-1">
@@ -4795,7 +4845,7 @@ export default function App() {
                       {/* CUSTOM TRANSACTION FORM */}
                       <div className="bg-[#181818] border border-[#282828] p-2 rounded-xl space-y-1">
                         <div className="text-[10px] font-bold text-gray-300 flex items-center justify-between">
-                          <span>Custom Adjustment for {activeLbTarget === 'user' ? 'Partner (A)' : 'Admin (H)'}:</span>
+                          <span>Custom Adjustment for {activeLbTarget === 'user' ? 'Dora' : 'Darsh'}:</span>
                           <span className="text-[9px] text-gray-500">Live Socket Broadcast</span>
                         </div>
                         <div className="grid grid-cols-2 gap-1.5">
@@ -4857,7 +4907,7 @@ export default function App() {
                             min="0"
                             value={adminOverrideVal}
                             onChange={(e) => setAdminOverrideVal(e.target.value)}
-                            placeholder={`Set ${activeLbTarget === 'user' ? 'User' : 'Admin'} exact ₹`}
+                            placeholder={`Set ${activeLbTarget === 'user' ? 'Dora' : 'Darsh'} exact ₹`}
                             className="flex-1 bg-[#101010] border border-[#3a3a3a] text-amber-300 text-xs px-2 py-1 rounded-lg outline-none focus:border-amber-400 font-mono"
                           />
                           <button
@@ -4877,7 +4927,7 @@ export default function App() {
                             className="bg-[#242424] hover:bg-[#303030] border border-[#3e3e3e] text-pink-300 text-xs font-bold px-2 py-1 rounded-lg cursor-pointer transition-all active:scale-95 shrink-0"
                             title="Send instant love alert / ping"
                           >
-                            🔔 Nudge
+                            🔔 Nudge {activeLbTarget === 'user' ? 'Dora' : 'Darsh'}
                           </button>
                           <button
                             type="button"
@@ -5051,7 +5101,7 @@ export default function App() {
                                 <div className="space-y-0.5 min-w-0">
                                   <p className="text-xs font-semibold text-gray-200 truncate">{msg.text}</p>
                                   <p className="text-[10px] text-gray-400 font-mono">
-                                    By {msg.senderRole === 'parent' ? 'Admin (H)' : 'User (A)'} • {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    By {msg.senderRole === 'parent' ? 'Darsh' : 'Dora'} • {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                   </p>
                                 </div>
                                 <button
@@ -5117,7 +5167,7 @@ export default function App() {
                         </div>
                         <div className="text-right">
                           <div className="text-[9px] text-gray-400">Ludo Score</div>
-                          <div className="text-xs sm:text-sm font-black text-amber-400 font-mono">H: {scores.H} vs A: {scores.A}</div>
+                          <div className="text-xs sm:text-sm font-black text-amber-400 font-mono">Darsh: {scores.H} vs Dora: {scores.A}</div>
                         </div>
                       </div>
 
@@ -5178,7 +5228,7 @@ export default function App() {
                         onClick={handleAdminSendRequest}
                         className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-white text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1"
                       >
-                        <span>🎯 Invite User (A) to Ludo</span>
+                        <span>🎯 Invite Dora to Ludo</span>
                       </button>
                       <button
                         type="button"
@@ -5195,7 +5245,7 @@ export default function App() {
                 </div>
 
               </section>
-            )}}}
+            )}
 
             {viewMode === 'images_archive' && (
               <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-3 scrollbar-none font-sans">
@@ -6515,20 +6565,7 @@ export default function App() {
             )}
           </div>
         )}
-        {/* MOBILE FLOATING QUICK MENU PILL */}
-        {!sidebarOpen && viewMode !== 'admin_dashboard' && (
-          <div className="fixed bottom-16 left-3 z-30 md:hidden animate-in fade-in slide-in-from-bottom-2 duration-200">
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(true)}
-              className="bg-[#181818]/95 backdrop-blur-md border border-[#383838] text-gray-200 hover:text-white px-3 py-1.5 rounded-full shadow-2xl flex items-center gap-1.5 text-xs font-bold active:scale-95 transition-transform"
-              title="Open Sidebar Menu"
-            >
-              <PanelLeft size={14} className="text-emerald-400" />
-              <span>Chats</span>
-            </button>
-          </div>
-        )}
+
       </main>
     </div>
   );
