@@ -4069,9 +4069,7 @@ export default function App() {
               {notificationPermission === 'granted' ? <Bell size={15} /> : <BellRing size={15} />}
             </button>
             
-            <button className="p-1.5 text-white hover:text-gray-200 cursor-pointer">
-              <Share size={16} />
-            </button>
+
             <button className="p-1.5 text-white hover:text-gray-200 cursor-pointer" onClick={() => window.location.reload()}>
               <RefreshCw size={16} />
             </button>
@@ -4830,7 +4828,7 @@ export default function App() {
                               : 'text-gray-400 hover:text-white'
                           }`}
                         >
-                          <span>💕 Part 1A: For Dora</span>
+                          <span>💕 Dora</span>
                           <span className="text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono">₹ {Number(loveBalance || 0).toFixed(2)}</span>
                         </button>
                         <button
@@ -4842,7 +4840,7 @@ export default function App() {
                               : 'text-gray-400 hover:text-white'
                           }`}
                         >
-                          <span>👑 Part 1B: For Darsh</span>
+                          <span>👑 Darsh</span>
                           <span className="text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono">₹ {Number(adminLoveBalance || 0).toFixed(2)}</span>
                         </button>
                       </div>
@@ -4962,31 +4960,35 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* CUSTOM TRANSACTION FORM */}
-                      <div className="bg-[#181818] border border-[#282828] p-2 rounded-xl space-y-1">
-                        <div className="text-[10px] font-bold text-gray-300 flex items-center justify-between">
-                          <span>Custom Adjustment for {activeLbTarget === 'user' ? 'Dora' : 'Darsh'}:</span>
-                          <span className="text-[9px] text-gray-500">Live Socket Broadcast</span>
+                      {/* UNIFIED BALANCE ADJUSTMENT & MASTER POWER CONTROLS */}
+                      <div className="bg-[#161616] border border-amber-500/30 rounded-xl p-2.5 space-y-2">
+                        <div className="flex items-center justify-between text-[11px] font-bold text-gray-200">
+                          <span className="flex items-center gap-1.5 text-amber-300">
+                            ⚡ Balance Control for {activeLbTarget === 'user' ? 'Dora' : 'Darsh'}
+                          </span>
+                          <span className="text-[9px] text-gray-500 font-mono">Live Real-time Sync</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-1.5">
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                           <input
                             type="number"
                             step="0.5"
                             min="0"
                             value={adminLbAmount}
                             onChange={(e) => setAdminLbAmount(e.target.value)}
-                            placeholder="Points (e.g. 5.0)"
-                            className="bg-[#121212] border border-[#333] text-white text-xs px-2 py-1 rounded-lg outline-none focus:border-pink-500 font-mono"
+                            placeholder="Points / ₹ (e.g. 5.0)"
+                            className="bg-[#101010] border border-[#333] text-white text-xs px-2.5 py-1.5 rounded-lg outline-none focus:border-amber-400 font-mono"
                           />
                           <input
                             type="text"
                             value={adminLbReason}
                             onChange={(e) => setAdminLbReason(e.target.value)}
-                            placeholder="Remark / Gesture Reason"
-                            className="bg-[#121212] border border-[#333] text-white text-xs px-2 py-1 rounded-lg outline-none focus:border-pink-500"
+                            placeholder="Remark / Reason"
+                            className="bg-[#101010] border border-[#333] text-white text-xs px-2.5 py-1.5 rounded-lg outline-none focus:border-amber-400"
                           />
                         </div>
-                        <div className="flex gap-1.5 pt-0.5">
+
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-0.5">
                           <button
                             type="button"
                             onClick={() => {
@@ -4995,7 +4997,7 @@ export default function App() {
                               setAdminLbAmount('');
                               setAdminLbReason('');
                             }}
-                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1 rounded-lg cursor-pointer shadow active:scale-95 transition-all text-center"
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 rounded-lg cursor-pointer shadow active:scale-95 transition-all text-center"
                           >
                             + Credit (+₹)
                           </button>
@@ -5007,55 +5009,41 @@ export default function App() {
                               setAdminLbAmount('');
                               setAdminLbReason('');
                             }}
-                            className="flex-1 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold py-1 rounded-lg cursor-pointer shadow active:scale-95 transition-all text-center"
+                            className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold py-1.5 rounded-lg cursor-pointer shadow active:scale-95 transition-all text-center"
                           >
                             - Deduct (-₹)
                           </button>
-                        </div>
-                      </div>
-
-                      {/* ADMIN MASTER POWER TOOLS: SET EXACT BALANCE & CLEAR LEDGER & NUDGE */}
-                      <div className="bg-[#161616] border border-amber-500/30 p-2 rounded-xl space-y-1.5">
-                        <div className="text-[10px] font-bold text-amber-300 flex items-center justify-between">
-                          <span className="flex items-center gap-1">⚡ Superuser Power Tools (Changes User Side Live)</span>
-                          <span className="text-[9px] text-gray-500">Master Level</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="number"
-                            step="1"
-                            min="0"
-                            value={adminOverrideVal}
-                            onChange={(e) => setAdminOverrideVal(e.target.value)}
-                            placeholder={`Set ${activeLbTarget === 'user' ? 'Dora' : 'Darsh'} exact ₹`}
-                            className="flex-1 bg-[#101010] border border-[#3a3a3a] text-amber-300 text-xs px-2 py-1 rounded-lg outline-none focus:border-amber-400 font-mono"
-                          />
                           <button
                             type="button"
                             onClick={() => {
-                              if (!adminOverrideVal) return;
-                              handleAdminOverrideBalance(activeLbTarget, adminOverrideVal);
-                              setAdminOverrideVal('');
+                              if (!adminLbAmount) {
+                                alert(`Please enter the exact balance amount in the points box for ${activeLbTarget === 'user' ? 'Dora' : 'Darsh'}.`);
+                                return;
+                              }
+                              handleAdminOverrideBalance(activeLbTarget, adminLbAmount);
+                              setAdminLbAmount('');
+                              setAdminLbReason('');
                             }}
-                            className="bg-amber-600 hover:bg-amber-500 text-black text-xs font-bold px-2.5 py-1 rounded-lg cursor-pointer transition-all active:scale-95 shadow shrink-0"
+                            className="bg-amber-600 hover:bg-amber-500 text-black text-xs font-bold py-1.5 rounded-lg cursor-pointer transition-all active:scale-95 shadow text-center"
+                            title="Set exact balance directly"
                           >
-                            Force Set
+                            Force Set Exact
                           </button>
                           <button
                             type="button"
                             onClick={() => handleSendLoveNudge(activeLbTarget)}
-                            className="bg-[#242424] hover:bg-[#303030] border border-[#3e3e3e] text-pink-300 text-xs font-bold px-2 py-1 rounded-lg cursor-pointer transition-all active:scale-95 shrink-0"
+                            className="bg-[#242424] hover:bg-[#303030] border border-[#3e3e3e] text-pink-300 text-xs font-bold py-1.5 rounded-lg cursor-pointer transition-all active:scale-95 text-center truncate"
                             title="Send instant love alert / ping"
                           >
-                            🔔 Nudge {activeLbTarget === 'user' ? 'Dora' : 'Darsh'}
+                            🔔 Nudge
                           </button>
                           <button
                             type="button"
                             onClick={handleAdminClearLedger}
-                            className="bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-300 text-xs font-bold px-2 py-1 rounded-lg cursor-pointer transition-all active:scale-95 shrink-0 flex items-center gap-1"
+                            className="bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-300 text-xs font-bold py-1.5 rounded-lg cursor-pointer transition-all active:scale-95 text-center flex items-center justify-center gap-1 col-span-2 sm:col-span-1"
                             title="Clear all transaction history and reset points"
                           >
-                            <Trash2 size={11} />
+                            <Trash2 size={12} />
                             <span>Clear All</span>
                           </button>
                         </div>
@@ -6195,7 +6183,7 @@ export default function App() {
                         </span>
                       )}
                     </h2>
-                    <p className="text-xs text-gray-400">Romantic Karma & Wish Fulfillment Ledger</p>
+                    
                   </div>
                 </div>
 
@@ -6303,7 +6291,7 @@ export default function App() {
                               : 'text-gray-400 hover:text-white'
                           )}
                         >
-                          <span>💕 Dora's Passbook</span>
+                          <span>💕 Dora</span>
                           <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono">₹ {Number(loveBalance || 0).toFixed(2)}</span>
                         </button>
                         <button
@@ -6315,7 +6303,7 @@ export default function App() {
                               : 'text-gray-400 hover:text-white'
                           )}
                         >
-                          <span>👑 Darsh's Passbook</span>
+                          <span>👑 Darsh</span>
                           <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono">₹ {Number(adminLoveBalance || 0).toFixed(2)}</span>
                         </button>
                       </div>
@@ -6676,9 +6664,7 @@ export default function App() {
                       <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
                         <span>Love Balance Policy</span>
                       </h3>
-                      <p className="text-xs text-gray-300 leading-relaxed">
-                        The Love Balance system converts romantic gestures and thoughtful habits into points in real time. Good habits earn Love Balance, while unromantic behaviors or neglect deduct points.
-                      </p>
+
                     </div>
 
                     {/* REWARD EARNING RULES */}
