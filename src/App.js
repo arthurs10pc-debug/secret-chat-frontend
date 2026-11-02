@@ -47,6 +47,7 @@ const DEFAULT_LOVE_LEDGER = [
   {
     id: 'lb_1',
     sl: 1,
+    target: 'user',
     description: 'Announcement Read',
     earnedAt: '02/11/2026 01:33 PM',
     expireDate: '05/12/2026',
@@ -58,6 +59,7 @@ const DEFAULT_LOVE_LEDGER = [
   {
     id: 'lb_2',
     sl: 2,
+    target: 'user',
     description: 'Morning Sweet Text',
     earnedAt: '02/11/2026 09:38 AM',
     expireDate: '05/12/2026',
@@ -69,6 +71,7 @@ const DEFAULT_LOVE_LEDGER = [
   {
     id: 'lb_3',
     sl: 3,
+    target: 'user',
     description: 'Monthly Punctuality Reward',
     earnedAt: '01/11/2026 05:30 AM',
     expireDate: '05/12/2026',
@@ -80,6 +83,7 @@ const DEFAULT_LOVE_LEDGER = [
   {
     id: 'lb_4',
     sl: 4,
+    target: 'user',
     description: 'Dry Replies ("Hmm", "Ok")',
     earnedAt: '31/10/2026 07:37 PM',
     expireDate: '05/11/2026',
@@ -91,6 +95,7 @@ const DEFAULT_LOVE_LEDGER = [
   {
     id: 'lb_5',
     sl: 5,
+    target: 'user',
     description: 'Meal Check-in',
     earnedAt: '31/10/2026 01:15 PM',
     expireDate: '05/11/2026',
@@ -102,6 +107,7 @@ const DEFAULT_LOVE_LEDGER = [
   {
     id: 'lb_6',
     sl: 6,
+    target: 'user',
     description: 'Late Reply / Ghosting',
     earnedAt: '30/10/2026 07:38 PM',
     expireDate: '05/11/2026',
@@ -113,6 +119,7 @@ const DEFAULT_LOVE_LEDGER = [
   {
     id: 'lb_7',
     sl: 7,
+    target: 'user',
     description: 'Compliment Drop',
     earnedAt: '30/10/2026 02:45 PM',
     expireDate: '05/11/2026',
@@ -124,6 +131,7 @@ const DEFAULT_LOVE_LEDGER = [
   {
     id: 'lb_8',
     sl: 8,
+    target: 'user',
     description: 'Seen & Ignored',
     earnedAt: '29/10/2026 05:20 PM',
     expireDate: '05/11/2026',
@@ -135,6 +143,7 @@ const DEFAULT_LOVE_LEDGER = [
   {
     id: 'lb_9',
     sl: 9,
+    target: 'user',
     description: 'Romantic Song Recommendation',
     earnedAt: '28/10/2026 10:14 PM',
     expireDate: '05/11/2026',
@@ -146,6 +155,7 @@ const DEFAULT_LOVE_LEDGER = [
   {
     id: 'lb_10',
     sl: 10,
+    target: 'user',
     description: 'Late Night Romantic Paragraph',
     earnedAt: '27/10/2026 11:45 PM',
     expireDate: '05/11/2026',
@@ -153,6 +163,22 @@ const DEFAULT_LOVE_LEDGER = [
     type: 'credit',
     remarks: 'Heartfelt emotional paragraph before sleeping',
     status: 'Confirmed'
+  },
+  {
+    id: 'lb_11',
+    sl: 11,
+    target: 'user',
+    description: '[Dora] Redeemed: Voice Note on Demand',
+    earnedAt: '26/10/2026 09:30 PM',
+    expireDate: '26/11/2026',
+    points: -20.00,
+    type: 'redeem',
+    remarks: 'Personalized cute voice note on demand',
+    status: 'Redeemed',
+    wishTitle: 'Voice Note on Demand',
+    wishIcon: '🎙️',
+    wishCost: 20.00,
+    fulfillmentStatus: 'Fulfilled'
   }
 ];
 
@@ -365,7 +391,16 @@ export default function App() {
   const [loveLedger, setLoveLedger] = useState(() => {
     try {
       const saved = localStorage.getItem('stealth_love_ledger');
-      return saved ? JSON.parse(saved) : DEFAULT_LOVE_LEDGER;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(item => ({
+            ...item,
+            target: item.target || (item.description && item.description.includes('[Darsh]') ? 'admin' : 'user')
+          }));
+        }
+      }
+      return DEFAULT_LOVE_LEDGER;
     } catch {
       return DEFAULT_LOVE_LEDGER;
     }
@@ -1771,7 +1806,7 @@ export default function App() {
     }
   }, []);
 
-  const handleLoveBalanceTransaction = useCallback((amount, type, reason, isBroadcast = false, target = 'user') => {
+  const handleLoveBalanceTransaction = useCallback((amount, type, reason, isBroadcast = false, target = 'user', extraData = null) => {
     const numAmount = Math.abs(parseFloat(amount) || 0);
     if (numAmount === 0) return;
     const finalDelta = type === 'credit' ? numAmount : -numAmount;
@@ -1791,17 +1826,22 @@ export default function App() {
     const expStr = expDate.toLocaleDateString('en-GB');
 
     const targetLabel = target === 'user' ? 'Dora' : 'Darsh';
+    const cleanReason = reason || (type === 'credit' ? 'Love Karma Reward' : (type === 'redeem' ? 'Wish Redeemed' : 'Love Karma Deduction'));
     const newEntry = {
       id: 'lb_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
       sl: 1,
       target: target,
-      description: `[${targetLabel}] ` + (reason || (type === 'credit' ? 'Love Karma Reward' : 'Love Karma Deduction')),
+      description: '[' + targetLabel + '] ' + cleanReason,
       earnedAt: nowStr,
       expireDate: expStr,
       points: type === 'credit' ? numAmount : -numAmount,
       type: type,
-      remarks: reason || (type === 'credit' ? 'Sweet romance karma credited' : 'Karma deduction applied'),
-      status: type === 'credit' ? 'Confirmed' : (type === 'redeem' ? 'Redeemed' : 'Deducted')
+      remarks: cleanReason,
+      status: type === 'credit' ? 'Confirmed' : (type === 'redeem' ? 'Redeemed' : 'Deducted'),
+      wishTitle: (extraData && extraData.title) || (type === 'redeem' ? cleanReason.replace(/^Redeemed:\s*/i, '') : undefined),
+      wishIcon: (extraData && extraData.icon) || '🎁',
+      wishCost: numAmount,
+      fulfillmentStatus: type === 'redeem' ? 'Pending' : undefined
     };
 
     setLoveLedger(prev => [newEntry, ...prev.map((e, idx) => ({ ...e, sl: idx + 2 }))]);
@@ -1820,6 +1860,7 @@ export default function App() {
         amount: numAmount,
         type: type,
         reason: reason,
+        extraData: extraData,
         senderRole: roleRef.current || 'admin',
         timestamp: Date.now()
       });
@@ -1863,7 +1904,7 @@ export default function App() {
         timestamp: Date.now()
       });
     }
-    alert(`Success: ${target === 'user' ? 'Dora' : 'Darsh'} Love Balance set to ₹ ${val.toFixed(2)}.`);
+    alert('Success: ' + (target === 'user' ? 'Dora' : 'Darsh') + ' Love Balance set to ₹ ' + val.toFixed(2) + '.');
   }, []);
 
   const handleSendLoveNudge = useCallback((target) => {
@@ -1876,19 +1917,47 @@ export default function App() {
         senderRole: roleRef.current || 'admin',
         timestamp: Date.now()
       });
-      alert(`Love Nudge dispatched to ${target === 'user' ? 'Dora' : 'Darsh'}!`);
+      alert('Love Nudge dispatched to ' + (target === 'user' ? 'Dora' : 'Darsh') + '!');
+    }
+  }, []);
+
+  const handleToggleWishFulfillment = useCallback((wishId) => {
+    setLoveLedger(prev => prev.map(item => {
+      if (item.id === wishId) {
+        const nextStatus = item.fulfillmentStatus === 'Fulfilled' ? 'Pending' : 'Fulfilled';
+        return { ...item, fulfillmentStatus: nextStatus };
+      }
+      return item;
+    }));
+    if (socketRef.current) {
+      socketRef.current.emit('love_balance_action', {
+        room: GLOBAL_ROOM,
+        action: 'TOGGLE_FULFILLMENT',
+        wishId: wishId,
+        senderRole: roleRef.current || 'admin',
+        timestamp: Date.now()
+      });
     }
   }, []);
 
   const handleRedeemWish = (wish) => {
-    if (loveBalance < wish.cost) {
-      alert(`Insufficient Love Balance! You have ₹ ${loveBalance.toFixed(2)}, but need ₹ ${wish.cost.toFixed(2)}. Earn more Love Balance through sweet messages and caring gestures!`);
+    const isDarsh = role === 'parent';
+    const currentTarget = isDarsh ? activeLbTarget : 'user';
+    const currentBal = currentTarget === 'admin' ? adminLoveBalance : loveBalance;
+    if (currentBal < wish.cost) {
+      alert('Insufficient Love Balance! You have ₹ ' + currentBal.toFixed(2) + ', but need ₹ ' + wish.cost.toFixed(2) + '. Earn more Love Balance through sweet messages and caring gestures!');
       return;
     }
-    handleLoveBalanceTransaction(wish.cost, 'redeem', `Redeemed: ${wish.title}`);
+    handleLoveBalanceTransaction(wish.cost, 'redeem', 'Redeemed: ' + wish.title, false, currentTarget, {
+      title: wish.title,
+      icon: wish.icon,
+      cost: wish.cost
+    });
     try {
       confetti({ particleCount: 70, spread: 80, origin: { y: 0.5 } });
     } catch (e) {}
+    alert('🎉 Wish Redeemed: "' + wish.title + '"! Claim recorded in your Redeemed Wishes section.');
+    setLoveModalTab('claimed');
   };
 
   useEffect(() => {
@@ -2430,27 +2499,45 @@ export default function App() {
       const myRole = roleRef.current || localStorage.getItem('stealth_role');
       if (data.senderRole === myRole) return;
 
+      // PRIVACY ENFORCEMENT: Dora must NEVER receive or view Darsh's points
+      if (myRole !== 'parent' && data.target === 'admin') {
+        return;
+      }
+
       if (data.action === 'CLEAR_LEDGER') {
-        setLoveLedger([]);
-        if (data.resetBalance) {
+        if (myRole !== 'parent') {
+          setLoveLedger(prev => prev.filter(e => e.target === 'admin'));
           setLoveBalance(0);
-          setAdminLoveBalance(0);
+        } else {
+          setLoveLedger([]);
+          if (data.resetBalance) {
+            setLoveBalance(0);
+            setAdminLoveBalance(0);
+          }
         }
         alert("🧹 Love Balance passbook history cleared by Darsh!");
       } else if (data.action === 'OVERRIDE_BALANCE') {
         if (data.target === 'user') {
           setLoveBalance(data.newBalance);
-        } else if (data.target === 'admin') {
+          alert('⚡ Love Balance updated to ₹ ' + data.newBalance.toFixed(2) + ' by Darsh!');
+        } else if (data.target === 'admin' && myRole === 'parent') {
           setAdminLoveBalance(data.newBalance);
         }
-        alert(`⚡ Love Balance updated to ₹ ${data.newBalance.toFixed(2)} by Darsh!`);
       } else if (data.action === 'LOVE_NUDGE') {
         try {
           confetti({ particleCount: 60, spread: 70, origin: { y: 0.4 } });
         } catch (e) {}
         alert(data.message || "💖 Love Alert received!");
+      } else if (data.action === 'TOGGLE_FULFILLMENT') {
+        setLoveLedger(prev => prev.map(item => {
+          if (item.id === data.wishId) {
+            const nextStatus = item.fulfillmentStatus === 'Fulfilled' ? 'Pending' : 'Fulfilled';
+            return { ...item, fulfillmentStatus: nextStatus };
+          }
+          return item;
+        }));
       } else {
-        handleLoveBalanceTransaction(data.amount, data.type, data.reason, true, data.target || 'user');
+        handleLoveBalanceTransaction(data.amount, data.type, data.reason, true, data.target || 'user', data.extraData);
         if (data.type === 'credit') {
           try {
             confetti({ particleCount: 50, spread: 70, origin: { y: 0.4 } });
@@ -3062,6 +3149,34 @@ export default function App() {
     bubbleFontSize = 'text-[11px] leading-[15px]';
   }
 
+  // Love Balance Isolation & Metrics (Darsh points 100% hidden from Dora)
+  const isParentAdmin = role === 'parent';
+  const lbViewerTarget = isParentAdmin ? activeLbTarget : 'user';
+  const displayedLoveBalance = isParentAdmin
+    ? (lbViewerTarget === 'admin' ? Number(adminLoveBalance || 0) : Number(loveBalance || 0))
+    : Number(loveBalance || 0);
+
+  // Dora can NEVER see Darsh's transactions or points
+  const visibleLoveLedger = isParentAdmin
+    ? (lbViewerTarget === 'admin'
+        ? loveLedger.filter(e => e.target === 'admin' || (e.description && e.description.includes('[Darsh]')))
+        : loveLedger.filter(e => e.target !== 'admin' && !(e.description && e.description.includes('[Darsh]'))))
+    : loveLedger.filter(e => e.target !== 'admin' && !(e.description && e.description.includes('[Darsh]')));
+
+  const cutPointsTotal = visibleLoveLedger
+    .filter(e => e.type === 'debit' && e.status !== 'Redeemed')
+    .reduce((sum, e) => sum + Math.abs(e.points), 0);
+
+  const payoutsTotal = visibleLoveLedger
+    .filter(e => e.type === 'credit')
+    .reduce((sum, e) => sum + Math.abs(e.points), 0);
+
+  const redeemedWishesList = visibleLoveLedger
+    .filter(e => e.type === 'redeem' || e.status === 'Redeemed');
+
+  const redeemedWishesTotal = redeemedWishesList
+    .reduce((sum, e) => sum + Math.abs(e.points), 0);
+
   return (
     <div 
       className="flex h-[100dvh] w-screen overflow-hidden bg-[#000000] text-[#ececf1] font-sans antialiased select-none relative text-sm md:text-[14.5px]"
@@ -3303,7 +3418,7 @@ export default function App() {
             {showArcadePlugins && role === 'parent' && (
               <div className="pl-2 pr-1.5 py-2 space-y-2 bg-[#0c0c0c] rounded-xl border border-[#222] my-1">
                 <div className="flex items-center justify-between text-[11px] font-bold text-amber-400">
-                  <span className="flex items-center gap-1"><Gamepad2 size={13} /> Arcade Master (H)</span>
+                  <span className="flex items-center gap-1"><Gamepad2 size={13} /> Arcade Master (Darsh)</span>
                 </div>
                 <div className="grid grid-cols-2 gap-1.5">
                   <button
@@ -3326,7 +3441,7 @@ export default function App() {
             {incomingGameRequest && role !== 'parent' && (
               <div className="bg-amber-950/60 border border-amber-500/50 p-2.5 rounded-xl my-1 space-y-2 text-left animate-in fade-in duration-200">
                 <p className="text-[11px] text-amber-300 font-bold flex items-center gap-1">
-                  <Radio size={13} className="animate-pulse" /> Admin sent arcade request!
+                  <Radio size={13} className="animate-pulse" /> Darsh sent arcade request!
                 </p>
                 <button
                   onClick={handleUserAcceptRequest}
@@ -3450,7 +3565,7 @@ export default function App() {
                 <p className={`font-medium truncate flex items-center gap-1.5 ${
                   role === 'parent' ? 'text-amber-400 group-hover:text-amber-300 font-bold' : 'text-white'
                 }`}>
-                  <span>{role === 'parent' ? 'Admin (H)' : 'User (A)'}</span>
+                  <span>{role === 'parent' ? 'Darsh' : 'Dora'}</span>
                   {role === 'parent' && (
                     <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1 py-0.2 rounded font-mono font-bold animate-pulse">
                       DASHBOARD ➔
@@ -3483,7 +3598,7 @@ export default function App() {
                 {isConnected && <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#202c33] rounded-full" />}
               </div>
               <div>
-                <h3 className="text-sm font-bold tracking-tight">{role === 'parent' ? 'User (A)' : 'Admin (H)'}</h3>
+                <h3 className="text-sm font-bold tracking-tight">{role === 'parent' ? 'Dora' : 'Darsh'}</h3>
                 <p className="text-[11px] text-emerald-400 font-mono font-bold">{isConnected ? 'online' : 'connecting...'}</p>
               </div>
             </div>
@@ -3912,7 +4027,7 @@ export default function App() {
               <span>Call</span>
             </button>
 
-            {/* LOVE BALANCE BUTTON PILL (SHOW ONLY BALANCE) */}
+            {/* LOVE BALANCE BUTTON PILL (SHOW ONLY BALANCE - DARSH HIDDEN FROM DORA) */}
             <button
               type="button"
               onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
@@ -3920,7 +4035,12 @@ export default function App() {
               title="Open Love Balance Passbook & Wish Store"
             >
               <span className="text-emerald-400 font-sans font-black text-sm">₹</span>
-              <span>{Number(loveBalance || 0).toFixed(2)}</span>
+              <span>
+                {role === 'parent' 
+                  ? (activeLbTarget === 'admin' ? Number(adminLoveBalance || 0).toFixed(2) : Number(loveBalance || 0).toFixed(2)) 
+                  : Number(loveBalance || 0).toFixed(2)
+                }
+              </span>
             </button>
 
             {/* UPGRADE BUTTON (SPARKLES REMOVED) */}
@@ -6048,7 +6168,7 @@ export default function App() {
           </div>
         )}
 
-        {/* --- LOVE BALANCE MASTER MODAL (PASSBOOK, WISH STORE, RULES ENGINE) --- */}
+        {/* --- LOVE BALANCE MASTER MODAL (PASSBOOK, WISH STORE, REDEEMED WISHES, RULES) --- */}
         {showLoveBalanceModal && (
           <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
             <div className="bg-[#121212] border border-emerald-500/40 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden font-sans text-left">
@@ -6063,8 +6183,17 @@ export default function App() {
                     <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
                       <span>Love Balance</span>
                       <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-2 py-0.5 rounded-full">
-                        ₹ {Number(loveBalance || 0).toFixed(2)}
+                        ₹ {displayedLoveBalance.toFixed(2)}
                       </span>
+                      {isParentAdmin && (
+                        <span className={'text-[10px] font-bold px-2 py-0.5 rounded-full ' + (
+                          lbViewerTarget === 'admin' 
+                            ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40' 
+                            : 'bg-pink-500/20 text-pink-300 border border-pink-500/40'
+                        )}>
+                          {lbViewerTarget === 'admin' ? "Darsh's Ledger" : "Dora's Ledger"}
+                        </span>
+                      )}
                     </h2>
                     <p className="text-xs text-gray-400">Romantic Karma & Wish Fulfillment Ledger</p>
                   </div>
@@ -6072,30 +6201,41 @@ export default function App() {
 
                 {/* TAB BUTTONS & CLOSE */}
                 <div className="flex items-center gap-2">
-                  <div className="hidden sm:flex bg-[#1f1f1f] border border-[#2e2e2e] p-1 rounded-xl text-xs font-semibold">
+                  <div className="hidden sm:flex bg-[#1f1f1f] border border-[#2e2e2e] p-1 rounded-xl text-xs font-semibold gap-1">
                     <button
                       onClick={() => setLoveModalTab('passbook')}
-                      className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      className={'px-3 py-1.5 rounded-lg transition-all cursor-pointer ' + (
                         loveModalTab === 'passbook' ? 'bg-blue-600 text-white shadow font-bold' : 'text-gray-400 hover:text-white'
-                      }`}
+                      )}
                     >
                       Passbook Ledger
                     </button>
                     <button
                       onClick={() => setLoveModalTab('redeem')}
-                      className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      className={'px-3 py-1.5 rounded-lg transition-all cursor-pointer ' + (
                         loveModalTab === 'redeem' ? 'bg-pink-600 text-white shadow font-bold' : 'text-gray-400 hover:text-white'
-                      }`}
+                      )}
                     >
-                      Redeem Wishes
+                      Wish Store
+                    </button>
+                    <button
+                      onClick={() => setLoveModalTab('claimed')}
+                      className={'px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ' + (
+                        loveModalTab === 'claimed' ? 'bg-amber-600 text-white shadow font-bold' : 'text-gray-400 hover:text-white'
+                      )}
+                    >
+                      <span>Redeemed Wishes</span>
+                      <span className="text-[10px] bg-black/40 px-1.5 py-0.2 rounded font-mono font-bold">
+                        {redeemedWishesList.length}
+                      </span>
                     </button>
                     <button
                       onClick={() => setLoveModalTab('rules')}
-                      className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      className={'px-3 py-1.5 rounded-lg transition-all cursor-pointer ' + (
                         loveModalTab === 'rules' ? 'bg-emerald-600 text-white shadow font-bold' : 'text-gray-400 hover:text-white'
-                      }`}
+                      )}
                     >
-                      Rules Engine
+                      Love Policy
                     </button>
                   </div>
 
@@ -6109,30 +6249,38 @@ export default function App() {
               </div>
 
               {/* MOBILE TAB BAR */}
-              <div className="sm:hidden grid grid-cols-3 bg-[#161616] border-b border-[#222] p-1.5 text-xs font-semibold gap-1 text-center">
+              <div className="sm:hidden grid grid-cols-4 bg-[#161616] border-b border-[#222] p-1.5 text-[11px] font-semibold gap-1 text-center">
                 <button
                   onClick={() => setLoveModalTab('passbook')}
-                  className={`py-1.5 rounded-lg transition-all cursor-pointer ${
+                  className={'py-1.5 rounded-lg transition-all cursor-pointer ' + (
                     loveModalTab === 'passbook' ? 'bg-blue-600 text-white font-bold' : 'text-gray-400'
-                  }`}
+                  )}
                 >
                   Passbook
                 </button>
                 <button
                   onClick={() => setLoveModalTab('redeem')}
-                  className={`py-1.5 rounded-lg transition-all cursor-pointer ${
+                  className={'py-1.5 rounded-lg transition-all cursor-pointer ' + (
                     loveModalTab === 'redeem' ? 'bg-pink-600 text-white font-bold' : 'text-gray-400'
-                  }`}
+                  )}
                 >
                   Wishes
                 </button>
                 <button
-                  onClick={() => setLoveModalTab('rules')}
-                  className={`py-1.5 rounded-lg transition-all cursor-pointer ${
-                    loveModalTab === 'rules' ? 'bg-emerald-600 text-white font-bold' : 'text-gray-400'
-                  }`}
+                  onClick={() => setLoveModalTab('claimed')}
+                  className={'py-1.5 rounded-lg transition-all cursor-pointer ' + (
+                    loveModalTab === 'claimed' ? 'bg-amber-600 text-white font-bold' : 'text-gray-400'
+                  )}
                 >
-                  Rules
+                  Redeemed ({redeemedWishesList.length})
+                </button>
+                <button
+                  onClick={() => setLoveModalTab('rules')}
+                  className={'py-1.5 rounded-lg transition-all cursor-pointer ' + (
+                    loveModalTab === 'rules' ? 'bg-emerald-600 text-white font-bold' : 'text-gray-400'
+                  )}
+                >
+                  Policy
                 </button>
               </div>
 
@@ -6142,42 +6290,158 @@ export default function App() {
                 {/* TAB 1: PASSBOOK LEDGER */}
                 {loveModalTab === 'passbook' && (
                   <div className="space-y-4">
-                    {/* 3 TOP SUMMARY CARDS (AVAILABLE BALANCE, TOTAL CUT POINTS, TOTAL LOVE PAYOUTS) */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-sans">
+                    
+                    {/* DARSH ADMIN SELECTOR: SWITCH BETWEEN DORA AND DARSH PASSBOOK (NEVER SHOWN TO DORA) */}
+                    {isParentAdmin && (
+                      <div className="flex bg-[#1a1a1a] p-1 rounded-xl border border-[#2d2d2d] text-xs font-bold gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setActiveLbTarget('user')}
+                          className={'flex-1 py-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ' + (
+                            activeLbTarget === 'user' 
+                              ? 'bg-pink-600 text-white shadow font-black' 
+                              : 'text-gray-400 hover:text-white'
+                          )}
+                        >
+                          <span>💕 Dora's Passbook</span>
+                          <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono">₹ {Number(loveBalance || 0).toFixed(2)}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveLbTarget('admin')}
+                          className={'flex-1 py-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ' + (
+                            activeLbTarget === 'admin' 
+                              ? 'bg-blue-600 text-white shadow font-black' 
+                              : 'text-gray-400 hover:text-white'
+                          )}
+                        >
+                          <span>👑 Darsh's Passbook</span>
+                          <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono">₹ {Number(adminLoveBalance || 0).toFixed(2)}</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* 4 TOP SUMMARY CARDS (AVAILABLE BALANCE, TOTAL CUT POINTS, TOTAL LOVE PAYOUTS, REDEEMED WISHES) */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-sans">
                       
                       {/* CARD 1: AVAILABLE BALANCE (BLUE) */}
-                      <div className="bg-blue-600 text-white p-3.5 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-2 relative overflow-hidden">
+                      <div className="bg-blue-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-1.5 relative overflow-hidden">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold tracking-wide">Available Balance</span>
+                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">Available Balance</span>
                           <span className="text-sm">🤝</span>
                         </div>
-                        <div className="text-2xl font-black font-mono">
-                          ₹ {Number(loveBalance || 0).toFixed(2)}
+                        <div className="text-xl sm:text-2xl font-black font-mono">
+                          ₹ {displayedLoveBalance.toFixed(2)}
                         </div>
                       </div>
 
                       {/* CARD 2: TOTAL CUT POINTS (RED) */}
-                      <div className="bg-rose-600 text-white p-3.5 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-2 relative overflow-hidden">
+                      <div className="bg-rose-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-1.5 relative overflow-hidden">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold tracking-wide">Total Cut Points</span>
+                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">Total Cut Points</span>
                           <span className="text-sm">⚖️</span>
                         </div>
-                        <div className="text-2xl font-black font-mono">
-                          -₹ {(loveLedger.filter(e => e.type === 'debit' && e.status !== 'Redeemed').reduce((sum, e) => sum + Math.abs(e.points), 0)).toFixed(2)}
+                        <div className="text-xl sm:text-2xl font-black font-mono">
+                          -₹ {cutPointsTotal.toFixed(2)}
                         </div>
                       </div>
 
                       {/* CARD 3: TOTAL LOVE PAYOUTS (GREEN) */}
-                      <div className="bg-emerald-600 text-white p-3.5 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-2 relative overflow-hidden">
+                      <div className="bg-emerald-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-1.5 relative overflow-hidden">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold tracking-wide">Total Love Payouts</span>
+                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">Total Love Payouts</span>
                           <span className="text-sm">💰</span>
                         </div>
-                        <div className="text-2xl font-black font-mono">
-                          ₹ {loveLedger.filter(e => e.type === 'credit').reduce((sum, e) => sum + Math.abs(e.points), 0).toFixed(2)}
+                        <div className="text-xl sm:text-2xl font-black font-mono">
+                          ₹ {payoutsTotal.toFixed(2)}
                         </div>
                       </div>
 
+                      {/* CARD 4: REDEEMED WISHES (AMBER) */}
+                      <div className="bg-amber-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-1.5 relative overflow-hidden">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">Redeemed Wishes</span>
+                          <span className="text-sm">🎁</span>
+                        </div>
+                        <div className="text-xl sm:text-2xl font-black font-mono">
+                          ₹ {redeemedWishesTotal.toFixed(2)}
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* REDEEMED WISHES SECTION (INLINE DISPLAY IN PASSBOOK) */}
+                    <div className="bg-[#181818] border border-amber-500/30 rounded-2xl p-3 sm:p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">🎁</span>
+                          <div>
+                            <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
+                              <span>Redeemed Wish Section</span>
+                              <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-mono font-bold">
+                                {redeemedWishesList.length} CLAIMED
+                              </span>
+                            </h4>
+                            <p className="text-[11px] text-gray-400">Sweet promises & dates redeemed using Love Balance</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setLoveModalTab('redeem')}
+                          className="text-[11px] font-bold text-pink-400 hover:text-pink-300 bg-pink-950/40 border border-pink-500/30 px-3 py-1.5 rounded-xl cursor-pointer hover:bg-pink-900/40 transition-all flex items-center gap-1"
+                        >
+                          <Gift size={13} />
+                          <span>+ Claim Wish</span>
+                        </button>
+                      </div>
+
+                      {redeemedWishesList.length === 0 ? (
+                        <div className="bg-[#141414] border border-[#262626] rounded-xl p-4 text-center space-y-1.5">
+                          <p className="text-xs text-gray-400">No wishes redeemed yet.</p>
+                          <p className="text-[11px] text-gray-500">Collect Love Balance through sweet texts and gestures, then redeem cute dates & treats!</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {redeemedWishesList.map((rw, idx) => (
+                            <div key={rw.id || idx} className="bg-[#131313] border border-[#2a2a2a] hover:border-amber-500/40 rounded-xl p-3 flex flex-col justify-between space-y-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xl p-1.5 bg-[#222] rounded-xl shrink-0">{rw.wishIcon || '🎁'}</span>
+                                  <div>
+                                    <h5 className="text-xs font-bold text-white leading-tight">
+                                      {rw.wishTitle || rw.description.replace(/^\[(Dora|Darsh)\]\s*Redeemed:\s*/i, '').replace(/^Redeemed:\s*/i, '')}
+                                    </h5>
+                                    <span className="text-[10px] text-gray-400 font-mono">{rw.earnedAt}</span>
+                                  </div>
+                                </div>
+                                <span className="text-xs font-mono font-black text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-lg shrink-0">
+                                  ₹ {Math.abs(rw.points).toFixed(2)}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-1 border-t border-[#222]">
+                                <span className={'text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ' + (
+                                  rw.fulfillmentStatus === 'Fulfilled'
+                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse'
+                                )}>
+                                  {rw.fulfillmentStatus === 'Fulfilled' ? '✅ Granted & Fulfilled' : '⏳ Date / Reward Pending'}
+                                </span>
+
+                                {isParentAdmin && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleWishFulfillment(rw.id)}
+                                    className="text-[10px] font-bold bg-[#242424] hover:bg-[#303030] text-gray-200 hover:text-white px-2.5 py-1 rounded-lg border border-[#3a3a3a] cursor-pointer transition-all active:scale-95"
+                                  >
+                                    {rw.fulfillmentStatus === 'Fulfilled' ? 'Mark Pending' : 'Mark Fulfilled ✅'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* ACTION ROW: ONLY REDEEM WISH BUTTON */}
@@ -6185,20 +6449,29 @@ export default function App() {
                       <div className="flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
                         <span className="text-xs sm:text-sm font-bold text-white">Love Balance Passbook</span>
-                        <span className="text-[10px] text-gray-500 font-mono hidden sm:inline">({loveLedger.length} Records)</span>
+                        <span className="text-[10px] text-gray-500 font-mono hidden sm:inline">({visibleLoveLedger.length} Records)</span>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setLoveModalTab('redeem')}
-                        className="bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5"
-                      >
-                        <Gift size={14} />
-                        <span>Redeem Wish</span>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setLoveModalTab('claimed')}
+                          className="bg-[#242424] hover:bg-[#2e2e2e] text-amber-300 text-xs font-bold px-3 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5 border border-amber-500/30"
+                        >
+                          <span>🎁 Redeemed ({redeemedWishesList.length})</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLoveModalTab('redeem')}
+                          className="bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5"
+                        >
+                          <Gift size={14} />
+                          <span>Redeem Wish</span>
+                        </button>
+                      </div>
                     </div>
 
-                    {/* PASSBOOK DATA TABLE */}
+                    {/* PASSBOOK DATA TABLE (STRICTLY ISOLATED: DORA NEVER SEES DARSH'S RECORDS) */}
                     <div className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden">
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-xs font-sans min-w-[650px]">
@@ -6214,7 +6487,7 @@ export default function App() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#242424] text-gray-300">
-                            {loveLedger
+                            {visibleLoveLedger
                               .filter(e => {
                                 if (loveSourceFilter !== 'All' && e.type !== loveSourceFilter) return false;
                                 if (loveStatusFilter !== 'All' && e.status !== loveStatusFilter) return false;
@@ -6223,27 +6496,31 @@ export default function App() {
                               .map((row, idx) => (
                                 <tr key={row.id || idx} className="hover:bg-[#202020] transition-colors">
                                   <td className="py-2.5 px-3 font-mono text-gray-400">{row.sl || idx + 1}</td>
-                                  <td className="py-2.5 px-3 font-bold text-white">{row.description}</td>
+                                  <td className="py-2.5 px-3 font-bold text-white">
+                                    {!isParentAdmin ? row.description.replace(/^\[Dora\]\s*/i, '') : row.description}
+                                  </td>
                                   <td className="py-2.5 px-3 font-mono text-[11px] text-gray-400">{row.earnedAt}</td>
                                   <td className="py-2.5 px-3 font-mono text-[11px] text-gray-400">{row.expireDate || '—'}</td>
                                   <td className="py-2.5 px-3 font-mono font-bold">
-                                    <span className={`px-2 py-0.5 rounded-full text-[11px] ${
+                                    <span className={'px-2 py-0.5 rounded-full text-[11px] ' + (
                                       row.points > 0 
                                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                                        : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                                    }`}>
-                                      {row.points > 0 ? `+${row.points.toFixed(2)}` : row.points.toFixed(2)}
+                                        : (row.status === 'Redeemed'
+                                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                            : 'bg-rose-500/20 text-rose-400 border border-rose-500/30')
+                                    )}>
+                                      {row.points > 0 ? '+' + row.points.toFixed(2) : row.points.toFixed(2)}
                                     </span>
                                   </td>
                                   <td className="py-2.5 px-3 text-gray-400 text-[11px] max-w-[200px] truncate" title={row.remarks}>
                                     {row.remarks || '—'}
                                   </td>
                                   <td className="py-2.5 px-3 text-right">
-                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (
                                       row.status === 'Confirmed' 
                                         ? 'bg-emerald-600 text-white' 
-                                        : (row.status === 'Redeemed' ? 'bg-amber-600 text-white' : 'bg-zinc-700 text-gray-300')
-                                    }`}>
+                                        : (row.status === 'Redeemed' ? 'bg-amber-600 text-white' : 'bg-rose-600 text-white')
+                                    )}>
                                       {row.status}
                                     </span>
                                   </td>
@@ -6269,13 +6546,13 @@ export default function App() {
                       </div>
                       <div className="text-right">
                         <div className="text-[11px] text-gray-400">Your Wallet</div>
-                        <div className="text-lg sm:text-xl font-black text-emerald-400 font-mono">₹ {Number(loveBalance || 0).toFixed(2)}</div>
+                        <div className="text-lg sm:text-xl font-black text-emerald-400 font-mono">₹ {displayedLoveBalance.toFixed(2)}</div>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                       {ROMANTIC_WISH_STORE.map((wish) => {
-                        const canAfford = loveBalance >= wish.cost;
+                        const canAfford = displayedLoveBalance >= wish.cost;
                         return (
                           <div key={wish.id} className="bg-[#181818] border border-[#2a2a2a] hover:border-pink-500/50 rounded-2xl p-4 flex flex-col justify-between space-y-3 shadow transition-colors">
                             <div className="space-y-1.5">
@@ -6292,13 +6569,13 @@ export default function App() {
                             <button
                               type="button"
                               onClick={() => handleRedeemWish(wish)}
-                              className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow active:scale-95 ${
+                              className={'w-full py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow active:scale-95 ' + (
                                 canAfford 
                                   ? 'bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white' 
                                   : 'bg-zinc-800 text-gray-500 cursor-not-allowed border border-[#333]'
-                              }`}
+                              )}
                             >
-                              {canAfford ? `Redeem for ₹ ${wish.cost.toFixed(2)}` : `Need ₹ ${(wish.cost - loveBalance).toFixed(2)} More`}
+                              {canAfford ? ('Redeem for ₹ ' + wish.cost.toFixed(2)) : ('Need ₹ ' + (wish.cost - displayedLoveBalance).toFixed(2) + ' More')}
                             </button>
                           </div>
                         );
@@ -6307,7 +6584,91 @@ export default function App() {
                   </div>
                 )}
 
-                {/* TAB 3: RULES ENGINE GUIDE (ALL IN ENGLISH) */}
+                {/* TAB 3: REDEEMED WISHES VAULT & TIMELINE */}
+                {loveModalTab === 'claimed' && (
+                  <div className="space-y-4">
+                    <div className="bg-gradient-to-r from-amber-950/40 via-orange-950/40 to-amber-950/40 border border-amber-500/30 rounded-2xl p-4 sm:p-5 flex items-center justify-between">
+                      <div className="space-y-1">
+                        <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                          <span>Redeemed Wishes & Promises</span>
+                          <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-mono font-bold">
+                            {redeemedWishesList.length} TOTAL
+                          </span>
+                        </h3>
+                        <p className="text-xs text-gray-300">Track and fulfill all romantic wishes redeemed with Love Balance.</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[11px] text-gray-400">Total Spent</div>
+                        <div className="text-lg sm:text-xl font-black text-amber-400 font-mono">₹ {redeemedWishesTotal.toFixed(2)}</div>
+                      </div>
+                    </div>
+
+                    {redeemedWishesList.length === 0 ? (
+                      <div className="bg-[#181818] border border-[#282828] rounded-2xl p-8 text-center space-y-3">
+                        <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-3xl mx-auto">
+                          🎁
+                        </div>
+                        <h4 className="text-base font-bold text-white">No Wishes Redeemed Yet</h4>
+                        <p className="text-xs text-gray-400 max-w-md mx-auto leading-relaxed">
+                          You haven't claimed any romantic wishes yet. Save up your Love Balance and treat yourself in the Wish Store!
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setLoveModalTab('redeem')}
+                          className="bg-gradient-to-r from-pink-600 to-rose-600 text-white text-xs font-bold px-5 py-2.5 rounded-xl cursor-pointer shadow active:scale-95 transition-all inline-flex items-center gap-2"
+                        >
+                          <Gift size={15} />
+                          <span>Go to Wish Store</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        {redeemedWishesList.map((rw, idx) => (
+                          <div key={rw.id || idx} className="bg-[#181818] border border-[#2a2a2a] hover:border-amber-500/50 rounded-2xl p-4 flex flex-col justify-between space-y-3 shadow transition-colors">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <span className="text-3xl p-2 bg-[#222] rounded-2xl border border-[#333] shrink-0">{rw.wishIcon || '🎁'}</span>
+                                <div className="space-y-0.5">
+                                  <h4 className="text-sm font-black text-white">
+                                    {rw.wishTitle || rw.description.replace(/^\[(Dora|Darsh)\]\s*Redeemed:\s*/i, '').replace(/^Redeemed:\s*/i, '')}
+                                  </h4>
+                                  <div className="text-[11px] text-gray-400 font-mono">Redeemed: {rw.earnedAt}</div>
+                                  <div className="text-[10px] text-gray-500">Remarks: {rw.remarks}</div>
+                                </div>
+                              </div>
+                              <span className="text-sm font-mono font-black text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-xl shrink-0">
+                                ₹ {Math.abs(rw.points).toFixed(2)}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-2 border-t border-[#252525]">
+                              <span className={'text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5 ' + (
+                                rw.fulfillmentStatus === 'Fulfilled'
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse'
+                              )}>
+                                {rw.fulfillmentStatus === 'Fulfilled' ? '✅ Granted & Fulfilled' : '⏳ Date / Reward Pending'}
+                              </span>
+
+                              {isParentAdmin && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleWishFulfillment(rw.id)}
+                                  className="text-xs font-bold bg-[#262626] hover:bg-[#333] text-white px-3 py-1.5 rounded-xl border border-[#3d3d3d] cursor-pointer transition-all active:scale-95"
+                                  title="Toggle fulfillment status"
+                                >
+                                  {rw.fulfillmentStatus === 'Fulfilled' ? 'Mark Pending ⏳' : 'Mark Fulfilled ✅'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 4: RULES ENGINE GUIDE (ALL IN ENGLISH) */}
                 {loveModalTab === 'rules' && (
                   <div className="space-y-5">
                     {/* INTRO HERO */}
