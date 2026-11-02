@@ -407,6 +407,15 @@ export default function App() {
   });
 
   const [showLoveBalanceModal, setShowLoveBalanceModal] = useState(false);
+  const [wishRequests, setWishRequests] = useState(() => {
+    try {
+      const saved = localStorage.getItem('stealth_wish_requests');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [activeWishApprovalModal, setActiveWishApprovalModal] = useState(null);
   const [loveModalTab, setLoveModalTab] = useState('passbook'); // 'passbook' | 'redeem' | 'rules'
   const [loveSourceFilter, setLoveSourceFilter] = useState('All');
   const [loveStatusFilter, setLoveStatusFilter] = useState('All');
@@ -1748,6 +1757,7 @@ export default function App() {
       localStorage.setItem('stealth_love_balance', loveBalance.toString());
       localStorage.setItem('stealth_admin_love_balance', adminLoveBalance.toString());
       localStorage.setItem('stealth_love_ledger', JSON.stringify(loveLedger));
+      localStorage.setItem('stealth_wish_requests', JSON.stringify(wishRequests));
     } catch (e) {
       console.warn("Storage quota limit reached for love balance:", e);
     }
@@ -1826,7 +1836,7 @@ export default function App() {
     const expStr = expDate.toLocaleDateString('en-GB');
 
     const targetLabel = target === 'user' ? 'Dora' : 'Darsh';
-    const cleanReason = reason || (type === 'credit' ? 'Love Karma Reward' : (type === 'redeem' ? 'Wish Redeemed' : 'Love Karma Deduction'));
+    const cleanReason = reason || (type === 'credit' ? 'Love Balance Reward' : (type === 'redeem' ? 'Wish Redeemed' : 'Love Balance Deduction'));
     const newEntry = {
       id: 'lb_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
       sl: 1,
@@ -1940,24 +1950,111 @@ export default function App() {
     }
   }, []);
 
-  const handleRedeemWish = (wish) => {
+  const handleInitiateWishRequest = (wish) => {
     const isDarsh = role === 'parent';
-    const currentTarget = isDarsh ? activeLbTarget : 'user';
-    const currentBal = currentTarget === 'admin' ? adminLoveBalance : loveBalance;
+    const requesterRole = isDarsh ? (activeLbTarget === 'admin' ? 'admin' : 'user') : 'user';
+    const requesterName = requesterRole === 'admin' ? 'Darsh' : 'Dora';
+    const targetName = requesterRole === 'admin' ? 'Dora' : 'Darsh';
+    const currentBal = requesterRole === 'admin' ? adminLoveBalance : loveBalance;
+
     if (currentBal < wish.cost) {
       alert('Insufficient Love Balance! You have ₹ ' + currentBal.toFixed(2) + ', but need ₹ ' + wish.cost.toFixed(2) + '. Earn more Love Balance through sweet messages and caring gestures!');
       return;
     }
-    handleLoveBalanceTransaction(wish.cost, 'redeem', 'Redeemed: ' + wish.title, false, currentTarget, {
-      title: wish.title,
-      icon: wish.icon,
-      cost: wish.cost
-    });
+
+    const alreadyPending = wishRequests.some(r => r.wishId === wish.id && r.status === 'PENDING' && r.requesterRole === requesterRole);
+    if (alreadyPending) {
+      alert('You already have a pending request for "' + wish.title + '". Awaiting ' + targetName + "\'s approval!");
+      setLoveModalTab('claimed');
+      return;
+    }
+
+    const newReq = {
+      id: 'wreq_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      wishId: wish.id,
+      wishTitle: wish.title,
+      wishIcon: wish.icon,
+      wishCost: wish.cost,
+      wishDesc: wish.description,
+      requesterRole: requesterRole,
+      requesterName: requesterName,
+      targetName: targetName,
+      requestedAt: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
+      status: 'PENDING'
+    };
+
+    setWishRequests(prev => [newReq, ...prev]);
+
+    if (socketRef.current) {
+      socketRef.current.emit('love_balance_action', {
+        room: GLOBAL_ROOM,
+        action: 'WISH_REQUEST',
+        wishRequest: newReq,
+        senderRole: roleRef.current || 'user',
+        timestamp: Date.now()
+      });
+    }
+
     try {
-      confetti({ particleCount: 70, spread: 80, origin: { y: 0.5 } });
+      confetti({ particleCount: 50, spread: 70, origin: { y: 0.5 } });
     } catch (e) {}
-    alert('🎉 Wish Redeemed: "' + wish.title + '"! Claim recorded in your Redeemed Wishes section.');
+
+    alert('💌 Wish Request Sent!\n\n"' + wish.title + '" request dispatched to ' + targetName + '.\n\nOnce ' + targetName + ' approves, your ₹ ' + wish.cost.toFixed(2) + ' Love Balance will be redeemed!');
     setLoveModalTab('claimed');
+  };
+
+  const handleApproveWishRequest = (req) => {
+    // 1. Deduct points from requester in real time and log confirmed transaction
+    handleLoveBalanceTransaction(
+      req.wishCost,
+      'redeem',
+      'Redeemed: ' + req.wishTitle,
+      false,
+      req.requesterRole,
+      {
+        title: req.wishTitle,
+        icon: req.wishIcon,
+        cost: req.wishCost,
+        approvedBy: role === 'parent' ? 'Darsh' : 'Dora'
+      }
+    );
+
+    // 2. Mark request as APPROVED
+    setWishRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'APPROVED' } : r));
+    setActiveWishApprovalModal(null);
+
+    // 3. Real-time Socket Broadcast
+    if (socketRef.current) {
+      socketRef.current.emit('love_balance_action', {
+        room: GLOBAL_ROOM,
+        action: 'WISH_APPROVED',
+        wishRequest: { ...req, status: 'APPROVED' },
+        senderRole: roleRef.current || 'admin',
+        timestamp: Date.now()
+      });
+    }
+
+    try {
+      confetti({ particleCount: 80, spread: 90, origin: { y: 0.4 } });
+    } catch (e) {}
+
+    alert('🎉 Wish Approved!\n\nYou granted "' + req.wishTitle + '" for ' + req.requesterName + '!\n₹ ' + req.wishCost.toFixed(2) + ' Love Balance has been redeemed.');
+  };
+
+  const handleDeclineWishRequest = (req) => {
+    setWishRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'DECLINED' } : r));
+    setActiveWishApprovalModal(null);
+
+    if (socketRef.current) {
+      socketRef.current.emit('love_balance_action', {
+        room: GLOBAL_ROOM,
+        action: 'WISH_DECLINED',
+        wishRequest: { ...req, status: 'DECLINED' },
+        senderRole: roleRef.current || 'admin',
+        timestamp: Date.now()
+      });
+    }
+    alert('Wish request for "' + req.wishTitle + '" has been declined.');
   };
 
   useEffect(() => {
@@ -1993,6 +2090,14 @@ export default function App() {
 
     socketRef.current.on('connect', () => {
       setIsConnected(true);
+      if (socketRef.current) {
+        socketRef.current.emit('love_balance_action', {
+          room: GLOBAL_ROOM,
+          action: 'REQUEST_SYNC',
+          senderRole: roleRef.current || 'user',
+          timestamp: Date.now()
+        });
+      }
       const currentRole = localStorage.getItem('stealth_role') || 'user';
       socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: currentRole });
       markMessagesAsSeen();
@@ -2536,6 +2641,49 @@ export default function App() {
           }
           return item;
         }));
+      } else if (data.action === 'WISH_REQUEST') {
+        const req = data.wishRequest;
+        if (req) {
+          setWishRequests(prev => [req, ...prev.filter(r => r.id !== req.id)]);
+          try {
+            playReceiveSound();
+            confetti({ particleCount: 60, spread: 80, origin: { y: 0.4 } });
+          } catch (e) {}
+          setActiveWishApprovalModal(req);
+        }
+      } else if (data.action === 'WISH_APPROVED') {
+        const req = data.wishRequest;
+        if (req) {
+          setWishRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'APPROVED' } : r));
+          try {
+            confetti({ particleCount: 100, spread: 100, origin: { y: 0.4 } });
+          } catch (e) {}
+          alert('🎉 IT\'S APPROVED! 💖\n\n' + (req.targetName || 'Your partner') + ' APPROVED your wish:\n"' + req.wishTitle + '"!\n\nPoints deducted and wish granted!');
+        }
+      } else if (data.action === 'WISH_DECLINED') {
+        const req = data.wishRequest;
+        if (req) {
+          setWishRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'DECLINED' } : r));
+          alert('Note: Wish request for "' + req.wishTitle + '" was declined.');
+        }
+      } else if (data.action === 'REQUEST_SYNC') {
+        if (socketRef.current) {
+          socketRef.current.emit('love_balance_action', {
+            room: GLOBAL_ROOM,
+            action: 'SYNC_STATE_RESPONSE',
+            loveBalance: loveBalance,
+            adminLoveBalance: adminLoveBalance,
+            loveLedger: loveLedger,
+            wishRequests: wishRequests,
+            senderRole: roleRef.current || 'admin',
+            timestamp: Date.now()
+          });
+        }
+      } else if (data.action === 'SYNC_STATE_RESPONSE') {
+        if (typeof data.loveBalance === 'number') setLoveBalance(data.loveBalance);
+        if (typeof data.adminLoveBalance === 'number' && myRole === 'parent') setAdminLoveBalance(data.adminLoveBalance);
+        if (Array.isArray(data.loveLedger)) setLoveLedger(data.loveLedger);
+        if (Array.isArray(data.wishRequests)) setWishRequests(data.wishRequests);
       } else {
         handleLoveBalanceTransaction(data.amount, data.type, data.reason, true, data.target || 'user', data.extraData);
         if (data.type === 'credit') {
@@ -3964,14 +4112,15 @@ export default function App() {
         />
         <header className="h-14 flex items-center justify-between px-4 shrink-0 z-10 border-b border-[#141414]">
           <div className="flex items-center gap-2.5 overflow-hidden">
-            <button 
-              onClick={() => setSidebarOpen(true)} 
-              className="flex items-center gap-1.5 bg-[#181818] hover:bg-[#252525] border border-[#2e2e2e] text-gray-200 hover:text-white px-2.5 py-1.5 rounded-xl active:scale-95 cursor-pointer shrink-0 shadow-sm"
-              title="Open Sidebar Menu"
-            >
-              <PanelLeft size={17} className="text-emerald-400" />
-              <span className="text-xs font-semibold md:hidden">Menu</span>
-            </button>
+            {!sidebarOpen && (
+              <button 
+                onClick={() => setSidebarOpen(true)} 
+                className="hidden md:flex items-center gap-1.5 bg-[#181818] hover:bg-[#252525] border border-[#2e2e2e] text-gray-200 hover:text-white p-2 rounded-xl active:scale-95 cursor-pointer shrink-0 shadow-sm"
+                title="Open Sidebar Menu"
+              >
+                <PanelLeft size={17} className="text-emerald-400" />
+              </button>
+            )}
 
             <span className="text-sm font-semibold text-gray-200 truncate max-w-[150px] sm:max-w-[260px]">
               {viewMode === 'codex' ? 'Codex' : currentRoom}
@@ -3979,14 +4128,7 @@ export default function App() {
 
             {role === 'parent' && (
               <div className="flex items-center gap-1.5 sm:gap-2">
-                <button
-                  onClick={() => setShowAdminRecordingsModal(true)}
-                  className="hidden md:flex items-center gap-1.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-600/60 text-rose-300 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer shadow active:scale-95 shrink-0"
-                  title="Admin Call Recordings Vault"
-                >
-                  <Disc size={14} className="text-rose-400 animate-spin" style={{ animationDuration: '3s' }} />
-                  <span>Call Recordings</span>
-                </button>
+
 
                 <button
                   onClick={downloadFullChatPDF}
@@ -6360,6 +6502,61 @@ export default function App() {
 
                     {/* REDEEMED WISHES SECTION (INLINE DISPLAY IN PASSBOOK) */}
                     <div className="bg-[#181818] border border-amber-500/30 rounded-2xl p-3 sm:p-4 space-y-3">
+                      {/* PENDING APPROVAL REQUESTS BANNER */}
+                      {(() => {
+                        const myRole = role === 'parent' ? 'admin' : 'user';
+                        const incomingPendingReqs = wishRequests.filter(r => r.status === 'PENDING' && r.requesterRole !== myRole);
+                        const myPendingReqs = wishRequests.filter(r => r.status === 'PENDING' && r.requesterRole === myRole);
+                        if (incomingPendingReqs.length === 0 && myPendingReqs.length === 0) return null;
+                        return (
+                          <div className="space-y-2 pb-2 border-b border-[#2a2a2a]">
+                            {incomingPendingReqs.map(req => (
+                              <div key={req.id} className="bg-pink-950/50 border border-pink-500/60 p-3 rounded-xl flex items-center justify-between gap-2 shadow-lg animate-pulse">
+                                <div className="flex items-center gap-2.5">
+                                  <span className="text-2xl">{req.wishIcon || '🎁'}</span>
+                                  <div>
+                                    <h5 className="text-xs font-bold text-white flex items-center gap-1.5">
+                                      <span>{req.requesterName} requested: {req.wishTitle}</span>
+                                      <span className="text-[10px] text-amber-300 font-mono font-bold bg-black/40 px-1.5 py-0.2 rounded">₹ {req.wishCost.toFixed(2)}</span>
+                                    </h5>
+                                    <p className="text-[10px] text-pink-300">Awaiting your approval to grant wish & deduct points</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApproveWishRequest(req)}
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer shadow active:scale-95"
+                                  >
+                                    Approve & Grant 💝
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeclineWishRequest(req)}
+                                    className="bg-[#242424] hover:bg-[#333] text-gray-300 text-xs px-2.5 py-1.5 rounded-lg cursor-pointer border border-[#3a3a3a]"
+                                  >
+                                    Decline
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+
+                            {myPendingReqs.map(req => (
+                              <div key={req.id} className="bg-amber-950/40 border border-amber-500/40 p-2.5 rounded-xl flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xl">{req.wishIcon || '🎁'}</span>
+                                  <span className="text-xs font-bold text-amber-200">
+                                    Requested: {req.wishTitle} (₹ {req.wishCost.toFixed(2)})
+                                  </span>
+                                </div>
+                                <span className="text-[10px] font-bold text-amber-300 bg-amber-900/60 border border-amber-700 px-2 py-0.5 rounded-full animate-pulse">
+                                  ⏳ Awaiting {req.targetName}\'s Approval
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="text-xl">🎁</span>
@@ -6554,17 +6751,27 @@ export default function App() {
                               <p className="text-xs text-gray-400 leading-relaxed">{wish.description}</p>
                             </div>
 
-                            <button
-                              type="button"
-                              onClick={() => handleRedeemWish(wish)}
-                              className={'w-full py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow active:scale-95 ' + (
-                                canAfford 
-                                  ? 'bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white' 
-                                  : 'bg-zinc-800 text-gray-500 cursor-not-allowed border border-[#333]'
-                              )}
-                            >
-                              {canAfford ? ('Redeem for ₹ ' + wish.cost.toFixed(2)) : ('Need ₹ ' + (wish.cost - displayedLoveBalance).toFixed(2) + ' More')}
-                            </button>
+                            {(() => {
+                              const requesterRole = isParentAdmin ? (activeLbTarget === 'admin' ? 'admin' : 'user') : 'user';
+                              const isPending = wishRequests.some(r => r.wishId === wish.id && r.status === 'PENDING' && r.requesterRole === requesterRole);
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => handleInitiateWishRequest(wish)}
+                                  className={'w-full py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow active:scale-95 ' + (
+                                    isPending
+                                      ? 'bg-amber-600 text-white animate-pulse border border-amber-400'
+                                      : (canAfford 
+                                          ? 'bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white' 
+                                          : 'bg-zinc-800 text-gray-500 cursor-not-allowed border border-[#333]')
+                                  )}
+                                >
+                                  {isPending 
+                                    ? '⏳ Awaiting Partner Approval' 
+                                    : (canAfford ? ('Request Wish for ₹ ' + wish.cost.toFixed(2) + ' 💝') : ('Need ₹ ' + (wish.cost - displayedLoveBalance).toFixed(2) + ' More'))}
+                                </button>
+                              );
+                            })()}
                           </div>
                         );
                       })}
@@ -6575,6 +6782,63 @@ export default function App() {
                 {/* TAB 3: REDEEMED WISHES VAULT & TIMELINE */}
                 {loveModalTab === 'claimed' && (
                   <div className="space-y-4">
+                    {/* INCOMING PENDING REQUESTS IN TAB 3 */}
+                    {(() => {
+                      const myRole = role === 'parent' ? 'admin' : 'user';
+                      const incomingPendingReqs = wishRequests.filter(r => r.status === 'PENDING' && r.requesterRole !== myRole);
+                      const myPendingReqs = wishRequests.filter(r => r.status === 'PENDING' && r.requesterRole === myRole);
+                      if (incomingPendingReqs.length === 0 && myPendingReqs.length === 0) return null;
+                      return (
+                        <div className="space-y-2">
+                          {incomingPendingReqs.map(req => (
+                            <div key={req.id} className="bg-gradient-to-r from-pink-950/60 to-purple-950/60 border-2 border-pink-500/70 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl">
+                              <div className="flex items-center gap-3">
+                                <span className="text-3xl p-2 bg-black/40 rounded-xl">{req.wishIcon || '🎁'}</span>
+                                <div className="text-left space-y-0.5">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="text-sm font-black text-white">{req.requesterName} wants: {req.wishTitle}</h4>
+                                    <span className="text-xs font-mono font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.2 rounded-lg">₹ {req.wishCost.toFixed(2)}</span>
+                                  </div>
+                                  <p className="text-xs text-gray-300">{req.wishDesc}</p>
+                                  <p className="text-[10px] text-gray-500 font-mono">Requested: {req.requestedAt}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 w-full sm:w-auto">
+                                <button
+                                  type="button"
+                                  onClick={() => handleApproveWishRequest(req)}
+                                  className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all"
+                                >
+                                  Approve & Grant 💝
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeclineWishRequest(req)}
+                                  className="bg-[#242424] hover:bg-[#333] text-gray-300 text-xs px-3 py-2 rounded-xl cursor-pointer border border-[#3a3a3a]"
+                                >
+                                  Decline
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+
+                          {myPendingReqs.map(req => (
+                            <div key={req.id} className="bg-amber-950/30 border border-amber-500/40 p-3 rounded-2xl flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2.5">
+                                <span className="text-2xl">{req.wishIcon || '🎁'}</span>
+                                <div className="text-left">
+                                  <h5 className="text-xs font-bold text-white">Your Request: {req.wishTitle}</h5>
+                                  <span className="text-[10px] text-gray-400 font-mono">₹ {req.wishCost.toFixed(2)} • {req.requestedAt}</span>
+                                </div>
+                              </div>
+                              <span className="text-xs font-bold text-amber-300 bg-amber-950/60 border border-amber-600/60 px-3 py-1 rounded-full animate-pulse">
+                                ⏳ Waiting for {req.targetName}\'s Approval
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                     <div className="bg-gradient-to-r from-amber-950/40 via-orange-950/40 to-amber-950/40 border border-amber-500/30 rounded-2xl p-4 sm:p-5 flex items-center justify-between">
                       <div className="space-y-1">
                         <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
@@ -6670,7 +6934,7 @@ export default function App() {
                     {/* REWARD EARNING RULES */}
                     <div className="space-y-3">
                       <h4 className="text-sm font-black text-emerald-400 flex items-center gap-2">
-                        <span>✨ 3. Reward Earning Structure (Love Karma Rules Engine)</span>
+                        <span>✨ Love Balance Earning Rules</span>
                       </h4>
                       <div className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden">
                         <div className="overflow-x-auto">
@@ -6705,7 +6969,7 @@ export default function App() {
                     {/* DEDUCTION RULES */}
                     <div className="space-y-3 pt-2">
                       <h4 className="text-sm font-black text-rose-400 flex items-center gap-2">
-                        <span>💔 4. Love Karma Deductions Engine</span>
+                        <span>💔 Love Balance Deductions</span>
                       </h4>
                       <div className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden">
                         <div className="overflow-x-auto">
@@ -6713,9 +6977,9 @@ export default function App() {
                             <thead className="bg-[#121212] text-gray-400 uppercase text-[10px] font-mono border-b border-[#262626]">
                               <tr>
                                 <th className="py-2.5 px-3 w-12">S.NO</th>
-                                <th className="py-2.5 px-3">INFRACTION TYPE</th>
+                                <th className="py-2.5 px-3">DEDUCTION TYPE</th>
                                 <th className="py-2.5 px-3">CRITERIA</th>
-                                <th className="py-2.5 px-3 text-right">PENALTY POINTS</th>
+                                <th className="py-2.5 px-3 text-right">DEDUCTION POINTS</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-[#242424] text-gray-300">
@@ -6742,6 +7006,59 @@ export default function App() {
 
               </div>
 
+            </div>
+          </div>
+        )}
+
+        {/* INCOMING WISH REQUEST APPROVAL POPUP */}
+        {activeWishApprovalModal && (
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-200 font-sans">
+            <div className="bg-[#141414] border-2 border-pink-500/70 rounded-3xl max-w-md w-full p-6 text-center space-y-4 shadow-2xl relative">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-pink-500/20 to-purple-500/20 border border-pink-500/40 text-4xl flex items-center justify-center mx-auto shadow-inner">
+                {activeWishApprovalModal.wishIcon || '🎁'}
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-pink-400 bg-pink-950/60 border border-pink-700/60 px-3 py-1 rounded-full">
+                  Incoming Wish Request 💖
+                </span>
+                <h3 className="text-lg font-black text-white pt-1">
+                  {activeWishApprovalModal.requesterName} wants to redeem:
+                </h3>
+                <h4 className="text-base font-bold text-amber-300">
+                  {activeWishApprovalModal.wishTitle}
+                </h4>
+                <p className="text-xs text-gray-400 max-w-xs mx-auto">
+                  {activeWishApprovalModal.wishDesc}
+                </p>
+                <div className="pt-2">
+                  <span className="text-sm font-black font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-3 py-1 rounded-xl">
+                    Cost: ₹ {Number(activeWishApprovalModal.wishCost || 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-gray-400">
+                Approving will deduct ₹ {Number(activeWishApprovalModal.wishCost || 0).toFixed(2)} from {activeWishApprovalModal.requesterName}'s Love Balance and grant the wish!
+              </p>
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleApproveWishRequest(activeWishApprovalModal)}
+                  className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-2.5 rounded-xl cursor-pointer shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5 text-xs"
+                >
+                  <Check size={16} />
+                  <span>Approve & Grant 💝</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeclineWishRequest(activeWishApprovalModal)}
+                  className="bg-[#222] hover:bg-[#2c2c2c] text-gray-400 hover:text-white font-bold px-4 py-2.5 rounded-xl cursor-pointer border border-[#333] transition-all text-xs"
+                >
+                  Decline
+                </button>
+              </div>
             </div>
           </div>
         )}
