@@ -378,6 +378,18 @@ export default function App() {
   const [adminLbAmount, setAdminLbAmount] = useState('');
   const [adminLbReason, setAdminLbReason] = useState('');
 
+  // Dual Balance & Power Tools State
+  const [adminLoveBalance, setAdminLoveBalance] = useState(() => {
+    try {
+      const saved = localStorage.getItem('stealth_admin_love_balance');
+      return saved !== null ? parseFloat(saved) : 18.00;
+    } catch {
+      return 18.00;
+    }
+  });
+  const [activeLbTarget, setActiveLbTarget] = useState('user'); // 'user' (Partner A) or 'admin' (Admin H)
+  const [adminOverrideVal, setAdminOverrideVal] = useState('');
+
   // Mobile Notification Permission State
   const [notificationPermission, setNotificationPermission] = useState(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -1658,15 +1670,16 @@ export default function App() {
     };
   }, []);
 
-  // Persist Love Balance to LocalStorage
+  // Persist Dual Love Balance to LocalStorage
   useEffect(() => {
     try {
       localStorage.setItem('stealth_love_balance', loveBalance.toString());
+      localStorage.setItem('stealth_admin_love_balance', adminLoveBalance.toString());
       localStorage.setItem('stealth_love_ledger', JSON.stringify(loveLedger));
     } catch (e) {
       console.warn("Storage quota limit reached for love balance:", e);
     }
-  }, [loveBalance, loveLedger]);
+  }, [loveBalance, adminLoveBalance, loveLedger]);
 
   const requestNotificationAccess = useCallback(async () => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -1721,15 +1734,16 @@ export default function App() {
     }
   }, []);
 
-  const handleLoveBalanceTransaction = useCallback((amount, type, reason, isBroadcast = false) => {
+  const handleLoveBalanceTransaction = useCallback((amount, type, reason, isBroadcast = false, target = 'user') => {
     const numAmount = Math.abs(parseFloat(amount) || 0);
     if (numAmount === 0) return;
     const finalDelta = type === 'credit' ? numAmount : -numAmount;
 
-    setLoveBalance(prev => {
-      const nextBal = Math.max(0, parseFloat((prev + finalDelta).toFixed(2)));
-      return nextBal;
-    });
+    if (target === 'user') {
+      setLoveBalance(prev => Math.max(0, parseFloat((prev + finalDelta).toFixed(2))));
+    } else {
+      setAdminLoveBalance(prev => Math.max(0, parseFloat((prev + finalDelta).toFixed(2))));
+    }
 
     const nowStr = new Date().toLocaleString('en-GB', { 
       day: '2-digit', month: '2-digit', year: 'numeric',
@@ -1739,10 +1753,12 @@ export default function App() {
     expDate.setMonth(expDate.getMonth() + 1);
     const expStr = expDate.toLocaleDateString('en-GB');
 
+    const targetLabel = target === 'user' ? 'Partner (A)' : 'Admin (H)';
     const newEntry = {
       id: 'lb_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
       sl: 1,
-      description: reason || (type === 'credit' ? 'Love Karma Reward' : 'Love Karma Deduction'),
+      target: target,
+      description: `[${targetLabel}] ` + (reason || (type === 'credit' ? 'Love Karma Reward' : 'Love Karma Deduction')),
       earnedAt: nowStr,
       expireDate: expStr,
       points: type === 'credit' ? numAmount : -numAmount,
@@ -1762,12 +1778,68 @@ export default function App() {
     if (!isBroadcast && socketRef.current) {
       socketRef.current.emit('love_balance_action', {
         room: GLOBAL_ROOM,
+        action: 'TRANSACTION',
+        target: target,
         amount: numAmount,
         type: type,
         reason: reason,
         senderRole: roleRef.current || 'admin',
         timestamp: Date.now()
       });
+    }
+  }, []);
+
+  const handleAdminClearLedger = useCallback(() => {
+    if (!window.confirm("Are you sure you want to clear all Love Balance Ledger history and reset points for both sides?")) return;
+    setLoveLedger([]);
+    setLoveBalance(0);
+    setAdminLoveBalance(0);
+    if (socketRef.current) {
+      socketRef.current.emit('love_balance_action', {
+        room: GLOBAL_ROOM,
+        action: 'CLEAR_LEDGER',
+        resetBalance: true,
+        senderRole: roleRef.current || 'admin',
+        timestamp: Date.now()
+      });
+    }
+  }, []);
+
+  const handleAdminOverrideBalance = useCallback((target, newBal) => {
+    const val = parseFloat(newBal);
+    if (isNaN(val) || val < 0) {
+      alert("Please enter a valid balance amount (>= 0).");
+      return;
+    }
+    if (target === 'user') {
+      setLoveBalance(val);
+    } else {
+      setAdminLoveBalance(val);
+    }
+    if (socketRef.current) {
+      socketRef.current.emit('love_balance_action', {
+        room: GLOBAL_ROOM,
+        action: 'OVERRIDE_BALANCE',
+        target: target,
+        newBalance: val,
+        senderRole: roleRef.current || 'admin',
+        timestamp: Date.now()
+      });
+    }
+    alert(`Success: ${target === 'user' ? 'Partner (A)' : 'Admin (H)'} Love Balance set to ₹ ${val.toFixed(2)}.`);
+  }, []);
+
+  const handleSendLoveNudge = useCallback((target) => {
+    if (socketRef.current) {
+      socketRef.current.emit('love_balance_action', {
+        room: GLOBAL_ROOM,
+        action: 'LOVE_NUDGE',
+        target: target,
+        message: target === 'user' ? "💖 Admin (H) sent you a sweet Love Nudge!" : "💖 Partner (A) sent you a Love Nudge!",
+        senderRole: roleRef.current || 'admin',
+        timestamp: Date.now()
+      });
+      alert(`Love Nudge dispatched to ${target === 'user' ? 'Partner (A)' : 'Admin (H)'}!`);
     }
   }, []);
 
@@ -2317,8 +2389,31 @@ export default function App() {
     });
 
     socketRef.current.on('love_balance_broadcast', (data) => {
-      if (data && data.senderRole !== (roleRef.current || localStorage.getItem('stealth_role'))) {
-        handleLoveBalanceTransaction(data.amount, data.type, data.reason, true);
+      if (!data) return;
+      const myRole = roleRef.current || localStorage.getItem('stealth_role');
+      if (data.senderRole === myRole) return;
+
+      if (data.action === 'CLEAR_LEDGER') {
+        setLoveLedger([]);
+        if (data.resetBalance) {
+          setLoveBalance(0);
+          setAdminLoveBalance(0);
+        }
+        alert("🧹 Love Balance passbook history cleared by Admin (H)!");
+      } else if (data.action === 'OVERRIDE_BALANCE') {
+        if (data.target === 'user') {
+          setLoveBalance(data.newBalance);
+        } else if (data.target === 'admin') {
+          setAdminLoveBalance(data.newBalance);
+        }
+        alert(`⚡ Love Balance updated to ₹ ${data.newBalance.toFixed(2)} by Admin (H)!`);
+      } else if (data.action === 'LOVE_NUDGE') {
+        try {
+          confetti({ particleCount: 60, spread: 70, origin: { y: 0.4 } });
+        } catch (e) {}
+        alert(data.message || "💖 Love Alert received!");
+      } else {
+        handleLoveBalanceTransaction(data.amount, data.type, data.reason, true, data.target || 'user');
         if (data.type === 'credit') {
           try {
             confetti({ particleCount: 50, spread: 70, origin: { y: 0.4 } });
@@ -3706,10 +3801,11 @@ export default function App() {
           <div className="flex items-center gap-2.5 overflow-hidden">
             <button 
               onClick={() => setSidebarOpen(true)} 
-              className="text-[#9b9b9b] hover:text-white p-1.5 rounded-xl active:bg-[#1f1f1f] cursor-pointer shrink-0"
-              title="Open Sidebar"
+              className="flex items-center gap-1.5 bg-[#181818] hover:bg-[#252525] border border-[#2e2e2e] text-gray-200 hover:text-white px-2.5 py-1.5 rounded-xl active:scale-95 cursor-pointer shrink-0 shadow-sm"
+              title="Open Sidebar Menu"
             >
-              <PanelLeft size={20} />
+              <PanelLeft size={17} className="text-emerald-400" />
+              <span className="text-xs font-semibold md:hidden">Menu</span>
             </button>
 
             <span className="text-sm font-semibold text-gray-200 truncate max-w-[150px] sm:max-w-[260px]">
@@ -3766,16 +3862,15 @@ export default function App() {
               <span>Call</span>
             </button>
 
-            {/* LOVE BALANCE BUTTON PILL (RIGHT OF CALL, LEFT OF UPGRADE) */}
+            {/* LOVE BALANCE BUTTON PILL (SHOW ONLY BALANCE) */}
             <button
               type="button"
               onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-              className="flex items-center gap-1 bg-emerald-950/50 hover:bg-emerald-900/70 border border-emerald-500/60 hover:border-emerald-400 text-emerald-300 hover:text-white px-2 sm:px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all shadow-[0_0_12px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
+              className="flex items-center gap-1 bg-emerald-950/50 hover:bg-emerald-900/70 border border-emerald-500/60 hover:border-emerald-400 text-emerald-300 hover:text-white px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all shadow-[0_0_12px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
               title="Open Love Balance Passbook & Wish Store"
             >
               <span className="text-emerald-400 font-sans font-black text-sm">₹</span>
               <span>{Number(loveBalance || 0).toFixed(2)}</span>
-              <span className="hidden sm:inline font-sans font-semibold text-[11px] text-emerald-300/90 ml-0.5">Love Balance</span>
             </button>
 
             {/* UPGRADE BUTTON (SPARKLES REMOVED) */}
@@ -4471,21 +4566,21 @@ export default function App() {
 
             {/* --- SEPARATE DEDICATED ADMIN DASHBOARD (ADMIN PARENT ONLY) --- */}
             {viewMode === 'admin_dashboard' && role === 'parent' && (
-              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-5 max-w-6xl w-full mx-auto space-y-5 scrollbar-none font-sans animate-in fade-in duration-200">
+              <section className="flex-1 overflow-y-auto px-2 sm:px-4 py-2 sm:py-3 w-full max-w-7xl mx-auto space-y-3 font-sans animate-in fade-in duration-200">
                 
                 {/* DASHBOARD HERO HEADER */}
-                <div className="bg-gradient-to-r from-[#161616] via-[#1c1813] to-[#161616] border-2 border-amber-500/50 rounded-3xl p-4 sm:p-6 shadow-2xl relative overflow-hidden">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-black flex items-center justify-center text-2xl shadow-xl border-2 border-amber-300 font-black shrink-0">
+                <div className="bg-gradient-to-r from-[#161616] via-[#1c1813] to-[#161616] border border-amber-500/40 rounded-2xl p-3 sm:p-4 shadow-xl relative overflow-hidden">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-black flex items-center justify-center text-xl shadow-lg border border-amber-300 font-black shrink-0">
                         👑
                       </div>
                       <div className="text-left space-y-0.5">
                         <div className="flex items-center gap-2">
-                          <h1 className="text-lg sm:text-xl font-black text-white">Admin Command Center</h1>
-                          <span className="text-[10px] bg-amber-500 text-black px-2 py-0.5 rounded-full font-bold">SUPERUSER</span>
+                          <h1 className="text-base sm:text-lg font-black text-white">Admin Command Center</h1>
+                          <span className="text-[10px] bg-amber-500 text-black px-2 py-0.2 rounded-full font-bold">SUPERUSER</span>
                         </div>
-                        <p className="text-xs text-amber-300/80 font-mono">
+                        <p className="text-[11px] text-amber-300/80 font-mono">
                           Session Verified • Administrator (H) • Master Access
                         </p>
                       </div>
@@ -4494,152 +4589,202 @@ export default function App() {
                     <div className="flex items-center gap-2 shrink-0">
                       <button
                         type="button"
+                        onClick={() => setSidebarOpen(true)}
+                        className="bg-[#242424] hover:bg-[#333] border border-[#3a3a3a] text-gray-300 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 active:scale-95 shadow md:hidden"
+                      >
+                        <PanelLeft size={13} className="text-emerald-400" />
+                        <span>Menu</span>
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setViewMode('real_gpt')}
-                        className="bg-[#242424] hover:bg-[#333] border border-[#3a3a3a] text-white px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 active:scale-95 shadow"
+                        className="bg-[#242424] hover:bg-[#333] border border-[#3a3a3a] text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 active:scale-95 shadow"
                       >
                         <span>← Return to Chat</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => window.location.reload()}
-                        className="bg-amber-500 hover:bg-amber-400 text-black p-2 rounded-xl text-xs font-bold cursor-pointer transition-all shadow"
+                        className="bg-amber-500 hover:bg-amber-400 text-black p-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all shadow"
                         title="Reload Dashboard"
                       >
-                        <RefreshCw size={14} />
+                        <RefreshCw size={13} />
                       </button>
                     </div>
                   </div>
                 </div>
 
-                {/* 4 DISTINCT CLEAN MODULAR PARTS */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 text-left font-sans">
+                {/* 4 DISTINCT CLEAN MODULAR PARTS (FULL SCREEN FITTED 4 SQUARES) */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-3.5 text-left font-sans">
                   
-                  {/* PART 1: LOVE BALANCE CENTRAL ENGINE & CONTROLLER */}
-                  <div className="bg-[#121212] border-2 border-pink-500/40 hover:border-pink-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col justify-between space-y-4">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between border-b border-[#222] pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-9 h-9 rounded-xl bg-pink-500/10 border border-pink-500/30 flex items-center justify-center text-pink-400 font-bold text-lg">
+                  {/* PART 1: LOVE BALANCE CENTRAL ENGINE (2-PART: ADMIN H & PARTNER A) */}
+                  <div className="bg-[#121212] border-2 border-pink-500/40 hover:border-pink-500/60 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-2xl flex flex-col justify-between space-y-3">
+                    <div className="space-y-2.5">
+                      
+                      {/* CARD HEADER WITH DUAL BALANCES */}
+                      <div className="flex items-center justify-between border-b border-[#222] pb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-xl bg-pink-500/10 border border-pink-500/30 flex items-center justify-center text-pink-400 font-bold text-base">
                             💖
                           </div>
                           <div>
-                            <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                            <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
                               <span>Part 1: Love Balance Engine</span>
-                              <span className="text-[10px] bg-pink-500/20 text-pink-300 border border-pink-500/30 px-2 py-0.5 rounded-full font-mono">LIVE CONTROL</span>
+                              <span className="text-[9px] bg-pink-500/20 text-pink-300 border border-pink-500/30 px-1.5 py-0.2 rounded font-mono">2-WAY</span>
                             </h3>
-                            <p className="text-[11px] text-gray-400">Award sweet karma rewards & manage relationship rules</p>
+                            <p className="text-[10px] text-gray-400">Control & award points for Partner (A) and Admin (H)</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-xs text-gray-400">Current Balance</div>
-                          <div className="text-lg sm:text-xl font-black text-emerald-400 font-mono">₹ {Number(loveBalance || 0).toFixed(2)}</div>
+
+                        {/* DUAL BALANCES DISPLAY */}
+                        <div className="flex items-center gap-1.5 text-right">
+                          <div className="bg-[#181818] border border-pink-500/30 px-2 py-0.5 rounded-xl">
+                            <div className="text-[9px] text-gray-400">Partner (A)</div>
+                            <div className="text-xs sm:text-sm font-black text-emerald-400 font-mono">₹ {Number(loveBalance || 0).toFixed(2)}</div>
+                          </div>
+                          <div className="bg-[#181818] border border-blue-500/30 px-2 py-0.5 rounded-xl">
+                            <div className="text-[9px] text-gray-400">Admin (H)</div>
+                            <div className="text-xs sm:text-sm font-black text-blue-400 font-mono">₹ {Number(adminLoveBalance || 0).toFixed(2)}</div>
+                          </div>
                         </div>
                       </div>
 
-                      {/* QUICK REWARDS & DEDUCTIONS */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-[11px] font-semibold text-gray-300">
-                          <span className="text-emerald-400 flex items-center gap-1">✨ Quick Awards (+Points):</span>
+                      {/* 2 PARTS SELECTOR: PARTNER (A) VS ADMIN (H) */}
+                      <div className="flex bg-[#181818] p-1 rounded-xl border border-[#2a2a2a] text-xs font-bold gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setActiveLbTarget('user')}
+                          className={`flex-1 py-1 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                            activeLbTarget === 'user' 
+                              ? 'bg-pink-600 text-white shadow font-black' 
+                              : 'text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          <span>👤 Part 1A: For Partner (A)</span>
+                          <span className="text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono">₹ {Number(loveBalance || 0).toFixed(2)}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveLbTarget('admin')}
+                          className={`flex-1 py-1 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                            activeLbTarget === 'admin' 
+                              ? 'bg-blue-600 text-white shadow font-black' 
+                              : 'text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          <span>👑 Part 1B: For Admin (H)</span>
+                          <span className="text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono">₹ {Number(adminLoveBalance || 0).toFixed(2)}</span>
+                        </button>
+                      </div>
+
+                      {/* QUICK AWARDS & DEDUCTIONS FOR CURRENT TARGET */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[10px] font-semibold text-gray-300">
+                          <span className="text-emerald-400 flex items-center gap-1">
+                            ✨ Quick Awards to {activeLbTarget === 'user' ? 'Partner (A)' : 'Admin (H)'} (+₹):
+                          </span>
                         </div>
-                        <div className="grid grid-cols-3 gap-1.5">
+                        <div className="grid grid-cols-3 gap-1">
                           <button
                             type="button"
-                            onClick={() => handleLoveBalanceTransaction(2, 'credit', 'Morning Sweet Text (Before 9 AM)')}
-                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            onClick={() => handleLoveBalanceTransaction(2, 'credit', 'Morning Sweet Text (Before 9 AM)', false, activeLbTarget)}
+                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
                             title="Morning Sweet Text (+₹2.00)"
                           >
                             +₹2 Morning Text
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleLoveBalanceTransaction(1, 'credit', 'Instant Reply (< 5 mins)')}
-                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            onClick={() => handleLoveBalanceTransaction(1, 'credit', 'Instant Reply (< 5 mins)', false, activeLbTarget)}
+                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
                             title="Instant Reply (+₹1.00)"
                           >
                             +₹1 Fast Reply
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleLoveBalanceTransaction(3, 'credit', 'Compliment Drop')}
-                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            onClick={() => handleLoveBalanceTransaction(3, 'credit', 'Compliment Drop', false, activeLbTarget)}
+                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
                             title="Compliment Drop (+₹3.00)"
                           >
                             +₹3 Compliment
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleLoveBalanceTransaction(5, 'credit', 'Romantic Song / Movie')}
-                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            onClick={() => handleLoveBalanceTransaction(5, 'credit', 'Romantic Song / Movie', false, activeLbTarget)}
+                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
                             title="Romantic Song / Movie (+₹5.00)"
                           >
                             +₹5 Song/Movie
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleLoveBalanceTransaction(10, 'credit', 'Late Night Romantic Paragraph')}
-                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            onClick={() => handleLoveBalanceTransaction(10, 'credit', 'Late Night Romantic Paragraph', false, activeLbTarget)}
+                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
                             title="Late Night Romantic Paragraph (+₹10.00)"
                           >
                             +₹10 Paragraph
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleLoveBalanceTransaction(15, 'credit', 'Special Milestone / Anniversary')}
-                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            onClick={() => handleLoveBalanceTransaction(15, 'credit', 'Special Milestone / Anniversary', false, activeLbTarget)}
+                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
                             title="Special Date / Milestone (+₹15.00)"
                           >
                             +₹15 Milestone
                           </button>
                         </div>
 
-                        <div className="flex items-center justify-between text-[11px] font-semibold text-gray-300 pt-1">
-                          <span className="text-rose-400 flex items-center gap-1">💔 Quick Deductions (-Points):</span>
+                        <div className="flex items-center justify-between text-[10px] font-semibold text-gray-300 pt-0.5">
+                          <span className="text-rose-400 flex items-center gap-1">
+                            💔 Quick Deductions from {activeLbTarget === 'user' ? 'Partner (A)' : 'Admin (H)'} (-₹):
+                          </span>
                         </div>
-                        <div className="grid grid-cols-3 gap-1.5">
+                        <div className="grid grid-cols-3 gap-1">
                           <button
                             type="button"
-                            onClick={() => handleLoveBalanceTransaction(2, 'debit', 'Dry Replies ("Hmm", "Ok")')}
-                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            onClick={() => handleLoveBalanceTransaction(2, 'debit', 'Dry Replies ("Hmm", "Ok")', false, activeLbTarget)}
+                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
                             title="Dry Reply (-₹2.00)"
                           >
                             -₹2 Dry Reply
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleLoveBalanceTransaction(3, 'debit', 'Seen & Ignored (>1 hr)')}
-                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            onClick={() => handleLoveBalanceTransaction(3, 'debit', 'Seen & Ignored (>1 hr)', false, activeLbTarget)}
+                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
                             title="Seen & Ignored (-₹3.00)"
                           >
                             -₹3 Seen & Left
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleLoveBalanceTransaction(3, 'debit', 'Slept without Good Night')}
-                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            onClick={() => handleLoveBalanceTransaction(3, 'debit', 'Slept without Good Night', false, activeLbTarget)}
+                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
                             title="Slept without Good Night (-₹3.00)"
                           >
                             -₹3 Slept w/o GN
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleLoveBalanceTransaction(5, 'debit', 'Late Reply / Ghosting')}
-                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            onClick={() => handleLoveBalanceTransaction(5, 'debit', 'Late Reply / Ghosting', false, activeLbTarget)}
+                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
                             title="Late Reply (-₹5.00)"
                           >
                             -₹5 Late Reply
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleLoveBalanceTransaction(10, 'debit', 'Rudeness / Harsh Words')}
-                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            onClick={() => handleLoveBalanceTransaction(10, 'debit', 'Rudeness / Harsh Words', false, activeLbTarget)}
+                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
                             title="Rudeness (-₹10.00)"
                           >
                             -₹10 Rude Tone
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleLoveBalanceTransaction(20, 'debit', 'Forgetting Anniversary / Date')}
-                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1.5 px-2 rounded-xl text-[11px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
+                            onClick={() => handleLoveBalanceTransaction(20, 'debit', 'Forgetting Anniversary / Date', false, activeLbTarget)}
+                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
                             title="Forgetting Date (-₹20.00)"
                           >
                             -₹20 Forgot Date
@@ -4648,12 +4793,12 @@ export default function App() {
                       </div>
 
                       {/* CUSTOM TRANSACTION FORM */}
-                      <div className="bg-[#181818] border border-[#282828] p-3 rounded-2xl space-y-2">
-                        <div className="text-[11px] font-bold text-gray-300 flex items-center justify-between">
-                          <span>Custom Adjustment:</span>
-                          <span className="text-[10px] text-gray-500">Instant Real-time Sync</span>
+                      <div className="bg-[#181818] border border-[#282828] p-2 rounded-xl space-y-1">
+                        <div className="text-[10px] font-bold text-gray-300 flex items-center justify-between">
+                          <span>Custom Adjustment for {activeLbTarget === 'user' ? 'Partner (A)' : 'Admin (H)'}:</span>
+                          <span className="text-[9px] text-gray-500">Live Socket Broadcast</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-2 gap-1.5">
                           <input
                             type="number"
                             step="0.5"
@@ -4661,26 +4806,26 @@ export default function App() {
                             value={adminLbAmount}
                             onChange={(e) => setAdminLbAmount(e.target.value)}
                             placeholder="Points (e.g. 5.0)"
-                            className="bg-[#121212] border border-[#333] text-white text-xs px-3 py-1.5 rounded-xl outline-none focus:border-pink-500 font-mono"
+                            className="bg-[#121212] border border-[#333] text-white text-xs px-2 py-1 rounded-lg outline-none focus:border-pink-500 font-mono"
                           />
                           <input
                             type="text"
                             value={adminLbReason}
                             onChange={(e) => setAdminLbReason(e.target.value)}
                             placeholder="Remark / Gesture Reason"
-                            className="bg-[#121212] border border-[#333] text-white text-xs px-3 py-1.5 rounded-xl outline-none focus:border-pink-500"
+                            className="bg-[#121212] border border-[#333] text-white text-xs px-2 py-1 rounded-lg outline-none focus:border-pink-500"
                           />
                         </div>
-                        <div className="flex gap-2 pt-1">
+                        <div className="flex gap-1.5 pt-0.5">
                           <button
                             type="button"
                             onClick={() => {
                               if (!adminLbAmount) return;
-                              handleLoveBalanceTransaction(parseFloat(adminLbAmount), 'credit', adminLbReason || 'Admin Sweet Reward');
+                              handleLoveBalanceTransaction(parseFloat(adminLbAmount), 'credit', adminLbReason || 'Admin Sweet Reward', false, activeLbTarget);
                               setAdminLbAmount('');
                               setAdminLbReason('');
                             }}
-                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 rounded-xl cursor-pointer shadow active:scale-95 transition-all text-center"
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1 rounded-lg cursor-pointer shadow active:scale-95 transition-all text-center"
                           >
                             + Credit (+₹)
                           </button>
@@ -4688,41 +4833,89 @@ export default function App() {
                             type="button"
                             onClick={() => {
                               if (!adminLbAmount) return;
-                              handleLoveBalanceTransaction(parseFloat(adminLbAmount), 'debit', adminLbReason || 'Admin Karma Deduction');
+                              handleLoveBalanceTransaction(parseFloat(adminLbAmount), 'debit', adminLbReason || 'Admin Karma Deduction', false, activeLbTarget);
                               setAdminLbAmount('');
                               setAdminLbReason('');
                             }}
-                            className="flex-1 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold py-1.5 rounded-xl cursor-pointer shadow active:scale-95 transition-all text-center"
+                            className="flex-1 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold py-1 rounded-lg cursor-pointer shadow active:scale-95 transition-all text-center"
                           >
                             - Deduct (-₹)
                           </button>
                         </div>
                       </div>
+
+                      {/* ADMIN MASTER POWER TOOLS: SET EXACT BALANCE & CLEAR LEDGER & NUDGE */}
+                      <div className="bg-[#161616] border border-amber-500/30 p-2 rounded-xl space-y-1.5">
+                        <div className="text-[10px] font-bold text-amber-300 flex items-center justify-between">
+                          <span className="flex items-center gap-1">⚡ Superuser Power Tools (Changes User Side Live)</span>
+                          <span className="text-[9px] text-gray-500">Master Level</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            step="1"
+                            min="0"
+                            value={adminOverrideVal}
+                            onChange={(e) => setAdminOverrideVal(e.target.value)}
+                            placeholder={`Set ${activeLbTarget === 'user' ? 'User' : 'Admin'} exact ₹`}
+                            className="flex-1 bg-[#101010] border border-[#3a3a3a] text-amber-300 text-xs px-2 py-1 rounded-lg outline-none focus:border-amber-400 font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!adminOverrideVal) return;
+                              handleAdminOverrideBalance(activeLbTarget, adminOverrideVal);
+                              setAdminOverrideVal('');
+                            }}
+                            className="bg-amber-600 hover:bg-amber-500 text-black text-xs font-bold px-2.5 py-1 rounded-lg cursor-pointer transition-all active:scale-95 shadow shrink-0"
+                          >
+                            Force Set
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSendLoveNudge(activeLbTarget)}
+                            className="bg-[#242424] hover:bg-[#303030] border border-[#3e3e3e] text-pink-300 text-xs font-bold px-2 py-1 rounded-lg cursor-pointer transition-all active:scale-95 shrink-0"
+                            title="Send instant love alert / ping"
+                          >
+                            🔔 Nudge
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleAdminClearLedger}
+                            className="bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-300 text-xs font-bold px-2 py-1 rounded-lg cursor-pointer transition-all active:scale-95 shrink-0 flex items-center gap-1"
+                            title="Clear all transaction history and reset points"
+                          >
+                            <Trash2 size={11} />
+                            <span>Clear All</span>
+                          </button>
+                        </div>
+                      </div>
+
                     </div>
 
                     {/* PASSBOOK & WISH STORE LAUNCHERS */}
-                    <div className="flex gap-2 pt-2 border-t border-[#222]">
+                    <div className="flex gap-1.5 pt-2 border-t border-[#222]">
                       <button
                         type="button"
                         onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                        className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
+                        className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-white text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
                       >
-                        <Coins size={14} className="text-amber-400" />
+                        <Coins size={13} className="text-amber-400" />
                         <span>Open Passbook</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('redeem'); }}
-                        className="flex-1 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
+                        className="flex-1 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
                       >
-                        <Gift size={14} />
+                        <Gift size={13} />
                         <span>Wish Store</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('rules'); }}
-                        className="bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-gray-300 text-xs font-bold px-3 py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow"
-                        title="English Rules Guide"
+                        className="bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-gray-300 text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow"
+                        title="Love Balance Policy"
                       >
                         📖
                       </button>
@@ -4730,49 +4923,49 @@ export default function App() {
                   </div>
 
                   {/* PART 2: CALL RECORDINGS VAULT & AUDIO HUB */}
-                  <div className="bg-[#121212] border-2 border-rose-500/40 hover:border-rose-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col justify-between space-y-4">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between border-b border-[#222] pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-9 h-9 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 font-bold text-lg">
-                            <Disc size={18} className="animate-spin" style={{ animationDuration: '4s' }} />
+                  <div className="bg-[#121212] border-2 border-rose-500/40 hover:border-rose-500/60 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-2xl flex flex-col justify-between space-y-3">
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-[#222] pb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 font-bold text-base">
+                            <Disc size={16} className="animate-spin" style={{ animationDuration: '4s' }} />
                           </div>
                           <div>
-                            <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                            <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
                               <span>Part 2: Call Recordings Vault</span>
-                              <span className="text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded-full font-mono">
+                              <span className="text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-1.5 py-0.2 rounded font-mono">
                                 {adminRecordingsList.length} STORED
                               </span>
                             </h3>
-                            <p className="text-[11px] text-gray-400">Mixed dual-channel HD recordings with 24h retention</p>
+                            <p className="text-[10px] text-gray-400">Mixed dual-channel HD recordings with 24h retention</p>
                           </div>
                         </div>
                         <button
                           type="button"
                           onClick={handleStartAudioCall}
-                          className="bg-rose-950 hover:bg-rose-900 border border-rose-600/60 text-rose-300 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all shadow flex items-center gap-1.5 active:scale-95"
+                          className="bg-rose-950 hover:bg-rose-900 border border-rose-600/60 text-rose-300 px-2.5 py-1 rounded-xl text-xs font-bold cursor-pointer transition-all shadow flex items-center gap-1 active:scale-95"
                         >
-                          <Phone size={12} />
+                          <Phone size={11} />
                           <span>Call Now</span>
                         </button>
                       </div>
 
                       {/* RECORDINGS LIST PREVIEW */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-[11px] font-semibold text-gray-400">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-[10px] font-semibold text-gray-400">
                           <span>Recent Audio Recordings:</span>
-                          <span className="text-[10px] text-gray-500">Auto-expires after 24 hours</span>
+                          <span className="text-[9px] text-gray-500">Auto-expires after 24h</span>
                         </div>
 
-                        <div className="max-h-48 overflow-y-auto space-y-2 scrollbar-none pr-1">
+                        <div className="max-h-52 overflow-y-auto space-y-1.5 scrollbar-none pr-1">
                           {adminRecordingsList.length === 0 ? (
-                            <div className="bg-[#181818] border border-[#262626] rounded-2xl p-6 text-center text-xs text-gray-500 space-y-1">
+                            <div className="bg-[#181818] border border-[#262626] rounded-xl p-4 text-center text-xs text-gray-500 space-y-1">
                               <p>No call recordings stored in vault yet.</p>
-                              <p className="text-[11px] text-gray-600">Start an encrypted whisper call to automatically record and preserve audio.</p>
+                              <p className="text-[10px] text-gray-600">Start an encrypted whisper call to automatically record and preserve audio.</p>
                             </div>
                           ) : (
                             adminRecordingsList.slice(0, 4).map((rec) => (
-                              <div key={rec.id} className="bg-[#181818] border border-[#2a2a2a] p-3 rounded-2xl flex items-center justify-between gap-2">
+                              <div key={rec.id} className="bg-[#181818] border border-[#2a2a2a] p-2.5 rounded-xl flex items-center justify-between gap-2">
                                 <div className="space-y-0.5 min-w-0">
                                   <p className="text-xs font-bold text-gray-200 truncate">{rec.title || 'Voice Call Recording'}</p>
                                   <p className="text-[10px] text-gray-400 font-mono">
@@ -4781,15 +4974,15 @@ export default function App() {
                                 </div>
                                 <div className="flex items-center gap-1.5 shrink-0">
                                   {rec.audioUrl && (
-                                    <audio controls src={rec.audioUrl} className="h-7 w-28 sm:w-36 outline-none" />
+                                    <audio controls src={rec.audioUrl} className="h-6 w-24 sm:w-32 outline-none" />
                                   )}
                                   <button
                                     type="button"
                                     onClick={() => handleDeleteRecording(rec.id)}
-                                    className="text-gray-500 hover:text-rose-400 p-1.5 cursor-pointer rounded-lg hover:bg-[#252525] transition-colors"
+                                    className="text-gray-500 hover:text-rose-400 p-1 cursor-pointer rounded-lg hover:bg-[#252525] transition-colors"
                                     title="Delete Recording"
                                   >
-                                    <Trash2 size={13} />
+                                    <Trash2 size={12} />
                                   </button>
                                 </div>
                               </div>
@@ -4804,57 +4997,57 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setShowAdminRecordingsModal(true)}
-                        className="w-full bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-200 text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-2"
+                        className="w-full bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-200 text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
                       >
-                        <Disc size={14} className="text-rose-400 animate-spin" />
+                        <Disc size={13} className="text-rose-400 animate-spin" />
                         <span>Open Dedicated Audio Vault ({adminRecordingsList.length})</span>
                       </button>
                     </div>
                   </div>
 
                   {/* PART 3: ANSWER PENDING & 7:20 PM PDF AUTO-EXPORT */}
-                  <div className="bg-[#121212] border-2 border-amber-500/40 hover:border-amber-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col justify-between space-y-4">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between border-b border-[#222] pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-lg">
-                            <AlertCircle size={18} />
+                  <div className="bg-[#121212] border-2 border-amber-500/40 hover:border-amber-500/60 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-2xl flex flex-col justify-between space-y-3">
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-[#222] pb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-base">
+                            <AlertCircle size={16} />
                           </div>
                           <div>
-                            <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                            <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
                               <span>Part 3: Answer Pending & PDF</span>
-                              <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-mono">
+                              <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.2 rounded font-mono">
                                 {pendingMessages.length} PENDING
                               </span>
                             </h3>
-                            <p className="text-[11px] text-gray-400">Flagged questions & 7:20 PM daily auto-export scheduler</p>
+                            <p className="text-[10px] text-gray-400">Flagged questions & 7:20 PM daily auto-export scheduler</p>
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-[10px] text-gray-400">Daily Export In</div>
+                          <div className="text-[9px] text-gray-400">Daily Export In</div>
                           <div className="text-xs sm:text-sm font-black text-amber-400 font-mono flex items-center gap-1 justify-end">
-                            <Timer size={12} className="animate-spin" />
+                            <Timer size={11} className="animate-spin" />
                             <span>{countdownStr}</span>
                           </div>
                         </div>
                       </div>
 
                       {/* PENDING LIST PREVIEW */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-[11px] font-semibold text-gray-400">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-[10px] font-semibold text-gray-400">
                           <span>Flagged Questions ({pendingMessages.length}):</span>
-                          <span className="text-[10px] text-emerald-400">Auto-downloads PDF at 7:20 PM</span>
+                          <span className="text-[9px] text-emerald-400">Auto-downloads at 7:20 PM</span>
                         </div>
 
-                        <div className="max-h-48 overflow-y-auto space-y-2 scrollbar-none pr-1">
+                        <div className="max-h-52 overflow-y-auto space-y-1.5 scrollbar-none pr-1">
                           {pendingMessages.length === 0 ? (
-                            <div className="bg-[#181818] border border-[#262626] rounded-2xl p-6 text-center text-xs text-gray-500 space-y-1">
+                            <div className="bg-[#181818] border border-[#262626] rounded-xl p-4 text-center text-xs text-gray-500 space-y-1">
                               <p>All questions answered! Zero pending flags.</p>
-                              <p className="text-[11px] text-gray-600">Flag important questions in secret chat to highlight and review here.</p>
+                              <p className="text-[10px] text-gray-600">Flag important questions in secret chat to highlight and review here.</p>
                             </div>
                           ) : (
                             pendingMessages.slice(0, 4).map((msg) => (
-                              <div key={msg._id} className="bg-[#181818] border border-[#2a2a2a] p-3 rounded-2xl flex items-center justify-between gap-2">
+                              <div key={msg._id} className="bg-[#181818] border border-[#2a2a2a] p-2.5 rounded-xl flex items-center justify-between gap-2">
                                 <div className="space-y-0.5 min-w-0">
                                   <p className="text-xs font-semibold text-gray-200 truncate">{msg.text}</p>
                                   <p className="text-[10px] text-gray-400 font-mono">
@@ -4864,7 +5057,7 @@ export default function App() {
                                 <button
                                   type="button"
                                   onClick={(e) => togglePendingFlag(e, msg)}
-                                  className="bg-emerald-950 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer transition-all active:scale-95 shrink-0"
+                                  className="bg-emerald-950 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-lg cursor-pointer transition-all active:scale-95 shrink-0"
                                 >
                                   Resolve
                                 </button>
@@ -4876,27 +5069,27 @@ export default function App() {
                     </div>
 
                     {/* PDF EXPORT ACTION BUTTONS */}
-                    <div className="flex gap-2 pt-2 border-t border-[#222]">
+                    <div className="flex gap-1.5 pt-2 border-t border-[#222]">
                       <button
                         type="button"
                         onClick={downloadFullChatPDF}
-                        className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
+                        className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-white text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1"
                       >
-                        <Download size={14} className="text-amber-400" />
+                        <Download size={13} className="text-amber-400" />
                         <span>Instant Full Chat PDF</span>
                       </button>
                       <button
                         type="button"
                         onClick={downloadPendingPDF}
-                        className="flex-1 bg-amber-600 hover:bg-amber-500 text-black text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
+                        className="flex-1 bg-amber-600 hover:bg-amber-500 text-black text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1"
                       >
-                        <FileDown size={14} />
+                        <FileDown size={13} />
                         <span>Export Pending PDF</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setShowPendingModal(true)}
-                        className="bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-gray-300 text-xs font-bold px-3 py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow"
+                        className="bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-gray-300 text-xs font-bold px-2.5 py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow"
                         title="View All Pending Questions"
                       >
                         🔍
@@ -4905,72 +5098,72 @@ export default function App() {
                   </div>
 
                   {/* PART 4: REAL-TIME ARENA & MEDIA HUB */}
-                  <div className="bg-[#121212] border-2 border-blue-500/40 hover:border-blue-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col justify-between space-y-4">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between border-b border-[#222] pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold text-lg">
-                            <Gamepad2 size={18} />
+                  <div className="bg-[#121212] border-2 border-blue-500/40 hover:border-blue-500/60 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-2xl flex flex-col justify-between space-y-3">
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-[#222] pb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold text-base">
+                            <Gamepad2 size={16} />
                           </div>
                           <div>
-                            <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                            <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
                               <span>Part 4: Real-time Arena & Media</span>
-                              <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-full font-mono">
+                              <span className="text-[9px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-1.5 py-0.2 rounded font-mono">
                                 2-PLAYER & CINEMA
                               </span>
                             </h3>
-                            <p className="text-[11px] text-gray-400">Ludo Royale Clash board arena & Codex synchronized cinema</p>
+                            <p className="text-[10px] text-gray-400">Ludo Royale Clash board arena & Codex synchronized cinema</p>
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-[10px] text-gray-400">Ludo Score</div>
+                          <div className="text-[9px] text-gray-400">Ludo Score</div>
                           <div className="text-xs sm:text-sm font-black text-amber-400 font-mono">H: {scores.H} vs A: {scores.A}</div>
                         </div>
                       </div>
 
                       {/* ARENA & CINEMA SPLIT CARDS */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {/* LUDO ROYALE CARD */}
-                        <div className="bg-[#181818] border border-[#2a2a2a] p-3.5 rounded-2xl space-y-2">
+                        <div className="bg-[#181818] border border-[#2a2a2a] p-3 rounded-xl space-y-1.5">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
                               <span>🎲</span>
                               <span>Ludo Royale 2P</span>
                             </span>
-                            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono">
+                            <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-mono">
                               ACTIVE
                             </span>
                           </div>
-                          <p className="text-[11px] text-gray-400 leading-tight">
-                            Turn-based socket board game with animated 3D dice and live token tracking.
+                          <p className="text-[10px] text-gray-400 leading-tight">
+                            Multiplayer board game with animated 3D dice and live token tracking.
                           </p>
                           <button
                             type="button"
                             onClick={() => setActiveGame(ARCADE_GAMES[0])}
-                            className="w-full bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-200 text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow mt-1"
+                            className="w-full bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-200 text-xs font-bold py-1.5 rounded-lg cursor-pointer transition-all active:scale-95 shadow mt-1"
                           >
                             Launch Ludo Arena
                           </button>
                         </div>
 
                         {/* CODEX CINEMA CARD */}
-                        <div className="bg-[#181818] border border-[#2a2a2a] p-3.5 rounded-2xl space-y-2">
+                        <div className="bg-[#181818] border border-[#2a2a2a] p-3 rounded-xl space-y-1.5">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
-                              <Tv size={14} />
+                            <span className="text-xs font-bold text-blue-400 flex items-center gap-1">
+                              <Tv size={13} />
                               <span>Codex Cinema</span>
                             </span>
-                            <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full font-mono">
+                            <span className="text-[9px] bg-blue-500/20 text-blue-300 px-1.5 py-0.2 rounded font-mono">
                               WHITE DOT
                             </span>
                           </div>
-                          <p className="text-[11px] text-gray-400 leading-tight">
-                            Synchronized video player with frame delay gap calculator & Togepi live chat.
+                          <p className="text-[10px] text-gray-400 leading-tight">
+                            Synchronized player with delay gap calculator & Togepi live chat.
                           </p>
                           <button
                             type="button"
                             onClick={() => setViewMode('codex')}
-                            className="w-full bg-blue-950/80 hover:bg-blue-900 border border-blue-700/60 text-blue-200 text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow mt-1"
+                            className="w-full bg-blue-950/80 hover:bg-blue-900 border border-blue-700/60 text-blue-200 text-xs font-bold py-1.5 rounded-lg cursor-pointer transition-all active:scale-95 shadow mt-1"
                           >
                             Open Cinema
                           </button>
@@ -4979,21 +5172,21 @@ export default function App() {
                     </div>
 
                     {/* QUICK MEDIA CONTROLS */}
-                    <div className="flex gap-2 pt-2 border-t border-[#222]">
+                    <div className="flex gap-1.5 pt-2 border-t border-[#222]">
                       <button
                         type="button"
                         onClick={handleAdminSendRequest}
-                        className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
+                        className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-white text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1"
                       >
                         <span>🎯 Invite User (A) to Ludo</span>
                       </button>
                       <button
                         type="button"
                         onClick={handleUniversalSyncRealign}
-                        className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-gray-200 text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
+                        className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-gray-200 text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1"
                         title="Calculate Frame Sync Gap"
                       >
-                        <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
+                        <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
                         <span>Sync White Dot</span>
                       </button>
                     </div>
@@ -5002,7 +5195,7 @@ export default function App() {
                 </div>
 
               </section>
-            )}}
+            )}}}
 
             {viewMode === 'images_archive' && (
               <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-3 scrollbar-none font-sans">
@@ -5899,118 +6092,60 @@ export default function App() {
                 {/* TAB 1: PASSBOOK LEDGER */}
                 {loveModalTab === 'passbook' && (
                   <div className="space-y-4">
-                    {/* 4 TOP SUMMARY CARDS MATCHING SCREENSHOT */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3.5 font-sans">
+                    {/* 3 TOP SUMMARY CARDS (AVAILABLE BALANCE, TOTAL CUT POINTS, TOTAL LOVE PAYOUTS) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-sans">
                       
                       {/* CARD 1: AVAILABLE BALANCE (BLUE) */}
-                      <div className="bg-blue-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-2 relative overflow-hidden">
+                      <div className="bg-blue-600 text-white p-3.5 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-2 relative overflow-hidden">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">Available Balance</span>
+                          <span className="text-xs font-bold tracking-wide">Available Balance</span>
                           <span className="text-sm">🤝</span>
                         </div>
-                        <div className="text-xl sm:text-2xl font-black font-mono">
-                          {Number(loveBalance || 0).toFixed(2)}
+                        <div className="text-2xl font-black font-mono">
+                          ₹ {Number(loveBalance || 0).toFixed(2)}
                         </div>
                       </div>
 
-                      {/* CARD 2: RECENT WITHDRAWAL / REDEEMED (AMBER) */}
-                      <div className="bg-amber-500 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-2 relative overflow-hidden">
+                      {/* CARD 2: TOTAL CUT POINTS (RED) */}
+                      <div className="bg-rose-600 text-white p-3.5 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-2 relative overflow-hidden">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">Recent Redeemed</span>
-                          <span className="text-sm">🪙</span>
-                        </div>
-                        <div className="text-xl sm:text-2xl font-black font-mono">
-                          {loveLedger.filter(e => e.status === 'Redeemed').reduce((sum, e) => sum + Math.abs(e.points), 0).toFixed(2)}
-                        </div>
-                      </div>
-
-                      {/* CARD 3: TOTAL DEDUCTION (RED) */}
-                      <div className="bg-rose-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-2 relative overflow-hidden">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">Total Deduction</span>
+                          <span className="text-xs font-bold tracking-wide">Total Cut Points</span>
                           <span className="text-sm">⚖️</span>
                         </div>
-                        <div className="text-xl sm:text-2xl font-black font-mono">
-                          -{(loveLedger.filter(e => e.type === 'debit' && e.status !== 'Redeemed').reduce((sum, e) => sum + Math.abs(e.points), 0)).toFixed(2)}
+                        <div className="text-2xl font-black font-mono">
+                          -₹ {(loveLedger.filter(e => e.type === 'debit' && e.status !== 'Redeemed').reduce((sum, e) => sum + Math.abs(e.points), 0)).toFixed(2)}
                         </div>
                       </div>
 
-                      {/* CARD 4: TOTAL KARMA PAYOUTS (GREEN) */}
-                      <div className="bg-emerald-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-2 relative overflow-hidden">
+                      {/* CARD 3: TOTAL LOVE PAYOUTS (GREEN) */}
+                      <div className="bg-emerald-600 text-white p-3.5 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-2 relative overflow-hidden">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">Total Love Payouts</span>
+                          <span className="text-xs font-bold tracking-wide">Total Love Payouts</span>
                           <span className="text-sm">💰</span>
                         </div>
-                        <div className="text-xl sm:text-2xl font-black font-mono">
-                          {loveLedger.filter(e => e.type === 'credit').reduce((sum, e) => sum + Math.abs(e.points), 0).toFixed(2)}
+                        <div className="text-2xl font-black font-mono">
+                          ₹ {loveLedger.filter(e => e.type === 'credit').reduce((sum, e) => sum + Math.abs(e.points), 0).toFixed(2)}
                         </div>
                       </div>
 
                     </div>
 
-                    {/* FILTER & WITHDRAW ROW */}
-                    <div className="bg-[#181818] border border-[#282828] p-3 sm:p-4 rounded-2xl space-y-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                        <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
-                          <span className="text-blue-400 font-bold">●</span>
-                          <span>Love Balance Ledger Transactions</span>
-                        </h4>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setLoveModalTab('redeem')}
-                            className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5"
-                          >
-                            <span>Redeem Wish</span>
-                          </button>
-                          <span className="text-[10px] text-gray-500 font-mono hidden md:inline">Synced Real-time</span>
-                        </div>
+                    {/* ACTION ROW: ONLY REDEEM WISH BUTTON */}
+                    <div className="flex items-center justify-between bg-[#181818] border border-[#282828] p-3 rounded-2xl">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+                        <span className="text-xs sm:text-sm font-bold text-white">Love Balance Passbook</span>
+                        <span className="text-[10px] text-gray-500 font-mono hidden sm:inline">({loveLedger.length} Records)</span>
                       </div>
 
-                      {/* FILTER BAR */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                        <div>
-                          <label className="text-[10px] text-gray-400 block mb-1">Source</label>
-                          <select
-                            value={loveSourceFilter}
-                            onChange={(e) => setLoveSourceFilter(e.target.value)}
-                            className="w-full bg-[#121212] border border-[#333] text-gray-200 p-2 rounded-xl outline-none"
-                          >
-                            <option value="All">All Sources</option>
-                            <option value="credit">Rewards (Credit)</option>
-                            <option value="debit">Deductions (Debit)</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-gray-400 block mb-1">Status</label>
-                          <select
-                            value={loveStatusFilter}
-                            onChange={(e) => setLoveStatusFilter(e.target.value)}
-                            className="w-full bg-[#121212] border border-[#333] text-gray-200 p-2 rounded-xl outline-none"
-                          >
-                            <option value="All">All Statuses</option>
-                            <option value="Confirmed">Confirmed</option>
-                            <option value="Deducted">Deducted</option>
-                            <option value="Redeemed">Redeemed</option>
-                          </select>
-                        </div>
-                        <div className="col-span-2 sm:col-span-2 flex items-end gap-2">
-                          <button
-                            onClick={() => { setLoveSourceFilter('All'); setLoveStatusFilter('All'); }}
-                            className="bg-[#262626] hover:bg-[#333] text-gray-300 text-xs px-3 py-2 rounded-xl cursor-pointer"
-                          >
-                            Reset Filters
-                          </button>
-                          <span className="text-[11px] text-gray-500 self-center">
-                            Showing {
-                              loveLedger.filter(e => {
-                                if (loveSourceFilter !== 'All' && e.type !== loveSourceFilter) return false;
-                                if (loveStatusFilter !== 'All' && e.status !== loveStatusFilter) return false;
-                                return true;
-                              }).length
-                            } entries
-                          </span>
-                        </div>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setLoveModalTab('redeem')}
+                        className="bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5"
+                      >
+                        <Gift size={14} />
+                        <span>Redeem Wish</span>
+                      </button>
                     </div>
 
                     {/* PASSBOOK DATA TABLE */}
@@ -6128,8 +6263,7 @@ export default function App() {
                     {/* INTRO HERO */}
                     <div className="bg-gradient-to-r from-blue-950/40 via-indigo-950/40 to-blue-950/40 border border-blue-500/30 rounded-2xl p-4 sm:p-5 space-y-2">
                       <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                        <span>Karma Rules Engine • Official Policy</span>
-                        <span className="text-xs bg-blue-500/20 text-blue-300 border border-blue-500/40 px-2 py-0.5 rounded-full font-mono">100% ENGLISH</span>
+                        <span>Love Balance Policy</span>
                       </h3>
                       <p className="text-xs text-gray-300 leading-relaxed">
                         The Love Balance system converts romantic gestures and thoughtful habits into points in real time. Good habits earn Love Balance, while unromantic behaviors or neglect deduct points.
@@ -6379,6 +6513,20 @@ export default function App() {
                 )}
               </div>
             )}
+          </div>
+        )}
+        {/* MOBILE FLOATING QUICK MENU PILL */}
+        {!sidebarOpen && viewMode !== 'admin_dashboard' && (
+          <div className="fixed bottom-16 left-3 z-30 md:hidden animate-in fade-in slide-in-from-bottom-2 duration-200">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="bg-[#181818]/95 backdrop-blur-md border border-[#383838] text-gray-200 hover:text-white px-3 py-1.5 rounded-full shadow-2xl flex items-center gap-1.5 text-xs font-bold active:scale-95 transition-transform"
+              title="Open Sidebar Menu"
+            >
+              <PanelLeft size={14} className="text-emerald-400" />
+              <span>Chats</span>
+            </button>
           </div>
         )}
       </main>
