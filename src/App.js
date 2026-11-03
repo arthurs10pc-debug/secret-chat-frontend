@@ -43,144 +43,7 @@ const DEFAULT_RECENT_CHATS = [
   "Punjabi Thali Search"
 ];
 
-const DEFAULT_LOVE_LEDGER = [
-  {
-    id: 'lb_1',
-    sl: 1,
-    target: 'user',
-    description: 'Announcement Read',
-    earnedAt: '02/11/2026 01:33 PM',
-    expireDate: '05/12/2026',
-    points: 1.50,
-    type: 'credit',
-    remarks: 'Announcement Read before 10 Hours',
-    status: 'Confirmed'
-  },
-  {
-    id: 'lb_2',
-    sl: 2,
-    target: 'user',
-    description: 'Morning Sweet Text',
-    earnedAt: '02/11/2026 09:38 AM',
-    expireDate: '05/12/2026',
-    points: 2.00,
-    type: 'credit',
-    remarks: 'Check-in sweet Good Morning before 09:00 AM',
-    status: 'Confirmed'
-  },
-  {
-    id: 'lb_3',
-    sl: 3,
-    target: 'user',
-    description: 'Monthly Punctuality Reward',
-    earnedAt: '01/11/2026 05:30 AM',
-    expireDate: '05/12/2026',
-    points: 15.00,
-    type: 'credit',
-    remarks: 'Great job! Perfect weekend punctuality, zero late arrivals or absences',
-    status: 'Confirmed'
-  },
-  {
-    id: 'lb_4',
-    sl: 4,
-    target: 'user',
-    description: 'Dry Replies ("Hmm", "Ok")',
-    earnedAt: '31/10/2026 07:37 PM',
-    expireDate: '05/11/2026',
-    points: -2.00,
-    type: 'debit',
-    remarks: 'Sent dry reply during sweet conversation',
-    status: 'Deducted'
-  },
-  {
-    id: 'lb_5',
-    sl: 5,
-    target: 'user',
-    description: 'Meal Check-in',
-    earnedAt: '31/10/2026 01:15 PM',
-    expireDate: '05/11/2026',
-    points: 2.00,
-    type: 'credit',
-    remarks: 'Caring "Had lunch?" reminder sent on time',
-    status: 'Confirmed'
-  },
-  {
-    id: 'lb_6',
-    sl: 6,
-    target: 'user',
-    description: 'Late Reply / Ghosting',
-    earnedAt: '30/10/2026 07:38 PM',
-    expireDate: '05/11/2026',
-    points: -5.00,
-    type: 'debit',
-    remarks: 'Disappeared for >2 hours without prior notice',
-    status: 'Deducted'
-  },
-  {
-    id: 'lb_7',
-    sl: 7,
-    target: 'user',
-    description: 'Compliment Drop',
-    earnedAt: '30/10/2026 02:45 PM',
-    expireDate: '05/11/2026',
-    points: 3.00,
-    type: 'credit',
-    remarks: 'Spontaneous sweet romantic compliment',
-    status: 'Confirmed'
-  },
-  {
-    id: 'lb_8',
-    sl: 8,
-    target: 'user',
-    description: 'Seen & Ignored',
-    earnedAt: '29/10/2026 05:20 PM',
-    expireDate: '05/11/2026',
-    points: -3.00,
-    type: 'debit',
-    remarks: 'Message read but left unreplied for >1 hour',
-    status: 'Deducted'
-  },
-  {
-    id: 'lb_9',
-    sl: 9,
-    target: 'user',
-    description: 'Romantic Song Recommendation',
-    earnedAt: '28/10/2026 10:14 PM',
-    expireDate: '05/11/2026',
-    points: 5.00,
-    type: 'credit',
-    remarks: 'Recommended beautiful love track for sync listening',
-    status: 'Confirmed'
-  },
-  {
-    id: 'lb_10',
-    sl: 10,
-    target: 'user',
-    description: 'Late Night Romantic Paragraph',
-    earnedAt: '27/10/2026 11:45 PM',
-    expireDate: '05/11/2026',
-    points: 10.00,
-    type: 'credit',
-    remarks: 'Heartfelt emotional paragraph before sleeping',
-    status: 'Confirmed'
-  },
-  {
-    id: 'lb_11',
-    sl: 11,
-    target: 'user',
-    description: '[Dora] Redeemed: Voice Note on Demand',
-    earnedAt: '26/10/2026 09:30 PM',
-    expireDate: '26/11/2026',
-    points: -20.00,
-    type: 'redeem',
-    remarks: 'Personalized cute voice note on demand',
-    status: 'Redeemed',
-    wishTitle: 'Voice Note on Demand',
-    wishIcon: '🎙️',
-    wishCost: 20.00,
-    fulfillmentStatus: 'Fulfilled'
-  }
-];
+const DEFAULT_LOVE_LEDGER = [];
 
 const ROMANTIC_WISH_STORE = [
   {
@@ -398,16 +261,53 @@ export default function App() {
     }
   });
 
+  // Auto-purge any stale mock transactions (e.g. Announcement Read, Voice Note on Demand) from client localStorage
+  try {
+    const rawLegacy = localStorage.getItem('stealth_love_ledger');
+    if (rawLegacy && (
+      rawLegacy.includes('Announcement Read') || 
+      rawLegacy.includes('Monthly Punctuality Reward') || 
+      rawLegacy.includes('Voice Note on Demand') ||
+      rawLegacy.includes('"id":"lb_1"') ||
+      rawLegacy.includes('"id":"lb_2"')
+    )) {
+      localStorage.setItem('stealth_love_ledger', '[]');
+      localStorage.setItem('stealth_love_balance', '0');
+      localStorage.setItem('stealth_admin_love_balance', '0');
+      localStorage.setItem('stealth_wish_requests', '[]');
+    }
+  } catch (e) {}
+
   const [loveLedger, setLoveLedger] = useState(() => {
     try {
       const saved = localStorage.getItem('stealth_love_ledger');
       if (saved !== null) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed.map(item => ({
-            ...item,
-            target: item.target || (item.description && item.description.includes('[Darsh]') ? 'admin' : 'user')
-          }));
+          return parsed
+            .filter(item => {
+              if (!item) return false;
+              // Purge legacy mock entries by ID (lb_1 .. lb_11) or mock descriptions
+              if (item.id && /^lb_\d{1,2}$/.test(item.id)) return false;
+              if (item.description && (
+                item.description.includes('Announcement Read') ||
+                item.description.includes('Morning Sweet Text') ||
+                item.description.includes('Monthly Punctuality Reward') ||
+                item.description.includes('Voice Note on Demand') ||
+                item.description.includes('Meal Check-in') ||
+                item.description.includes('Compliment Drop') ||
+                item.description.includes('Romantic Song') ||
+                item.description.includes('Romantic Paragraph') ||
+                item.description.includes('Dry Replies') ||
+                item.description.includes('Late Reply') ||
+                item.description.includes('Seen & Ignored')
+              )) return false;
+              return true;
+            })
+            .map(item => ({
+              ...item,
+              target: item.target || (item.description && item.description.includes('[Darsh]') ? 'admin' : 'user')
+            }));
         }
       }
       return [];
@@ -1887,6 +1787,7 @@ export default function App() {
         type: type,
         reason: reason,
         extraData: extraData,
+        newEntry: newEntry,
         senderRole: roleRef.current || 'admin',
         timestamp: Date.now()
       });
@@ -2854,6 +2755,9 @@ export default function App() {
         if (Array.isArray(data.loveLedger)) setLoveLedger(data.loveLedger);
         if (Array.isArray(data.wishRequests)) setWishRequests(data.wishRequests);
       } else {
+        if (data.newEntry) {
+          setLoveLedger(prev => [data.newEntry, ...prev.filter(e => e.id !== data.newEntry.id)]);
+        }
         handleLoveBalanceTransaction(data.amount, data.type, data.reason, true, data.target || 'user', data.extraData);
         if (data.type === 'credit') {
           try {
