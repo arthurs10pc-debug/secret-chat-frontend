@@ -3926,14 +3926,17 @@ export default function App() {
                     </button>
                     <button 
                       type="button"
-                      onClick={() => { handleExportChatBubblePDF(); setShowWpMenu(false); }}
+                      onClick={() => { downloadFullChatPDF(); setShowWpMenu(false); }}
                       className="w-full text-left px-4 py-2.5 hover:bg-[#182229] transition-colors"
                     >
                       Export chat PDF
                     </button>
                     <button 
                       type="button"
-                      onClick={() => { handleClearChat(); setShowWpMenu(false); }}
+                      onClick={() => { 
+                        setStealthMessages([]); 
+                        setShowWpMenu(false); 
+                      }}
                       className="w-full text-left px-4 py-2.5 hover:bg-[#182229] text-rose-400 transition-colors"
                     >
                       Clear chat
