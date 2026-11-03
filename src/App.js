@@ -392,31 +392,33 @@ export default function App() {
   const [loveBalance, setLoveBalance] = useState(() => {
     try {
       const saved = localStorage.getItem('stealth_love_balance');
-      return saved !== null ? parseFloat(saved) : 18.00;
+      return saved !== null ? parseFloat(saved) : 0.00;
     } catch {
-      return 18.00;
+      return 0.00;
     }
   });
 
   const [loveLedger, setLoveLedger] = useState(() => {
     try {
       const saved = localStorage.getItem('stealth_love_ledger');
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed.map(item => ({
             ...item,
             target: item.target || (item.description && item.description.includes('[Darsh]') ? 'admin' : 'user')
           }));
         }
       }
-      return DEFAULT_LOVE_LEDGER;
+      return [];
     } catch {
-      return DEFAULT_LOVE_LEDGER;
+      return [];
     }
   });
 
   const [showLoveBalanceModal, setShowLoveBalanceModal] = useState(false);
+  const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
+  const [clearModalTarget, setClearModalTarget] = useState('user'); // 'user' | 'admin' | 'both'
   const [wishRequests, setWishRequests] = useState(() => {
     try {
       const saved = localStorage.getItem('stealth_wish_requests');
@@ -436,9 +438,9 @@ export default function App() {
   const [adminLoveBalance, setAdminLoveBalance] = useState(() => {
     try {
       const saved = localStorage.getItem('stealth_admin_love_balance');
-      return saved !== null ? parseFloat(saved) : 18.00;
+      return saved !== null ? parseFloat(saved) : 0.00;
     } catch {
-      return 18.00;
+      return 0.00;
     }
   });
   const [activeLbTarget, setActiveLbTarget] = useState('user'); // 'user' (Partner A) or 'admin' (Admin H)
@@ -1995,21 +1997,52 @@ export default function App() {
   }, [handleLoveBalanceTransaction]);
 
 
-  const handleAdminClearLedger = useCallback(() => {
-    if (!window.confirm("Are you sure you want to clear all Love Balance Ledger history and reset points for both sides?")) return;
-    setLoveLedger([]);
-    setLoveBalance(0);
-    setAdminLoveBalance(0);
+  const handleOpenClearModal = useCallback((target = null) => {
+    setClearModalTarget(target || activeLbTarget || 'user');
+    setShowClearConfirmModal(true);
+  }, [activeLbTarget]);
+
+  const handleConfirmClearLedger = useCallback(() => {
+    const target = clearModalTarget; // 'user', 'admin', or 'both'
+
+    if (target === 'user') {
+      setLoveBalance(0);
+      localStorage.setItem('stealth_love_balance', '0');
+      setLoveLedger(prev => {
+        const next = prev.filter(e => e.target !== 'user');
+        localStorage.setItem('stealth_love_ledger', JSON.stringify(next));
+        return next;
+      });
+    } else if (target === 'admin') {
+      setAdminLoveBalance(0);
+      localStorage.setItem('stealth_admin_love_balance', '0');
+      setLoveLedger(prev => {
+        const next = prev.filter(e => e.target !== 'admin');
+        localStorage.setItem('stealth_love_ledger', JSON.stringify(next));
+        return next;
+      });
+    } else { // 'both'
+      setLoveBalance(0);
+      setAdminLoveBalance(0);
+      localStorage.setItem('stealth_love_balance', '0');
+      localStorage.setItem('stealth_admin_love_balance', '0');
+      setLoveLedger([]);
+      localStorage.setItem('stealth_love_ledger', '[]');
+    }
+
     if (socketRef.current) {
       socketRef.current.emit('love_balance_action', {
         room: GLOBAL_ROOM,
         action: 'CLEAR_LEDGER',
+        target: target,
         resetBalance: true,
         senderRole: roleRef.current || 'admin',
         timestamp: Date.now()
       });
     }
-  }, []);
+
+    setShowClearConfirmModal(false);
+  }, [clearModalTarget]);
 
   const handleAdminOverrideBalance = useCallback((target, newBal) => {
     const val = parseFloat(newBal);
@@ -2728,17 +2761,35 @@ export default function App() {
       }
 
       if (data.action === 'CLEAR_LEDGER') {
-        if (myRole !== 'parent') {
-          setLoveLedger(prev => prev.filter(e => e.target === 'admin'));
+        const clearTarget = data.target || 'user';
+        if (clearTarget === 'user') {
           setLoveBalance(0);
-        } else {
-          setLoveLedger([]);
-          if (data.resetBalance) {
-            setLoveBalance(0);
+          localStorage.setItem('stealth_love_balance', '0');
+          setLoveLedger(prev => {
+            const next = prev.filter(e => e.target !== 'user');
+            localStorage.setItem('stealth_love_ledger', JSON.stringify(next));
+            return next;
+          });
+        } else if (clearTarget === 'admin') {
+          if (myRole === 'parent') {
             setAdminLoveBalance(0);
+            localStorage.setItem('stealth_admin_love_balance', '0');
           }
+          setLoveLedger(prev => {
+            const next = prev.filter(e => e.target !== 'admin');
+            localStorage.setItem('stealth_love_ledger', JSON.stringify(next));
+            return next;
+          });
+        } else {
+          setLoveBalance(0);
+          localStorage.setItem('stealth_love_balance', '0');
+          if (myRole === 'parent') {
+            setAdminLoveBalance(0);
+            localStorage.setItem('stealth_admin_love_balance', '0');
+          }
+          setLoveLedger([]);
+          localStorage.setItem('stealth_love_ledger', '[]');
         }
-        alert("🧹 Love Balance passbook history cleared by Darsh!");
       } else if (data.action === 'OVERRIDE_BALANCE') {
         if (data.target === 'user') {
           setLoveBalance(data.newBalance);
@@ -5419,7 +5470,7 @@ export default function App() {
                           </button>
                           <button
                             type="button"
-                            onClick={handleAdminClearLedger}
+                            onClick={() => handleOpenClearModal(activeLbTarget)}
                             className="bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-300 text-xs font-bold py-1.5 rounded-lg cursor-pointer transition-all active:scale-95 text-center flex items-center justify-center gap-1 col-span-2 sm:col-span-1"
                             title="Clear all transaction history and reset points"
                           >
@@ -6864,6 +6915,17 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {role === 'parent' && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenClearModal(activeLbTarget)}
+                            className="bg-rose-950/70 hover:bg-rose-900 border border-rose-700/60 text-rose-300 text-xs font-bold px-3 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5"
+                            title="Clear passbook ledger history"
+                          >
+                            <Trash2 size={13} />
+                            <span>Clear All</span>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => setLoveModalTab('claimed')}
@@ -7457,6 +7519,106 @@ export default function App() {
         )}
 
       </main>
+    
+        {/* IN-APP CONFIRMATION POPUP FOR CLEAR ALL (MATCHING APP COLOR THEME) */}
+        {showClearConfirmModal && (
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-[#141414] border-2 border-rose-500/60 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-left font-sans animate-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between border-b border-[#262626] pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center border border-rose-500/40">
+                    <Trash2 size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white">Clear Love Balance & Passbook</h3>
+                    <p className="text-[10px] text-gray-400 font-mono">Delete passbook & reset points</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowClearConfirmModal(false)}
+                  className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-[#222] cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* TARGET SELECTOR PILLS */}
+              <div className="space-y-1.5">
+                <p className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">Select Target to Clear:</p>
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#0d0d0d] rounded-xl border border-[#222]">
+                  <button
+                    type="button"
+                    onClick={() => setClearModalTarget('user')}
+                    className={'py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ' + (
+                      clearModalTarget === 'user' 
+                        ? 'bg-rose-600 text-white shadow-md' 
+                        : 'text-gray-400 hover:text-white'
+                    )}
+                  >
+                    Dora (User)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setClearModalTarget('admin')}
+                    className={'py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ' + (
+                      clearModalTarget === 'admin' 
+                        ? 'bg-amber-600 text-black shadow-md' 
+                        : 'text-gray-400 hover:text-white'
+                    )}
+                  >
+                    Darsh (Admin)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setClearModalTarget('both')}
+                    className={'py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ' + (
+                      clearModalTarget === 'both' 
+                        ? 'bg-red-700 text-white shadow-md' 
+                        : 'text-gray-400 hover:text-white'
+                    )}
+                  >
+                    Both (All)
+                  </button>
+                </div>
+              </div>
+
+              {/* SUMMARY DETAIL CARD */}
+              <div className="bg-rose-950/30 border border-rose-500/40 rounded-2xl p-3.5 space-y-1.5 text-xs">
+                <p className="font-bold text-rose-300 flex items-center gap-1.5">
+                  <AlertTriangle size={14} className="text-rose-400 shrink-0" />
+                  <span>Target: <strong className="text-white underline">{clearModalTarget === 'user' ? 'Dora' : (clearModalTarget === 'admin' ? 'Darsh' : 'Both Dora & Darsh')}</strong></span>
+                </p>
+                <p className="text-[11px] text-gray-300 leading-relaxed">
+                  {clearModalTarget === 'user' 
+                    ? "Dora's Love Balance will be reset to ₹0.00 and all her passbook entries will be deleted. Darsh's points will remain intact."
+                    : (clearModalTarget === 'admin'
+                      ? "Darsh's Love Balance will be reset to ₹0.00 and all his passbook entries will be deleted. Dora's points will remain intact."
+                      : "Both Dora and Darsh will have their Love Balance reset to ₹0.00 and the entire passbook history will be cleared.")
+                  }
+                </p>
+              </div>
+
+              {/* ACTION BUTTONS */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirmModal(false)}
+                  className="bg-[#222] hover:bg-[#2c2c2c] text-gray-300 text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 text-center"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmClearLedger}
+                  className="bg-gradient-to-r from-rose-700 via-rose-600 to-red-600 hover:from-rose-600 hover:to-red-500 text-white text-xs font-black py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow-lg shadow-rose-950/60 flex items-center justify-center gap-1.5"
+                >
+                  <Trash2 size={13} />
+                  <span>Yes, Clear Now</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 }
