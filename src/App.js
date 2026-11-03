@@ -261,13 +261,12 @@ export default function App() {
     }
   });
 
-  // Auto-purge any stale mock transactions (e.g. Announcement Read, Voice Note on Demand) from client localStorage
+  // Auto-purge any stale mock transactions from client localStorage (only legacy mock templates)
   try {
     const rawLegacy = localStorage.getItem('stealth_love_ledger');
     if (rawLegacy && (
       rawLegacy.includes('Announcement Read') || 
       rawLegacy.includes('Monthly Punctuality Reward') || 
-      rawLegacy.includes('Voice Note on Demand') ||
       rawLegacy.includes('"id":"lb_1"') ||
       rawLegacy.includes('"id":"lb_2"')
     )) {
@@ -287,20 +286,11 @@ export default function App() {
           return parsed
             .filter(item => {
               if (!item) return false;
-              // Purge legacy mock entries by ID (lb_1 .. lb_11) or mock descriptions
-              if (item.id && /^lb_\d{1,2}$/.test(item.id)) return false;
+              // Purge ONLY legacy mock template entries by exact ID pattern (lb_1 .. lb_11) or mock announcement
+              if (item.id && /^lb_([1-9]|1[0-1])$/.test(item.id)) return false;
               if (item.description && (
                 item.description.includes('Announcement Read') ||
-                item.description.includes('Morning Sweet Text') ||
-                item.description.includes('Monthly Punctuality Reward') ||
-                item.description.includes('Voice Note on Demand') ||
-                item.description.includes('Meal Check-in') ||
-                item.description.includes('Compliment Drop') ||
-                item.description.includes('Romantic Song') ||
-                item.description.includes('Romantic Paragraph') ||
-                item.description.includes('Dry Replies') ||
-                item.description.includes('Late Reply') ||
-                item.description.includes('Seen & Ignored')
+                item.description.includes('Monthly Punctuality Reward')
               )) return false;
               return true;
             })
@@ -905,11 +895,29 @@ export default function App() {
     setPinInput(val);
     setPinError(false);
 
-    const correctPin = role === 'parent' ? '1111' : '0000';
     if (val.length === 4) {
-      if (val === correctPin) {
+      if (val === '1111') {
+        setRole('parent');
+        roleRef.current = 'parent';
+        try { localStorage.setItem('stealth_role', 'parent'); } catch(err) {}
+        if (socketRef.current && isConnected) {
+          socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'parent' });
+          socketRef.current.emit('presence_ping', { room: GLOBAL_ROOM, role: 'parent', isForeground: true });
+        }
         setShowPinModal(false);
         setIsWhatsAppView(true);
+        setPinInput('');
+      } else if (val === '0000') {
+        setRole('user');
+        roleRef.current = 'user';
+        try { localStorage.setItem('stealth_role', 'user'); } catch(err) {}
+        if (socketRef.current && isConnected) {
+          socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'user' });
+          socketRef.current.emit('presence_ping', { room: GLOBAL_ROOM, role: 'user', isForeground: true });
+        }
+        setShowPinModal(false);
+        setIsWhatsAppView(true);
+        setPinInput('');
       } else {
         setPinError(true);
         setPinInput(''); // Instant auto-clear on wrong password
@@ -919,10 +927,29 @@ export default function App() {
 
   const handleVerifyPin = (e) => {
     e.preventDefault();
-    const correctPin = role === 'parent' ? '1111' : '0000';
-    if (pinInput.trim() === correctPin) {
+    const val = pinInput.trim();
+    if (val === '1111') {
+      setRole('parent');
+      roleRef.current = 'parent';
+      try { localStorage.setItem('stealth_role', 'parent'); } catch(err) {}
+      if (socketRef.current && isConnected) {
+        socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'parent' });
+        socketRef.current.emit('presence_ping', { room: GLOBAL_ROOM, role: 'parent', isForeground: true });
+      }
       setShowPinModal(false);
       setIsWhatsAppView(true);
+      setPinInput('');
+    } else if (val === '0000') {
+      setRole('user');
+      roleRef.current = 'user';
+      try { localStorage.setItem('stealth_role', 'user'); } catch(err) {}
+      if (socketRef.current && isConnected) {
+        socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'user' });
+        socketRef.current.emit('presence_ping', { room: GLOBAL_ROOM, role: 'user', isForeground: true });
+      }
+      setShowPinModal(false);
+      setIsWhatsAppView(true);
+      setPinInput('');
     } else {
       setPinError(true);
       setPinInput('');
@@ -1673,17 +1700,31 @@ export default function App() {
     };
   }, []);
 
-  // Real-Time Foreground App Presence Sync (Online only when active in app)
+  // Real-Time Foreground App Presence Sync & Continuous Heartbeat Ping
   useEffect(() => {
-    const handleVisibility = () => {
-      const isFg = document.visibilityState === 'visible';
+    const activeRole = roleRef.current || role || localStorage.getItem('stealth_role') || 'user';
+
+    const sendPresence = (isFg = document.visibilityState === 'visible') => {
       if (socketRef.current && isConnected) {
-        socketRef.current.emit('presence_visibility', {
+        socketRef.current.emit('presence_ping', {
           room: GLOBAL_ROOM,
-          role: roleRef.current || 'user',
+          role: activeRole,
           isForeground: isFg
         });
       }
+    };
+
+    // Send immediately on connect / role change
+    sendPresence();
+
+    // 4-second continuous presence heartbeat
+    const heartbeatTimer = setInterval(() => {
+      sendPresence();
+    }, 4000);
+
+    const handleVisibility = () => {
+      const isFg = document.visibilityState === 'visible';
+      sendPresence(isFg);
     };
 
     document.addEventListener('visibilitychange', handleVisibility);
@@ -1691,11 +1732,12 @@ export default function App() {
     window.addEventListener('blur', handleVisibility);
 
     return () => {
+      clearInterval(heartbeatTimer);
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('focus', handleVisibility);
       window.removeEventListener('blur', handleVisibility);
     };
-  }, [isConnected]);
+  }, [isConnected, role]);
 
   // Persist Dual Love Balance to LocalStorage
   useEffect(() => {
@@ -1818,11 +1860,11 @@ export default function App() {
         reason: reason,
         extraData: extraData,
         newEntry: newEntry,
-        senderRole: roleRef.current || 'admin',
+        senderRole: roleRef.current || role || 'user',
         timestamp: Date.now()
       });
     }
-  }, []);
+  }, [role]);
 
   // --- SMOOTH ERROR-LESS LONG PRESS CONTROLLER FOR ADMIN STEALTH TOGGLE ---
   const handleThinkPointerDown = useCallback((e) => {
@@ -1940,7 +1982,7 @@ export default function App() {
       setLoveBalance(0);
       localStorage.setItem('stealth_love_balance', '0');
       setLoveLedger(prev => {
-        const next = prev.filter(e => e.target !== 'user');
+        const next = prev.filter(e => e.target === 'admin' || (e.description && e.description.includes('[Darsh]')));
         localStorage.setItem('stealth_love_ledger', JSON.stringify(next));
         return next;
       });
@@ -1948,7 +1990,7 @@ export default function App() {
       setAdminLoveBalance(0);
       localStorage.setItem('stealth_admin_love_balance', '0');
       setLoveLedger(prev => {
-        const next = prev.filter(e => e.target !== 'admin');
+        const next = prev.filter(e => e.target !== 'admin' && !(e.description && e.description.includes('[Darsh]')));
         localStorage.setItem('stealth_love_ledger', JSON.stringify(next));
         return next;
       });
@@ -1967,13 +2009,13 @@ export default function App() {
         action: 'CLEAR_LEDGER',
         target: target,
         resetBalance: true,
-        senderRole: roleRef.current || 'admin',
+        senderRole: roleRef.current || role || 'user',
         timestamp: Date.now()
       });
     }
 
     setShowClearConfirmModal(false);
-  }, [clearModalTarget]);
+  }, [clearModalTarget, role]);
 
   const handleAdminOverrideBalance = useCallback((target, newBal) => {
     const val = parseFloat(newBal);
@@ -2689,11 +2731,13 @@ export default function App() {
 
     socketRef.current.on('love_balance_broadcast', (data) => {
       if (!data) return;
-      const myRole = roleRef.current || localStorage.getItem('stealth_role');
-      if (data.senderRole === myRole) return;
+      const myRole = roleRef.current || role || localStorage.getItem('stealth_role');
+      const isMyOwnAction = (data.senderRole && data.senderRole === myRole) || 
+        ((myRole === 'parent' || myRole === 'admin') && (data.senderRole === 'parent' || data.senderRole === 'admin'));
+      if (isMyOwnAction) return;
 
       // PRIVACY ENFORCEMENT: Dora must NEVER receive or view Darsh's points
-      if (myRole !== 'parent' && data.target === 'admin') {
+      if (myRole !== 'parent' && myRole !== 'admin' && data.target === 'admin') {
         return;
       }
 
@@ -2703,24 +2747,24 @@ export default function App() {
           setLoveBalance(0);
           localStorage.setItem('stealth_love_balance', '0');
           setLoveLedger(prev => {
-            const next = prev.filter(e => e.target !== 'user');
+            const next = prev.filter(e => e.target === 'admin' || (e.description && e.description.includes('[Darsh]')));
             localStorage.setItem('stealth_love_ledger', JSON.stringify(next));
             return next;
           });
         } else if (clearTarget === 'admin') {
-          if (myRole === 'parent') {
+          if (myRole === 'parent' || myRole === 'admin') {
             setAdminLoveBalance(0);
             localStorage.setItem('stealth_admin_love_balance', '0');
           }
           setLoveLedger(prev => {
-            const next = prev.filter(e => e.target !== 'admin');
+            const next = prev.filter(e => e.target !== 'admin' && !(e.description && e.description.includes('[Darsh]')));
             localStorage.setItem('stealth_love_ledger', JSON.stringify(next));
             return next;
           });
         } else {
           setLoveBalance(0);
           localStorage.setItem('stealth_love_balance', '0');
-          if (myRole === 'parent') {
+          if (myRole === 'parent' || myRole === 'admin') {
             setAdminLoveBalance(0);
             localStorage.setItem('stealth_admin_love_balance', '0');
           }
@@ -2731,7 +2775,7 @@ export default function App() {
         if (data.target === 'user') {
           setLoveBalance(data.newBalance);
           alert('⚡ Love Balance updated to ₹ ' + data.newBalance.toFixed(2) + ' by Darsh!');
-        } else if (data.target === 'admin' && myRole === 'parent') {
+        } else if (data.target === 'admin' && (myRole === 'parent' || myRole === 'admin')) {
           setAdminLoveBalance(data.newBalance);
         }
       } else if (data.action === 'LOVE_NUDGE') {
@@ -2781,14 +2825,25 @@ export default function App() {
             adminLoveBalance: adminLoveBalance,
             loveLedger: loveLedger,
             wishRequests: wishRequests,
-            senderRole: roleRef.current || 'admin',
+            senderRole: roleRef.current || role || 'user',
             timestamp: Date.now()
           });
         }
       } else if (data.action === 'SYNC_STATE_RESPONSE') {
         if (typeof data.loveBalance === 'number') setLoveBalance(data.loveBalance);
-        if (typeof data.adminLoveBalance === 'number' && myRole === 'parent') setAdminLoveBalance(data.adminLoveBalance);
-        if (Array.isArray(data.loveLedger)) setLoveLedger(data.loveLedger);
+        if (typeof data.adminLoveBalance === 'number' && (myRole === 'parent' || myRole === 'admin')) setAdminLoveBalance(data.adminLoveBalance);
+        if (Array.isArray(data.loveLedger)) {
+          const sanitized = data.loveLedger.filter(item => {
+            if (!item) return false;
+            if (item.id && /^lb_([1-9]|1[0-1])$/.test(item.id)) return false;
+            if (item.description && (
+              item.description.includes('Announcement Read') ||
+              item.description.includes('Monthly Punctuality Reward')
+            )) return false;
+            return true;
+          });
+          setLoveLedger(sanitized);
+        }
         if (Array.isArray(data.wishRequests)) setWishRequests(data.wishRequests);
       } else {
         if (data.newEntry) {
@@ -3886,6 +3941,21 @@ export default function App() {
 
               <button
                 type="button"
+                onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                className="flex items-center gap-1 bg-[#182229] hover:bg-[#2a3942] border border-emerald-500/50 text-[#25d366] px-2 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 shadow-sm"
+                title="Love Balance Passbook & Wish Store"
+              >
+                <span>₹</span>
+                <span>
+                  {role === 'parent' 
+                    ? (activeLbTarget === 'admin' ? Number(adminLoveBalance || 0).toFixed(2) : Number(loveBalance || 0).toFixed(2)) 
+                    : Number(loveBalance || 0).toFixed(2)
+                  }
+                </span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handleStartAudioCall}
                 className="p-2 hover:text-[#25d366] hover:bg-[#374248]/40 rounded-full transition-colors cursor-pointer"
                 title="WhatsApp Voice Call"
@@ -3924,13 +3994,15 @@ export default function App() {
                     >
                       Search in chat
                     </button>
-                    <button 
-                      type="button"
-                      onClick={() => { downloadFullChatPDF(); setShowWpMenu(false); }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-[#182229] transition-colors"
-                    >
-                      Export chat PDF
-                    </button>
+                    {role === 'parent' && (
+                      <button 
+                        type="button"
+                        onClick={() => { downloadFullChatPDF(); setShowWpMenu(false); }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-[#182229] transition-colors"
+                      >
+                        Export chat PDF
+                      </button>
+                    )}
                     <button 
                       type="button"
                       onClick={() => { 
@@ -4172,18 +4244,90 @@ export default function App() {
                         </span>
                       )}
 
-                      {/* TIME & WHATSAPP DELIVERY TICKS */}
-                      <div className="flex items-center justify-end gap-1 mt-1 text-[11px] text-[#8696a0] select-none font-normal">
-                        <span>{m.timeFormatted}</span>
-                        {isMine && (
-                          m.isSeen && isPartnerOnline ? (
-                            <CheckCheck size={14} className="text-[#53bdeb]" title="Seen" />
-                          ) : isPartnerOnline ? (
-                            <CheckCheck size={14} className="text-[#8696a0]" title="Delivered" />
-                          ) : (
-                            <Check size={14} className="text-[#8696a0]" title="Sent" />
-                          )
-                        )}
+                      {/* TIME, WHATSAPP DELIVERY TICKS & AWARD BUTTON */}
+                      <div className="flex items-center justify-between gap-2 mt-1 text-[11px] text-[#8696a0] select-none font-normal">
+                        {!isMine ? (
+                          <div className="relative inline-flex items-center">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveAwardMsgId(activeAwardMsgId === m._id ? null : m._id);
+                              }}
+                              title={'Award Love Karma to ' + partnerName}
+                              className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-pink-950/70 hover:bg-pink-900 border border-pink-700/60 text-pink-300 hover:text-white cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-sm"
+                            >
+                              <Heart size={10} className="text-pink-400 fill-pink-400" />
+                              <span>Award</span>
+                            </button>
+
+                            {activeAwardMsgId === m._id && (
+                              <div 
+                                className="absolute left-0 bottom-6 z-50 bg-[#141414] border border-pink-500/50 p-2 rounded-2xl shadow-2xl flex flex-col gap-1 w-44 text-left text-xs font-sans animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <p className="text-[10px] text-pink-400 font-bold uppercase tracking-wider px-1">💖 Award {partnerName} Karma</p>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const awardTarget = role === 'parent' ? 'user' : 'admin';
+                                    handleLoveBalanceTransaction(1.00, 'credit', 'Cute Gesture / Heart', false, awardTarget);
+                                    setActiveAwardMsgId(null);
+                                  }}
+                                  className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
+                                >
+                                  +1 ₹ Cute Reaction
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const awardTarget = role === 'parent' ? 'user' : 'admin';
+                                    handleLoveBalanceTransaction(3.00, 'credit', 'Romantic Compliment Drop', false, awardTarget);
+                                    setActiveAwardMsgId(null);
+                                  }}
+                                  className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
+                                >
+                                  +3 ₹ Sweet Compliment
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const awardTarget = role === 'parent' ? 'user' : 'admin';
+                                    handleLoveBalanceTransaction(5.00, 'credit', 'Movie / Song Recommendation', false, awardTarget);
+                                    setActiveAwardMsgId(null);
+                                  }}
+                                  className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
+                                >
+                                  +5 ₹ Song/Movie Pick
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const awardTarget = role === 'parent' ? 'user' : 'admin';
+                                    handleLoveBalanceTransaction(10.00, 'credit', 'Deep Romantic Talk', false, awardTarget);
+                                    setActiveAwardMsgId(null);
+                                  }}
+                                  className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
+                                >
+                                  +10 ₹ Romantic Talk
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : <span />}
+
+                        <div className="flex items-center gap-1">
+                          <span>{m.timeFormatted}</span>
+                          {isMine && (
+                            m.isSeen && isPartnerOnline ? (
+                              <CheckCheck size={14} className="text-[#53bdeb]" title="Seen" />
+                            ) : isPartnerOnline ? (
+                              <CheckCheck size={14} className="text-[#8696a0]" title="Delivered" />
+                            ) : (
+                              <Check size={14} className="text-[#8696a0]" title="Sent" />
+                            )
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -5170,74 +5314,78 @@ export default function App() {
                                   )}
                                 </div>
 
-                                {role === 'parent' && (
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    {m.senderRole !== 'parent' && (
-                                      <div className="relative inline-flex items-center">
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setActiveAwardMsgId(activeAwardMsgId === m._id ? null : m._id);
-                                          }}
-                                          title="Award Love Karma Points to Dora for this message"
-                                          className="px-1.5 py-0.5 text-[11px] font-bold rounded bg-pink-950/70 hover:bg-pink-900 border border-pink-700/60 text-pink-300 hover:text-white cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-sm"
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {m.senderRole !== role && (
+                                    <div className="relative inline-flex items-center">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setActiveAwardMsgId(activeAwardMsgId === m._id ? null : m._id);
+                                        }}
+                                        title={'Award Love Karma Points to ' + partnerName + ' for this message'}
+                                        className="px-1.5 py-0.5 text-[11px] font-bold rounded bg-pink-950/70 hover:bg-pink-900 border border-pink-700/60 text-pink-300 hover:text-white cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-sm"
+                                      >
+                                        <Heart size={11} className="text-pink-400 fill-pink-400" />
+                                        <span>Award</span>
+                                      </button>
+
+                                      {activeAwardMsgId === m._id && (
+                                        <div 
+                                          className="absolute right-0 top-6 z-50 bg-[#141414] border border-pink-500/50 p-2 rounded-2xl shadow-2xl flex flex-col gap-1 w-44 text-left text-xs font-sans animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md"
+                                          onClick={(e) => e.stopPropagation()}
                                         >
-                                          <Heart size={11} className="text-pink-400 fill-pink-400" />
-                                          <span className="hidden sm:inline">Award</span>
-                                        </button>
-
-                                        {activeAwardMsgId === m._id && (
-                                          <div 
-                                            className="absolute right-0 top-6 z-50 bg-[#141414] border border-pink-500/50 p-2 rounded-2xl shadow-2xl flex flex-col gap-1 w-44 text-left text-xs font-sans animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md"
-                                            onClick={(e) => e.stopPropagation()}
+                                          <p className="text-[10px] text-pink-400 font-bold uppercase tracking-wider px-1">💖 Award {partnerName} Karma</p>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const awardTarget = role === 'parent' ? 'user' : 'admin';
+                                              handleLoveBalanceTransaction(1.00, 'credit', 'Cute Gesture / Heart', false, awardTarget);
+                                              setActiveAwardMsgId(null);
+                                            }}
+                                            className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
                                           >
-                                            <p className="text-[10px] text-pink-400 font-bold uppercase tracking-wider px-1">💖 Award Dora Karma</p>
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                handleLoveBalanceTransaction(1.00, 'credit', 'Cute Gesture / Heart', false, 'user');
-                                                setActiveAwardMsgId(null);
-                                              }}
-                                              className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
-                                            >
-                                              +1 ₹ Cute Reaction
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                handleLoveBalanceTransaction(3.00, 'credit', 'Romantic Compliment Drop', false, 'user');
-                                                setActiveAwardMsgId(null);
-                                              }}
-                                              className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
-                                            >
-                                              +3 ₹ Sweet Compliment
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                handleLoveBalanceTransaction(5.00, 'credit', 'Movie / Song Recommendation', false, 'user');
-                                                setActiveAwardMsgId(null);
-                                              }}
-                                              className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
-                                            >
-                                              +5 ₹ Song/Movie Pick
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                handleLoveBalanceTransaction(10.00, 'credit', 'Deep Romantic Talk', false, 'user');
-                                                setActiveAwardMsgId(null);
-                                              }}
-                                              className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
-                                            >
-                                              +10 ₹ Romantic Talk
-                                            </button>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
+                                            +1 ₹ Cute Reaction
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const awardTarget = role === 'parent' ? 'user' : 'admin';
+                                              handleLoveBalanceTransaction(3.00, 'credit', 'Romantic Compliment Drop', false, awardTarget);
+                                              setActiveAwardMsgId(null);
+                                            }}
+                                            className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
+                                          >
+                                            +3 ₹ Sweet Compliment
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const awardTarget = role === 'parent' ? 'user' : 'admin';
+                                              handleLoveBalanceTransaction(5.00, 'credit', 'Movie / Song Recommendation', false, awardTarget);
+                                              setActiveAwardMsgId(null);
+                                            }}
+                                            className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
+                                          >
+                                            +5 ₹ Song/Movie Pick
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const awardTarget = role === 'parent' ? 'user' : 'admin';
+                                              handleLoveBalanceTransaction(10.00, 'credit', 'Deep Romantic Talk', false, awardTarget);
+                                              setActiveAwardMsgId(null);
+                                            }}
+                                            className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
+                                          >
+                                            +10 ₹ Romantic Talk
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
 
+                                  {role === 'parent' && (
                                     <button 
                                       type="button"
                                       onClick={(e) => togglePendingFlag(e, m)}
@@ -5250,8 +5398,8 @@ export default function App() {
                                     >
                                       !
                                     </button>
-                                  </div>
-                                )}
+                                  )}
+                                </div>
                               </div>
                             );
                           })
