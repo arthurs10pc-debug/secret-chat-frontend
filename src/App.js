@@ -20,6 +20,7 @@ const PUBLIC_VAPID_KEY = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-8vMeAtA5cHmDkJ0d8Q9cW4
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "🙏", "👌", "💯", "🤫", "✨"];
 const HOVER_REACTIONS = ["👍", "❤️", "🥰", "😆", "😮", "😢", "➕"];
+const ROMANTIC_REGEX = /[\u2764\u2665\u2763\u2765\u2661\uD83D\uDC93-\uD83D\uDC9F\uD83E\uDDE1\uD83E\uDD0D\uD83E\uDD0E\uD83E\uDEF6\uD83D\uDE18\uD83E\uDD70\uD83D\uDE0D\uD83D\uDC8B\uD83E\uDE75-\uD83E\uDE77\uD83D\uDC8F\uD83D\uDC91\uD83C\uDF39\uD83D\uDC90\uD83E\uDD17]|<3|:heart:|\bdil\b|\bpyaar\b|\blove\b/iu;
 
 const ARCADE_GAMES = [
   { id: 'ludo', name: 'Ludo (Royal Clash)', desc: '2-Player Real-Time Multiplayer Board Game with Colorful Tokens & Animated 3D Dice' }
@@ -1810,9 +1811,17 @@ export default function App() {
     const finalDelta = type === 'credit' ? numAmount : -numAmount;
 
     if (target === 'user') {
-      setLoveBalance(prev => Math.max(0, parseFloat((prev + finalDelta).toFixed(2))));
+      setLoveBalance(prev => {
+        const next = Math.max(0, parseFloat((prev + finalDelta).toFixed(2)));
+        try { localStorage.setItem('stealth_love_balance', next.toString()); } catch(e) {}
+        return next;
+      });
     } else {
-      setAdminLoveBalance(prev => Math.max(0, parseFloat((prev + finalDelta).toFixed(2))));
+      setAdminLoveBalance(prev => {
+        const next = Math.max(0, parseFloat((prev + finalDelta).toFixed(2)));
+        try { localStorage.setItem('stealth_admin_love_balance', next.toString()); } catch(e) {}
+        return next;
+      });
     }
 
     const nowStr = new Date().toLocaleString('en-GB', { 
@@ -1842,7 +1851,11 @@ export default function App() {
       fulfillmentStatus: type === 'redeem' ? 'Pending' : undefined
     };
 
-    setLoveLedger(prev => [newEntry, ...prev.map((e, idx) => ({ ...e, sl: idx + 2 }))]);
+    setLoveLedger(prev => {
+      const nextLedger = [newEntry, ...prev.map((e, idx) => ({ ...e, sl: idx + 2 }))];
+      try { localStorage.setItem('stealth_love_ledger', JSON.stringify(nextLedger)); } catch(e) {}
+      return nextLedger;
+    });
 
     if (type === 'credit' && !isBroadcast) {
       try {
@@ -1918,18 +1931,16 @@ export default function App() {
     const cleanLower = cleanText.toLowerCase();
 
     // 1. Virtual Hug / Kiss / Heart Emoji (+1 Point)
-    const ROMANTIC_EMOJIS = ['❤️', '💖', '💕', '😘', '🥰', '😍', '💋', '💓', '💗', '💞', '💌', '💐', '🌹', '😻', '🫶', '🤍', '🧡', '💛', '💚', '💙', '💜', '🤎', '🖤'];
-    const hasHeart = ROMANTIC_EMOJIS.some(e => cleanText.includes(e));
-    if (hasHeart) {
+    if (ROMANTIC_REGEX.test(cleanText)) {
       handleLoveBalanceTransaction(1.00, 'credit', 'Virtual Hug / Heart Emoji Shared (❤️)', false, targetUser);
     }
 
-    // 2. Morning Sweet Text before 9:00 AM (+2 Points)
-    if (currentHour >= 5 && currentHour < 9) {
+    // 2. Morning Sweet Text before 10:00 AM (+2 Points)
+    if (currentHour >= 5 && currentHour < 10) {
       const todayDateKey = 'lb_morning_' + targetUser + '_' + now.toDateString();
       if (!localStorage.getItem(todayDateKey)) {
         localStorage.setItem(todayDateKey, 'true');
-        handleLoveBalanceTransaction(2.00, 'credit', 'Morning Sweet Text (Before 9:00 AM)', false, targetUser);
+        handleLoveBalanceTransaction(2.00, 'credit', 'Morning Sweet Text (Before 10:00 AM)', false, targetUser);
       }
     }
 
@@ -1942,21 +1953,27 @@ export default function App() {
     }
 
     // 4. Food / Meal Care Check-in (+2 Points)
-    const foodKeywords = ['khana', 'khaana', 'lunch', 'dinner', 'breakfast', 'nashta', 'meal', 'eat', 'khaya', 'khao', 'khali'];
+    const foodKeywords = ['khana', 'khaana', 'lunch', 'dinner', 'breakfast', 'nashta', 'meal', 'eat', 'khaya', 'khao', 'khali', 'food'];
     const hasFoodCheck = foodKeywords.some(kw => cleanLower.includes(kw));
-    if (hasFoodCheck && (cleanLower.includes('?') || cleanLower.includes('khaya') || cleanLower.includes('khao'))) {
+    if (hasFoodCheck && (cleanLower.includes('?') || cleanLower.includes('khaya') || cleanLower.includes('khao') || cleanLower.includes('eat') || cleanLower.includes('lunch') || cleanLower.includes('dinner'))) {
       handleLoveBalanceTransaction(2.00, 'credit', 'Food / Meal Care Check-in', false, targetUser);
     }
 
-    // 5. Compliment Drop (+3 Points)
-    const complimentWords = ['love you', 'miss you', 'cute', 'sundar', 'pyaari', 'pyari', 'handsome', 'so sweet', 'proud of you', 'meri jaan', 'babu', 'shona', 'tareef'];
+    // 5. Compliment Drop & Romantic Sweet Talk (+3 Points)
+    const complimentWords = [
+      'love you', 'love u', 'i love you', 'i love u', 'ily', 'loveyou',
+      'miss you', 'miss u', 'cute', 'sundar', 'pyaari', 'pyari', 'handsome',
+      'so sweet', 'sweetheart', 'darling', 'proud of you', 'meri jaan',
+      'babu', 'shona', 'tareef', 'pyaar', 'kiss', 'muah', 'hug', 'hugs',
+      'jaan', 'jaana', 'baby', 'cutie'
+    ];
     const hasCompliment = complimentWords.some(w => cleanLower.includes(w));
     if (hasCompliment) {
       handleLoveBalanceTransaction(3.00, 'credit', 'Romantic Compliment Drop', false, targetUser);
     }
 
     // 6. Long Romantic Paragraph (+10 Points)
-    if (cleanText.length >= 100) {
+    if (cleanText.length >= 70) {
       handleLoveBalanceTransaction(10.00, 'credit', 'Deep Romantic Long Message', false, targetUser);
     }
 
@@ -2700,6 +2717,12 @@ export default function App() {
           socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: myCurrentRole });
         }
 
+        if (text && ROMANTIC_REGEX.test(text)) {
+          try {
+            confetti({ particleCount: 60, spread: 70, origin: { y: 0.4 } });
+          } catch(e) {}
+        }
+
         triggerMobileNotification(formatted.isMedia ? "[Photo Asset]" : text, data.senderRole);
       }
     });
@@ -2734,6 +2757,17 @@ export default function App() {
       const myRole = roleRef.current || role || localStorage.getItem('stealth_role');
       const isMyOwnAction = (data.senderRole && data.senderRole === myRole) || 
         ((myRole === 'parent' || myRole === 'admin') && (data.senderRole === 'parent' || data.senderRole === 'admin'));
+
+      // Authoritative real-time sync from server
+      if (typeof data.currentLoveBalance === 'number') {
+        setLoveBalance(data.currentLoveBalance);
+        try { localStorage.setItem('stealth_love_balance', data.currentLoveBalance.toString()); } catch(e) {}
+      }
+      if (typeof data.currentAdminLoveBalance === 'number' && (myRole === 'parent' || myRole === 'admin')) {
+        setAdminLoveBalance(data.currentAdminLoveBalance);
+        try { localStorage.setItem('stealth_admin_love_balance', data.currentAdminLoveBalance.toString()); } catch(e) {}
+      }
+
       if (isMyOwnAction) return;
 
       // PRIVACY ENFORCEMENT: Dora must NEVER receive or view Darsh's points
@@ -2847,9 +2881,16 @@ export default function App() {
         if (Array.isArray(data.wishRequests)) setWishRequests(data.wishRequests);
       } else {
         if (data.newEntry) {
-          setLoveLedger(prev => [data.newEntry, ...prev.filter(e => e.id !== data.newEntry.id)]);
+          setLoveLedger(prev => {
+            if (prev.some(e => e.id === data.newEntry.id)) return prev;
+            const updated = [data.newEntry, ...prev.map((e, idx) => ({ ...e, sl: idx + 2 }))];
+            try { localStorage.setItem('stealth_love_ledger', JSON.stringify(updated)); } catch(e) {}
+            return updated;
+          });
         }
-        handleLoveBalanceTransaction(data.amount, data.type, data.reason, true, data.target || 'user', data.extraData);
+        if (typeof data.currentLoveBalance !== 'number') {
+          handleLoveBalanceTransaction(data.amount, data.type, data.reason, true, data.target || 'user', data.extraData);
+        }
         if (data.type === 'credit') {
           try {
             confetti({ particleCount: 50, spread: 70, origin: { y: 0.4 } });
@@ -3425,7 +3466,7 @@ export default function App() {
     setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, reaction: emoji } : m));
     setActiveReactionMsgId(null);
 
-    if (emoji === '❤️' || emoji === '🥰') {
+    if (ROMANTIC_REGEX.test(emoji) || emoji === '❤️' || emoji === '🥰' || emoji === '❤') {
       const targetUser = role === 'parent' ? 'admin' : 'user';
       handleLoveBalanceTransaction(1.00, 'credit', 'Heart Reaction on Message (❤️)', false, targetUser);
     }
@@ -3939,20 +3980,34 @@ export default function App() {
                 <VideoIcon size={19} />
               </button>
 
-              <button
-                type="button"
-                onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                className="flex items-center gap-1 bg-[#182229] hover:bg-[#2a3942] border border-emerald-500/50 text-[#25d366] px-2 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 shadow-sm"
-                title="Love Balance Passbook & Wish Store"
-              >
-                <span>₹</span>
-                <span>
-                  {role === 'parent' 
-                    ? (activeLbTarget === 'admin' ? Number(adminLoveBalance || 0).toFixed(2) : Number(loveBalance || 0).toFixed(2)) 
-                    : Number(loveBalance || 0).toFixed(2)
-                  }
-                </span>
-              </button>
+              {role === 'parent' ? (
+                <button
+                  type="button"
+                  onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                  className="flex items-center gap-1.5 bg-[#182229] hover:bg-[#2a3942] border border-pink-500/50 text-white px-2 sm:px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 shadow-sm"
+                  title="Dora: 💕 Love Balance | Darsh: 👑 Love Balance"
+                >
+                  <span className="flex items-center gap-1 text-pink-300">
+                    <span>💕</span>
+                    <span>₹{Number(loveBalance || 0).toFixed(2)}</span>
+                  </span>
+                  <span className="text-[#374248]">|</span>
+                  <span className="flex items-center gap-1 text-blue-300">
+                    <span>👑</span>
+                    <span>₹{Number(adminLoveBalance || 0).toFixed(2)}</span>
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                  className="flex items-center gap-1 bg-[#182229] hover:bg-[#2a3942] border border-pink-500/50 text-pink-300 hover:text-white px-2 sm:px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 shadow-sm"
+                  title="Your Love Balance Passbook & Wish Store"
+                >
+                  <span className="text-pink-400">💖</span>
+                  <span>₹ {Number(loveBalance || 0).toFixed(2)}</span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -4597,21 +4652,35 @@ export default function App() {
               <span>Call</span>
             </button>
 
-            {/* LOVE BALANCE BUTTON PILL (SHOW ONLY BALANCE - DARSH HIDDEN FROM DORA) */}
-            <button
-              type="button"
-              onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-              className="flex items-center gap-1 bg-emerald-950/50 hover:bg-emerald-900/70 border border-emerald-500/60 hover:border-emerald-400 text-emerald-300 hover:text-white px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all shadow-[0_0_12px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
-              title="Open Love Balance Passbook & Wish Store"
-            >
-              <span className="text-emerald-400 font-sans font-black text-sm">₹</span>
-              <span>
-                {role === 'parent' 
-                  ? (activeLbTarget === 'admin' ? Number(adminLoveBalance || 0).toFixed(2) : Number(loveBalance || 0).toFixed(2)) 
-                  : Number(loveBalance || 0).toFixed(2)
-                }
-              </span>
-            </button>
+            {/* LOVE BALANCE BUTTON PILL (SHOW BOTH FOR DARSH, DORA ONLY SEES DORA) */}
+            {role === 'parent' ? (
+              <button
+                type="button"
+                onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                className="flex items-center gap-1.5 bg-emerald-950/50 hover:bg-emerald-900/70 border border-emerald-500/60 hover:border-emerald-400 text-white px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all shadow-[0_0_12px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
+                title="Dora: 💕 Love Balance | Darsh: 👑 Love Balance"
+              >
+                <span className="flex items-center gap-1 text-pink-300">
+                  <span>💕</span>
+                  <span>₹{Number(loveBalance || 0).toFixed(2)}</span>
+                </span>
+                <span className="text-emerald-700">|</span>
+                <span className="flex items-center gap-1 text-blue-300">
+                  <span>👑</span>
+                  <span>₹{Number(adminLoveBalance || 0).toFixed(2)}</span>
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                className="flex items-center gap-1 bg-emerald-950/50 hover:bg-emerald-900/70 border border-emerald-500/60 hover:border-emerald-400 text-emerald-300 hover:text-white px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all shadow-[0_0_12px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
+                title="Open Love Balance Passbook & Wish Store"
+              >
+                <span className="text-pink-400 font-sans font-black text-sm">💖</span>
+                <span>₹ {Number(loveBalance || 0).toFixed(2)}</span>
+              </button>
+            )}
 
             {/* UPGRADE BUTTON (SPARKLES REMOVED) */}
             <button className="hidden sm:flex items-center gap-1.5 text-white hover:text-gray-200 cursor-pointer font-medium">
