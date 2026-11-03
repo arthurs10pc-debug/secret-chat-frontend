@@ -306,6 +306,10 @@ export default function App() {
   });
 
   const [viewMode, setViewMode] = useState('real_gpt');
+  const [isPressingThink, setIsPressingThink] = useState(false);
+  const thinkLongPressTimerRef = useRef(null);
+  const thinkTriggeredRef = useRef(false);
+  const [activeAwardMsgId, setActiveAwardMsgId] = useState(null);
   const [isWhatsAppView, setIsWhatsAppView] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinInput, setPinInput] = useState('');
@@ -1202,6 +1206,10 @@ export default function App() {
         });
         playSentSound();
       }
+
+      // --- AUTOMATIC LOVE KARMA REAL-TIME EVALUATION ---
+      const prevMessage = stealthMessages[stealthMessages.length - 1] || null;
+      evaluateLoveKarmaMessageRules(val, role, prevMessage);
       setInput('');
       setReplyTarget(null);
       if (wpChatScrollRef.current) {
@@ -1882,6 +1890,110 @@ export default function App() {
       });
     }
   }, []);
+
+  // --- SMOOTH ERROR-LESS LONG PRESS CONTROLLER FOR ADMIN STEALTH TOGGLE ---
+  const handleThinkPointerDown = useCallback((e) => {
+    if (role !== 'parent') return;
+    thinkTriggeredRef.current = false;
+    setIsPressingThink(true);
+    if (thinkLongPressTimerRef.current) clearTimeout(thinkLongPressTimerRef.current);
+
+    thinkLongPressTimerRef.current = setTimeout(() => {
+      thinkTriggeredRef.current = true;
+      setIsPressingThink(false);
+      try {
+        if (navigator.vibrate) navigator.vibrate([40, 30, 40]);
+      } catch (err) {}
+      setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
+    }, 420); // 420ms smooth, responsive hold
+  }, [role]);
+
+  const handleThinkPointerUp = useCallback((e) => {
+    setIsPressingThink(false);
+    if (thinkLongPressTimerRef.current) {
+      clearTimeout(thinkLongPressTimerRef.current);
+      thinkLongPressTimerRef.current = null;
+    }
+    if (thinkTriggeredRef.current) {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+  }, []);
+
+  const handleThinkPointerCancel = useCallback(() => {
+    setIsPressingThink(false);
+    if (thinkLongPressTimerRef.current) {
+      clearTimeout(thinkLongPressTimerRef.current);
+      thinkLongPressTimerRef.current = null;
+    }
+  }, []);
+
+
+  // --- REAL-TIME AUTOMATIC LOVE KARMA / LOVE BALANCE RULES ENGINE ---
+  const evaluateLoveKarmaMessageRules = useCallback((messageText, senderRole, prevMessage = null) => {
+    if (!messageText || typeof messageText !== 'string') return;
+    const cleanText = messageText.trim();
+    if (!cleanText) return;
+
+    const targetUser = senderRole === 'parent' ? 'admin' : 'user';
+    const now = new Date();
+    const currentHour = now.getHours();
+    const cleanLower = cleanText.toLowerCase();
+
+    // 1. Virtual Hug / Kiss / Heart Emoji (+1 Point)
+    const ROMANTIC_EMOJIS = ['❤️', '💖', '💕', '😘', '🥰', '😍', '💋', '💓', '💗', '💞', '💌', '💐', '🌹', '😻', '🫶', '🤍', '🧡', '💛', '💚', '💙', '💜', '🤎', '🖤'];
+    const hasHeart = ROMANTIC_EMOJIS.some(e => cleanText.includes(e));
+    if (hasHeart) {
+      handleLoveBalanceTransaction(1.00, 'credit', 'Virtual Hug / Heart Emoji Shared (❤️)', false, targetUser);
+    }
+
+    // 2. Morning Sweet Text before 9:00 AM (+2 Points)
+    if (currentHour >= 5 && currentHour < 9) {
+      const todayDateKey = 'lb_morning_' + targetUser + '_' + now.toDateString();
+      if (!localStorage.getItem(todayDateKey)) {
+        localStorage.setItem(todayDateKey, 'true');
+        handleLoveBalanceTransaction(2.00, 'credit', 'Morning Sweet Text (Before 9:00 AM)', false, targetUser);
+      }
+    }
+
+    // 3. Instant Reply within 5 minutes (+1 Point)
+    if (prevMessage && prevMessage.senderRole !== senderRole && prevMessage.timestamp) {
+      const diffMs = Date.now() - new Date(prevMessage.timestamp).getTime();
+      if (diffMs > 0 && diffMs <= 5 * 60 * 1000) {
+        handleLoveBalanceTransaction(1.00, 'credit', 'Instant Reply (Within 5 Mins)', false, targetUser);
+      }
+    }
+
+    // 4. Food / Meal Care Check-in (+2 Points)
+    const foodKeywords = ['khana', 'khaana', 'lunch', 'dinner', 'breakfast', 'nashta', 'meal', 'eat', 'khaya', 'khao', 'khali'];
+    const hasFoodCheck = foodKeywords.some(kw => cleanLower.includes(kw));
+    if (hasFoodCheck && (cleanLower.includes('?') || cleanLower.includes('khaya') || cleanLower.includes('khao'))) {
+      handleLoveBalanceTransaction(2.00, 'credit', 'Food / Meal Care Check-in', false, targetUser);
+    }
+
+    // 5. Compliment Drop (+3 Points)
+    const complimentWords = ['love you', 'miss you', 'cute', 'sundar', 'pyaari', 'pyari', 'handsome', 'so sweet', 'proud of you', 'meri jaan', 'babu', 'shona', 'tareef'];
+    const hasCompliment = complimentWords.some(w => cleanLower.includes(w));
+    if (hasCompliment) {
+      handleLoveBalanceTransaction(3.00, 'credit', 'Romantic Compliment Drop', false, targetUser);
+    }
+
+    // 6. Long Romantic Paragraph (+10 Points)
+    if (cleanText.length >= 100) {
+      handleLoveBalanceTransaction(10.00, 'credit', 'Deep Romantic Long Message', false, targetUser);
+    }
+
+    // 7. Dry Reply Check (-2 Points)
+    if (prevMessage && prevMessage.senderRole !== senderRole && prevMessage.text && prevMessage.text.length > 35) {
+      const dryWords = ['hmm', 'ok', 'k', 'acha', 'thik', 'humm', 'kk'];
+      if (dryWords.includes(cleanLower)) {
+        handleLoveBalanceTransaction(2.00, 'debit', 'Dry Single-Word Reply ("Hmm"/"Ok")', false, targetUser);
+      }
+    }
+  }, [handleLoveBalanceTransaction]);
+
 
   const handleAdminClearLedger = useCallback(() => {
     if (!window.confirm("Are you sure you want to clear all Love Balance Ledger history and reset points for both sides?")) return;
@@ -3267,6 +3379,11 @@ export default function App() {
     setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, reaction: emoji } : m));
     setActiveReactionMsgId(null);
 
+    if (emoji === '❤️' || emoji === '🥰') {
+      const targetUser = role === 'parent' ? 'admin' : 'user';
+      handleLoveBalanceTransaction(1.00, 'credit', 'Heart Reaction on Message (❤️)', false, targetUser);
+    }
+
     if (socketRef.current) {
       socketRef.current.emit('add_reaction', {
         room: GLOBAL_ROOM,
@@ -3656,26 +3773,7 @@ export default function App() {
             ))}
           </div>
 
-          {role === 'parent' && (
-            <div className="p-2 border-t border-[#1e1e1e] flex items-center gap-1.5 shrink-0 bg-[#0a0a0a]">
-              <button 
-                onClick={() => { setShowPendingModal(true); closeSidebarOnMobile(); }}
-                className="flex-1 flex items-center justify-between text-xs text-amber-400 hover:bg-[#1a1a1a] p-2 rounded-xl cursor-pointer font-medium"
-              >
-                <span className="flex items-center gap-1.5"><AlertCircle size={15} /> Answer Pending</span>
-                <span className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-bold ${pendingMessages.length > 0 ? 'bg-amber-500 text-black animate-pulse' : 'bg-amber-500/20 text-amber-300'}`}>
-                  {pendingMessages.length}
-                </span>
-              </button>
-              <button 
-                onClick={downloadPendingPDF}
-                title="Download Answer Pending Report"
-                className="p-2 text-gray-400 hover:text-amber-400 hover:bg-[#1a1a1a] rounded-xl cursor-pointer"
-              >
-                <Download size={15} />
-              </button>
-            </div>
-          )}
+          
 
           {!isAppInstalled && (
             <div className="px-3 py-2 border-t border-[#171717] bg-[#0c0c0c]">
@@ -4179,7 +4277,7 @@ export default function App() {
                   : (hasUnreadSecret ? 'Unread Secret Message Pending!' : 'Server Connected')
               } 
             />
-            {role === 'parent' && <span className="text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded font-mono">DARSH</span>}
+            
             
             {/* VOICE CALL INITIATION BUTTON */}
             <button 
@@ -4910,18 +5008,86 @@ export default function App() {
                                 </div>
 
                                 {role === 'parent' && (
-                                  <button 
-                                    type="button"
-                                    onClick={(e) => togglePendingFlag(e, m)}
-                                    title={m.flaggedPending ? "Mark as Resolved" : "Add to Answer Pending"}
-                                    className={`px-2 py-0.5 text-xs font-bold rounded cursor-pointer transition-all shrink-0 ${
-                                      m.flaggedPending 
-                                        ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-105' 
-                                        : 'bg-[#2a2a2a] text-gray-400 hover:text-white hover:bg-[#383838]'
-                                    }`}
-                                  >
-                                    !
-                                  </button>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {m.senderRole !== 'parent' && (
+                                      <div className="relative inline-flex items-center">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActiveAwardMsgId(activeAwardMsgId === m._id ? null : m._id);
+                                          }}
+                                          title="Award Love Karma Points to Dora for this message"
+                                          className="px-1.5 py-0.5 text-[11px] font-bold rounded bg-pink-950/70 hover:bg-pink-900 border border-pink-700/60 text-pink-300 hover:text-white cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-sm"
+                                        >
+                                          <Heart size={11} className="text-pink-400 fill-pink-400" />
+                                          <span className="hidden sm:inline">Award</span>
+                                        </button>
+
+                                        {activeAwardMsgId === m._id && (
+                                          <div 
+                                            className="absolute right-0 top-6 z-50 bg-[#141414] border border-pink-500/50 p-2 rounded-2xl shadow-2xl flex flex-col gap-1 w-44 text-left text-xs font-sans animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <p className="text-[10px] text-pink-400 font-bold uppercase tracking-wider px-1">💖 Award Dora Karma</p>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                handleLoveBalanceTransaction(1.00, 'credit', 'Cute Gesture / Heart', false, 'user');
+                                                setActiveAwardMsgId(null);
+                                              }}
+                                              className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
+                                            >
+                                              +1 ₹ Cute Reaction
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                handleLoveBalanceTransaction(3.00, 'credit', 'Romantic Compliment Drop', false, 'user');
+                                                setActiveAwardMsgId(null);
+                                              }}
+                                              className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
+                                            >
+                                              +3 ₹ Sweet Compliment
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                handleLoveBalanceTransaction(5.00, 'credit', 'Movie / Song Recommendation', false, 'user');
+                                                setActiveAwardMsgId(null);
+                                              }}
+                                              className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
+                                            >
+                                              +5 ₹ Song/Movie Pick
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                handleLoveBalanceTransaction(10.00, 'credit', 'Deep Romantic Talk', false, 'user');
+                                                setActiveAwardMsgId(null);
+                                              }}
+                                              className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
+                                            >
+                                              +10 ₹ Romantic Talk
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    <button 
+                                      type="button"
+                                      onClick={(e) => togglePendingFlag(e, m)}
+                                      title={m.flaggedPending ? "Mark as Resolved" : "Add to Answer Pending"}
+                                      className={`px-2 py-0.5 text-xs font-bold rounded cursor-pointer transition-all shrink-0 ${
+                                        m.flaggedPending 
+                                          ? "bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-105" 
+                                          : "bg-[#2a2a2a] text-gray-400 hover:text-white hover:bg-[#383838]"
+                                      }`}
+                                    >
+                                      !
+                                    </button>
+                                  </div>
                                 )}
                               </div>
                             );
@@ -6229,36 +6395,24 @@ export default function App() {
 
                   <button 
                     type="button" 
+                    onPointerDown={handleThinkPointerDown}
+                    onPointerUp={handleThinkPointerUp}
+                    onPointerCancel={handleThinkPointerCancel}
+                    onPointerLeave={handleThinkPointerCancel}
                     onContextMenu={(e) => {
                       if (role === 'parent') {
                         e.preventDefault();
                         setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
                       }
                     }}
-                    onMouseDown={() => {
-                      if (role === 'parent') {
-                        window.thinkLongPressTimer = setTimeout(() => {
-                          setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
-                        }, 500);
-                      }
-                    }}
-                    onMouseUp={() => {
-                      if (window.thinkLongPressTimer) clearTimeout(window.thinkLongPressTimer);
-                    }}
-                    onTouchStart={() => {
-                      if (role === 'parent') {
-                        window.thinkLongPressTimer = setTimeout(() => {
-                          setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
-                        }, 500);
-                      }
-                    }}
-                    onTouchEnd={() => {
-                      if (window.thinkLongPressTimer) clearTimeout(window.thinkLongPressTimer);
-                    }}
-                    title={role === 'parent' ? "Hold to open secret chat" : "Think"}
-                    className="flex items-center gap-1 text-xs text-[#9b9b9b] hover:text-white px-2 py-1 rounded-full hover:bg-[#2c2c2c] cursor-pointer shrink-0 select-none"
+                    title={role === 'parent' ? "Hold 0.4s to toggle secret chat" : "Think"}
+                    className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full cursor-pointer shrink-0 select-none touch-none transition-all duration-150 ${
+                      isPressingThink 
+                        ? 'bg-blue-600/40 text-cyan-200 scale-90 ring-2 ring-blue-400 shadow-[0_0_12px_rgba(59,130,246,0.6)]' 
+                        : 'text-[#9b9b9b] hover:text-white hover:bg-[#2c2c2c]'
+                    }`}
                   >
-                    <Sparkles size={13} className="text-blue-400" />
+                    <Sparkles size={13} className={isPressingThink ? 'text-cyan-300 animate-spin' : 'text-blue-400'} />
                     <span className="hidden sm:inline">Think</span>
                   </button>
 
