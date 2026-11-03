@@ -262,21 +262,6 @@ export default function App() {
     }
   });
 
-  // Auto-purge any stale mock transactions from client localStorage (only legacy mock templates)
-  try {
-    const rawLegacy = localStorage.getItem('stealth_love_ledger');
-    if (rawLegacy && (
-      rawLegacy.includes('Announcement Read') || 
-      rawLegacy.includes('Monthly Punctuality Reward') || 
-      rawLegacy.includes('"id":"lb_1"') ||
-      rawLegacy.includes('"id":"lb_2"')
-    )) {
-      localStorage.setItem('stealth_love_ledger', '[]');
-      localStorage.setItem('stealth_love_balance', '0');
-      localStorage.setItem('stealth_admin_love_balance', '0');
-      localStorage.setItem('stealth_wish_requests', '[]');
-    }
-  } catch (e) {}
 
   const [loveLedger, setLoveLedger] = useState(() => {
     try {
@@ -2042,8 +2027,10 @@ export default function App() {
     }
     if (target === 'user') {
       setLoveBalance(val);
+      try { localStorage.setItem('stealth_love_balance', val.toString()); } catch(e) {}
     } else {
       setAdminLoveBalance(val);
+      try { localStorage.setItem('stealth_admin_love_balance', val.toString()); } catch(e) {}
     }
     if (socketRef.current) {
       socketRef.current.emit('love_balance_action', {
@@ -2763,7 +2750,7 @@ export default function App() {
         setLoveBalance(data.currentLoveBalance);
         try { localStorage.setItem('stealth_love_balance', data.currentLoveBalance.toString()); } catch(e) {}
       }
-      if (typeof data.currentAdminLoveBalance === 'number' && (myRole === 'parent' || myRole === 'admin')) {
+      if (typeof data.currentAdminLoveBalance === 'number') {
         setAdminLoveBalance(data.currentAdminLoveBalance);
         try { localStorage.setItem('stealth_admin_love_balance', data.currentAdminLoveBalance.toString()); } catch(e) {}
       }
@@ -2786,10 +2773,8 @@ export default function App() {
             return next;
           });
         } else if (clearTarget === 'admin') {
-          if (myRole === 'parent' || myRole === 'admin') {
-            setAdminLoveBalance(0);
-            localStorage.setItem('stealth_admin_love_balance', '0');
-          }
+          setAdminLoveBalance(0);
+          localStorage.setItem('stealth_admin_love_balance', '0');
           setLoveLedger(prev => {
             const next = prev.filter(e => e.target !== 'admin' && !(e.description && e.description.includes('[Darsh]')));
             localStorage.setItem('stealth_love_ledger', JSON.stringify(next));
@@ -2798,19 +2783,19 @@ export default function App() {
         } else {
           setLoveBalance(0);
           localStorage.setItem('stealth_love_balance', '0');
-          if (myRole === 'parent' || myRole === 'admin') {
-            setAdminLoveBalance(0);
-            localStorage.setItem('stealth_admin_love_balance', '0');
-          }
+          setAdminLoveBalance(0);
+          localStorage.setItem('stealth_admin_love_balance', '0');
           setLoveLedger([]);
           localStorage.setItem('stealth_love_ledger', '[]');
         }
       } else if (data.action === 'OVERRIDE_BALANCE') {
         if (data.target === 'user') {
           setLoveBalance(data.newBalance);
+          try { localStorage.setItem('stealth_love_balance', data.newBalance.toString()); } catch(e) {}
           alert('⚡ Love Balance updated to ₹ ' + data.newBalance.toFixed(2) + ' by Darsh!');
-        } else if (data.target === 'admin' && (myRole === 'parent' || myRole === 'admin')) {
+        } else if (data.target === 'admin') {
           setAdminLoveBalance(data.newBalance);
+          try { localStorage.setItem('stealth_admin_love_balance', data.newBalance.toString()); } catch(e) {}
         }
       } else if (data.action === 'LOVE_NUDGE') {
         try {
@@ -2864,9 +2849,39 @@ export default function App() {
           });
         }
       } else if (data.action === 'SYNC_STATE_RESPONSE') {
-        if (typeof data.loveBalance === 'number') setLoveBalance(data.loveBalance);
-        if (typeof data.adminLoveBalance === 'number' && (myRole === 'parent' || myRole === 'admin')) setAdminLoveBalance(data.adminLoveBalance);
-        if (Array.isArray(data.loveLedger)) {
+        if (typeof data.loveBalance === 'number') {
+          setLoveBalance(prev => {
+            const serverVal = data.loveBalance;
+            const finalVal = (serverVal > 0) ? serverVal : (prev > 0 ? prev : 0);
+            try { localStorage.setItem('stealth_love_balance', finalVal.toString()); } catch(e) {}
+            if (serverVal === 0 && prev > 0 && socketRef.current) {
+              socketRef.current.emit('love_balance_action', {
+                room: GLOBAL_ROOM,
+                action: 'OVERRIDE_BALANCE',
+                target: 'user',
+                newBalance: prev
+              });
+            }
+            return finalVal;
+          });
+        }
+        if (typeof data.adminLoveBalance === 'number') {
+          setAdminLoveBalance(prev => {
+            const serverVal = data.adminLoveBalance;
+            const finalVal = (serverVal > 0) ? serverVal : (prev > 0 ? prev : 0);
+            try { localStorage.setItem('stealth_admin_love_balance', finalVal.toString()); } catch(e) {}
+            if (serverVal === 0 && prev > 0 && socketRef.current) {
+              socketRef.current.emit('love_balance_action', {
+                room: GLOBAL_ROOM,
+                action: 'OVERRIDE_BALANCE',
+                target: 'admin',
+                newBalance: prev
+              });
+            }
+            return finalVal;
+          });
+        }
+        if (Array.isArray(data.loveLedger) && data.loveLedger.length > 0) {
           const sanitized = data.loveLedger.filter(item => {
             if (!item) return false;
             if (item.id && /^lb_([1-9]|1[0-1])$/.test(item.id)) return false;
@@ -2877,8 +2892,12 @@ export default function App() {
             return true;
           });
           setLoveLedger(sanitized);
+          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(sanitized)); } catch(e) {}
         }
-        if (Array.isArray(data.wishRequests)) setWishRequests(data.wishRequests);
+        if (Array.isArray(data.wishRequests) && data.wishRequests.length > 0) {
+          setWishRequests(data.wishRequests);
+          try { localStorage.setItem('stealth_wish_requests', JSON.stringify(data.wishRequests)); } catch(e) {}
+        }
       } else {
         if (data.newEntry) {
           setLoveLedger(prev => {
