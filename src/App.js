@@ -9,7 +9,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2, Heart, Coins, Award, Scale, Gift, SlidersHorizontal, Bell, BellRing, Filter, CheckCircle2, XCircle
+  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2, Heart, Coins, Award, Scale, Gift, SlidersHorizontal, Bell, BellRing, Filter, CheckCircle2, XCircle, ArrowLeft, MoreVertical, Paperclip
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -333,6 +333,12 @@ export default function App() {
   const [loveStatusFilter, setLoveStatusFilter] = useState('All');
   const [adminLbAmount, setAdminLbAmount] = useState('');
   const [adminLbReason, setAdminLbReason] = useState('');
+
+  // Real-time Presence & WhatsApp View States
+  const [onlineRoles, setOnlineRoles] = useState([]);
+  const [showWpMenu, setShowWpMenu] = useState(false);
+  const [showWpSearch, setShowWpSearch] = useState(false);
+  const [wpSearchQuery, setWpSearchQuery] = useState('');
 
   // Dual Balance & Power Tools State
   const [adminLoveBalance, setAdminLoveBalance] = useState(() => {
@@ -1667,6 +1673,30 @@ export default function App() {
     };
   }, []);
 
+  // Real-Time Foreground App Presence Sync (Online only when active in app)
+  useEffect(() => {
+    const handleVisibility = () => {
+      const isFg = document.visibilityState === 'visible';
+      if (socketRef.current && isConnected) {
+        socketRef.current.emit('presence_visibility', {
+          room: GLOBAL_ROOM,
+          role: roleRef.current || 'user',
+          isForeground: isFg
+        });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleVisibility);
+    window.addEventListener('blur', handleVisibility);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleVisibility);
+      window.removeEventListener('blur', handleVisibility);
+    };
+  }, [isConnected]);
+
   // Persist Dual Love Balance to LocalStorage
   useEffect(() => {
     try {
@@ -2302,6 +2332,12 @@ export default function App() {
         setIsPeerTyping(Boolean(data.isTyping));
       } else {
         setIsPeerTyping(Boolean(data));
+      }
+    });
+
+    socketRef.current.on('presence_status', (data) => {
+      if (data && Array.isArray(data.onlineRoles)) {
+        setOnlineRoles(data.onlineRoles);
       }
     });
 
@@ -3355,6 +3391,12 @@ export default function App() {
   };
 
   const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
+  const partnerRole = role === 'parent' ? 'user' : 'parent';
+  const partnerName = role === 'parent' ? 'Dora' : 'Darsh';
+  const isPartnerOnline = onlineRoles.includes(partnerRole);
+  const filteredWpMessages = wpSearchQuery.trim()
+    ? displayedStealthMessages.filter(m => m.text && m.text.toLowerCase().includes(wpSearchQuery.toLowerCase()))
+    : displayedStealthMessages;
   const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
   const hasUnreadSecret = stealthMessages.some(m => m.senderRole !== role && !m.isSeen);
 
@@ -3794,30 +3836,152 @@ export default function App() {
           </div>
         </aside>
       ) : (
-        /* WHATSAPP MOBILE CHAT VIEW (STRICTLY COMPACT MOBILE VIEW WITH LARGER FONTS & REAL AUDIO CALL) */
-        <aside className="fixed md:static inset-0 z-50 w-full md:w-96 bg-[#0b141a] flex flex-col border-r border-[#222327] overflow-hidden select-none shrink-0 font-sans">
-          <div className="h-16 bg-[#202c33] flex items-center justify-between px-4 shrink-0 text-white shadow">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#111b21] flex items-center justify-center text-lg font-bold border border-emerald-500/40 relative">
-                {role === 'parent' ? 'A' : 'H'}
-                {isConnected && <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#202c33] rounded-full" />}
+        /* WHATSAPP FULL IMMERSIVE CHAT VIEW */
+        <aside className="fixed inset-0 z-50 w-full h-[100dvh] bg-[#0b141a] flex flex-col overflow-hidden select-none font-sans">
+          {/* WHATSAPP HEADER */}
+          <div className="h-16 bg-[#202c33] flex items-center justify-between px-3 sm:px-4 shrink-0 text-[#e9edef] shadow-md z-20 border-b border-[#2a3942]/60 relative">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <button
+                type="button"
+                onClick={() => setIsWhatsAppView(false)}
+                className="text-[#aebac1] hover:text-white p-1.5 -ml-1 rounded-full hover:bg-[#374248]/50 transition-colors cursor-pointer"
+                title="Return to Secret Chat"
+              >
+                <ArrowLeft size={20} />
+              </button>
+
+              <div 
+                onClick={() => setIsWhatsAppView(false)}
+                className="w-10 h-10 rounded-full bg-[#128c7e]/20 border border-[#25d366]/40 flex items-center justify-center text-base font-bold text-[#e9edef] relative shrink-0 cursor-pointer shadow-inner"
+              >
+                {partnerName[0]}
+                {isPartnerOnline && (
+                  <span className="absolute bottom-0 right-0 w-3 h-3 bg-[#25d366] border-2 border-[#202c33] rounded-full animate-pulse shadow-sm" />
+                )}
               </div>
-              <div>
-                <h3 className="text-sm font-bold tracking-tight">{role === 'parent' ? 'Dora' : 'Darsh'}</h3>
-                <p className="text-[11px] text-emerald-400 font-mono font-bold">{isConnected ? 'online' : 'connecting...'}</p>
+
+              <div className="min-w-0">
+                <h3 className="text-[15px] font-semibold text-[#e9edef] tracking-tight truncate leading-tight">
+                  {partnerName}
+                </h3>
+                <div className="text-[11.5px] font-normal leading-tight h-3.5 flex items-center">
+                  {isPeerTyping ? (
+                    <span className="text-[#25d366] animate-pulse">typing...</span>
+                  ) : isPartnerOnline ? (
+                    <span className="text-[#25d366]">online</span>
+                  ) : null}
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-3 text-gray-300">
-              <VideoIcon size={19} className="cursor-pointer hover:text-white" />
-              <Phone size={19} className="cursor-pointer hover:text-emerald-400 transition-colors" onClick={handleStartAudioCall} title="Start Whisper Audio Call" />
+
+            <div className="flex items-center gap-2 sm:gap-3 text-[#aebac1] relative">
+              <button
+                type="button"
+                onClick={() => alert("WhatsApp Video Call feature: Secure connection established with " + partnerName + "!")}
+                className="p-2 hover:text-white hover:bg-[#374248]/40 rounded-full transition-colors cursor-pointer"
+                title="WhatsApp Video Call"
+              >
+                <VideoIcon size={19} />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleStartAudioCall}
+                className="p-2 hover:text-[#25d366] hover:bg-[#374248]/40 rounded-full transition-colors cursor-pointer"
+                title="WhatsApp Voice Call"
+              >
+                <Phone size={19} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowWpSearch(!showWpSearch)}
+                className="p-2 hover:text-white hover:bg-[#374248]/40 rounded-full transition-colors cursor-pointer"
+                title="Search Messages"
+              >
+                <Search size={19} />
+              </button>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowWpMenu(!showWpMenu)}
+                  className="p-2 hover:text-white hover:bg-[#374248]/40 rounded-full transition-colors cursor-pointer"
+                  title="Menu"
+                >
+                  <MoreVertical size={19} />
+                </button>
+
+                {showWpMenu && (
+                  <div 
+                    className="absolute right-0 top-11 bg-[#233138] border border-[#374248] rounded-2xl shadow-2xl py-2 w-48 z-50 text-xs text-[#d1d7db] font-medium animate-in fade-in zoom-in-95 duration-150"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button 
+                      type="button"
+                      onClick={() => { setShowWpSearch(true); setShowWpMenu(false); }}
+                      className="w-full text-left px-4 py-2.5 hover:bg-[#182229] transition-colors"
+                    >
+                      Search in chat
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => { handleExportChatBubblePDF(); setShowWpMenu(false); }}
+                      className="w-full text-left px-4 py-2.5 hover:bg-[#182229] transition-colors"
+                    >
+                      Export chat PDF
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => { handleClearChat(); setShowWpMenu(false); }}
+                      className="w-full text-left px-4 py-2.5 hover:bg-[#182229] text-rose-400 transition-colors"
+                    >
+                      Clear chat
+                    </button>
+                    <div className="border-t border-[#374248] my-1" />
+                    <button 
+                      type="button"
+                      onClick={() => { setIsWhatsAppView(false); setShowWpMenu(false); }}
+                      className="w-full text-left px-4 py-2.5 hover:bg-[#182229] text-amber-300 font-bold transition-colors"
+                    >
+                      Exit WhatsApp View
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <button 
+                type="button"
                 onClick={() => setIsWhatsAppView(false)}
-                className="bg-[#111b21] hover:bg-[#2a3942] text-xs px-3 py-1.5 rounded-lg text-amber-300 font-bold cursor-pointer border border-amber-500/30"
+                className="bg-[#182229] hover:bg-[#2a3942] text-[#e9edef] text-xs font-semibold px-2.5 py-1.5 rounded-lg cursor-pointer border border-[#374248] transition-all active:scale-95"
               >
                 Exit WP
               </button>
             </div>
           </div>
+
+          {/* SEARCH BAR IN WP VIEW */}
+          {showWpSearch && (
+            <div className="bg-[#111b21] border-b border-[#2a3942] px-4 py-2 flex items-center gap-2.5 z-20">
+              <Search size={16} className="text-[#8696a0]" />
+              <input 
+                type="text"
+                value={wpSearchQuery}
+                onChange={(e) => setWpSearchQuery(e.target.value)}
+                placeholder="Search messages..."
+                className="flex-1 bg-transparent text-sm text-[#e9edef] placeholder-[#8696a0] outline-none"
+                autoFocus
+              />
+              {wpSearchQuery && (
+                <button onClick={() => setWpSearchQuery('')} className="text-[#8696a0] hover:text-white">
+                  <X size={15} />
+                </button>
+              )}
+              <button onClick={() => { setShowWpSearch(false); setWpSearchQuery(''); }} className="text-xs text-[#25d366] font-semibold">
+                Close
+              </button>
+            </div>
+          )}
 
           {/* INCOMING CALL BANNER AT UPPER SIDE WITH ANSWER & DECLINE */}
           {isIncomingCall && !isInAudioCall && (
@@ -3895,14 +4059,26 @@ export default function App() {
             </div>
           )}
 
+          {/* CHAT MESSAGES BODY WITH AUTHENTIC WHATSAPP DOODLE PATTERN */}
           <div 
             ref={wpChatScrollRef}
-            className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-[#0b141a] bg-[radial-gradient(#1f2c34_1px,transparent_1px)] bg-[size:16px_16px]"
+            onClick={() => { setShowWpMenu(false); setActiveReactionMsgId(null); }}
+            className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 bg-[#0b141a] bg-[radial-gradient(#1f2c34_1px,transparent_1px)] bg-[size:18px_18px]"
           >
-            {displayedStealthMessages.length === 0 ? (
-              <div className="text-center text-xs text-gray-500 py-12">No WhatsApp messages yet. Say hello!</div>
+            {/* WHATSAPP DATE DIVIDER */}
+            <div className="flex justify-center my-2 sticky top-1 z-10">
+              <span className="bg-[#182229] border border-[#222d34] text-[#8696a0] text-[11px] font-semibold px-3 py-1 rounded-lg shadow uppercase tracking-wide">
+                TODAY
+              </span>
+            </div>
+
+            {filteredWpMessages.length === 0 ? (
+              <div className="text-center text-xs text-[#8696a0] py-16 space-y-1">
+                <p className="font-semibold text-[#d1d7db]">No messages found</p>
+                <p className="text-[11px]">Messages are end-to-end encrypted and completely private.</p>
+              </div>
             ) : (
-              displayedStealthMessages.map((m, idx) => {
+              filteredWpMessages.map((m, idx) => {
                 const isMine = m.senderRole === role;
                 const hasReplyTag = m.text && m.text.startsWith('[⤴');
                 let replySnippet = "";
@@ -3919,7 +4095,7 @@ export default function App() {
                 const isReactionOpen = activeReactionMsgId === m._id;
 
                 return (
-                  <div key={idx} className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'}`}>
+                  <div key={m._id || idx} className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'}`}>
                     <div 
                       onTouchStart={(e) => {
                         touchStartXRef.current = e.touches[0].clientX;
@@ -3934,27 +4110,36 @@ export default function App() {
                       onDoubleClick={() => {
                         setActiveReactionMsgId(activeReactionMsgId === m._id ? null : m._id);
                       }}
-                      title="Right swipe to reply | Double click for reactions"
-                      className={`max-w-[82%] rounded-2xl px-4 py-2.5 shadow text-sm relative cursor-pointer ${isMine ? 'bg-[#005c4b] text-white rounded-tr-none' : 'bg-[#202c33] text-gray-100 rounded-tl-none border border-[#2a3942]'}`}
+                      title="Swipe right to reply • Double tap for reactions"
+                      className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-3.5 py-2 shadow-sm relative cursor-pointer text-[14.5px] leading-relaxed transition-all ${
+                        isMine 
+                          ? 'bg-[#005c4b] text-[#e9edef] rounded-tr-none' 
+                          : 'bg-[#202c33] text-[#e9edef] rounded-tl-none border border-[#2a3942]/60'
+                      }`}
                     >
                       {hasReplyTag && (
-                        <div className="bg-black/25 border-l-2 border-emerald-400 pl-2.5 py-1 mb-1.5 text-xs text-emerald-300 italic truncate rounded">
+                        <div className="bg-black/30 border-l-2 border-[#25d366] pl-2.5 py-1 mb-1.5 text-xs text-[#25d366] italic truncate rounded">
                           {replySnippet}
                         </div>
                       )}
 
                       {m.isMedia ? (
                         <div className="space-y-1">
-                          <img src={m.text} alt="Shared Photo" className="max-h-56 rounded-lg object-contain cursor-pointer" onClick={() => window.open(m.text, '_blank')} />
+                          <img 
+                            src={m.text} 
+                            alt="Shared Photo" 
+                            className="max-h-64 rounded-xl object-contain cursor-pointer shadow-md" 
+                            onClick={() => window.open(m.text, '_blank')} 
+                          />
                         </div>
                       ) : (
-                        <p className="break-words leading-relaxed text-sm md:text-[14.5px]">{cleanBody}</p>
+                        <p className="break-words select-text">{cleanBody}</p>
                       )}
 
-                      {/* REACTION POPUP TRAY ON DOUBLE CLICK */}
+                      {/* REACTION POPUP TRAY ON DOUBLE TAP */}
                       {isReactionOpen && (
                         <div 
-                          className="absolute -top-11 left-0 z-30 bg-[#202c33] border border-[#3a4a54] px-3 py-1.5 rounded-full shadow-2xl flex items-center gap-2 backdrop-blur-md"
+                          className="absolute -top-11 left-0 z-30 bg-[#233138] border border-[#374248] px-3 py-1.5 rounded-full shadow-2xl flex items-center gap-2 backdrop-blur-md animate-in zoom-in-95 duration-100"
                           onClick={(e) => e.stopPropagation()}
                         >
                           {["👍", "❤️", "😂", "😮", "🙏", "➕"].map((emoji, eIdx) => (
@@ -3977,15 +4162,25 @@ export default function App() {
                         </div>
                       )}
 
+                      {/* MESSAGE REACTION BADGE */}
                       {m.reaction && (
-                        <span className="absolute -bottom-2 right-2 bg-[#202c33] border border-[#3a4a54] px-2 py-0.5 rounded-full text-xs shadow">
+                        <span className="absolute -bottom-2 right-2 bg-[#202c33] border border-[#374248] px-2 py-0.5 rounded-full text-xs shadow-md">
                           {m.reaction}
                         </span>
                       )}
 
-                      <div className="flex items-center justify-end gap-1.5 mt-1.5 text-[10px] text-gray-300 font-mono">
+                      {/* TIME & WHATSAPP DELIVERY TICKS */}
+                      <div className="flex items-center justify-end gap-1 mt-1 text-[11px] text-[#8696a0] select-none font-normal">
                         <span>{m.timeFormatted}</span>
-                        {isMine && <CheckCheck size={13} className={m.isSeen ? 'text-sky-400' : 'text-gray-400'} />}
+                        {isMine && (
+                          m.isSeen && isPartnerOnline ? (
+                            <CheckCheck size={14} className="text-[#53bdeb]" title="Seen" />
+                          ) : isPartnerOnline ? (
+                            <CheckCheck size={14} className="text-[#8696a0]" title="Delivered" />
+                          ) : (
+                            <Check size={14} className="text-[#8696a0]" title="Sent" />
+                          )
+                        )}
                       </div>
                     </div>
                   </div>
@@ -3996,15 +4191,9 @@ export default function App() {
           </div>
 
           {replyTarget && (
-            <div className="bg-[#1f2c34] border-t border-[#2a3942] px-4 py-2.5 flex items-center justify-between text-xs text-emerald-400">
+            <div className="bg-[#1f2c34] border-t border-[#2a3942] px-4 py-2.5 flex items-center justify-between text-xs text-[#25d366]">
               <span className="truncate italic">Replying to: "{replyTarget.text}"</span>
-              <button onClick={() => setReplyTarget(null)} className="text-gray-400 hover:text-white cursor-pointer"><X size={15} /></button>
-            </div>
-          )}
-
-          {isPeerTyping && (
-            <div className="px-4 py-1 bg-[#202c33] text-[11px] text-emerald-400 italic font-mono animate-pulse">
-              typing...
+              <button onClick={() => setReplyTarget(null)} className="text-[#8696a0] hover:text-white cursor-pointer"><X size={15} /></button>
             </div>
           )}
 
@@ -4023,22 +4212,23 @@ export default function App() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="bg-[#202c33] px-3 py-2.5 flex items-center gap-2.5 shrink-0 border-t border-[#2a3942]">
-            <button 
-              type="button" 
-              onClick={() => fileInputRef.current && fileInputRef.current.click()}
-              className="text-gray-400 hover:text-white cursor-pointer"
-              title="Attach Photo"
-            >
-              <Plus size={22} />
-            </button>
+          {/* WHATSAPP BOTTOM INPUT BAR */}
+          <form onSubmit={handleSubmit} className="bg-[#202c33] px-2.5 sm:px-4 py-2.5 flex items-center gap-2 shrink-0 border-t border-[#2a3942]/60">
             <button 
               type="button"
               onClick={() => setShowMiniEmojiBar(!showMiniEmojiBar)}
-              className="text-gray-400 hover:text-white cursor-pointer"
+              className="text-[#8696a0] hover:text-[#d1d7db] p-2 hover:bg-[#374248]/40 rounded-full transition-colors cursor-pointer"
               title="Emojis"
             >
               <Smile size={22} />
+            </button>
+            <button 
+              type="button" 
+              onClick={() => fileInputRef.current && fileInputRef.current.click()}
+              className="text-[#8696a0] hover:text-[#d1d7db] p-2 hover:bg-[#374248]/40 rounded-full transition-colors cursor-pointer"
+              title="Attach Photo or Document"
+            >
+              <Paperclip size={21} />
             </button>
             <textarea 
               rows={1}
@@ -4056,11 +4246,26 @@ export default function App() {
                 }
               }}
               placeholder="Type a message..."
-              className="flex-1 bg-[#2a3942] text-white placeholder-gray-400 text-sm px-4 py-2.5 rounded-xl outline-none resize-none max-h-28 overflow-y-auto"
+              className="flex-1 bg-[#2a3942] text-[#e9edef] placeholder-[#8696a0] text-[14.5px] px-4 py-2.5 rounded-3xl outline-none resize-none max-h-28 overflow-y-auto leading-relaxed shadow-inner"
             />
-            <button type="submit" className="w-10 h-10 rounded-full bg-[#00a884] hover:bg-[#029374] text-white flex items-center justify-center cursor-pointer shadow">
-              <Send size={16} />
-            </button>
+            {input.trim().length > 0 ? (
+              <button 
+                type="submit" 
+                className="w-11 h-11 rounded-full bg-[#00a884] hover:bg-[#029374] active:scale-90 text-white flex items-center justify-center cursor-pointer shadow-lg transition-transform shrink-0"
+                title="Send Message"
+              >
+                <Send size={18} className="translate-x-0.5" />
+              </button>
+            ) : (
+              <button 
+                type="button"
+                onClick={handleStartAudioCall}
+                className="w-11 h-11 rounded-full bg-[#00a884] hover:bg-[#029374] active:scale-90 text-white flex items-center justify-center cursor-pointer shadow-lg transition-transform shrink-0"
+                title="Start Whisper Call"
+              >
+                <Mic size={19} />
+              </button>
+            )}
           </form>
         </aside>
       )}
@@ -4114,7 +4319,7 @@ export default function App() {
             <div className="space-y-1">
               <h3 className="text-base font-black text-white">Security PIN Verification</h3>
               <p className="text-xs text-gray-400">
-                Enter 4-digit PIN to access WP view (Darsh: 1111 | Dora: 0000)
+                Enter 4-digit PIN to access WP view
               </p>
             </div>
 
@@ -6681,134 +6886,62 @@ export default function App() {
 
                     </div>
 
-                    {/* REDEEMED WISHES SECTION (INLINE DISPLAY IN PASSBOOK) */}
-                    <div className="bg-[#181818] border border-amber-500/30 rounded-2xl p-3 sm:p-4 space-y-3">
-                      {/* PENDING APPROVAL REQUESTS BANNER */}
-                      {(() => {
-                        const myRole = role === 'parent' ? 'admin' : 'user';
-                        const incomingPendingReqs = wishRequests.filter(r => r.status === 'PENDING' && r.requesterRole !== myRole);
-                        const myPendingReqs = wishRequests.filter(r => r.status === 'PENDING' && r.requesterRole === myRole);
-                        if (incomingPendingReqs.length === 0 && myPendingReqs.length === 0) return null;
-                        return (
-                          <div className="space-y-2 pb-2 border-b border-[#2a2a2a]">
-                            {incomingPendingReqs.map(req => (
-                              <div key={req.id} className="bg-pink-950/50 border border-pink-500/60 p-3 rounded-xl flex items-center justify-between gap-2 shadow-lg animate-pulse">
-                                <div className="flex items-center gap-2.5">
-                                  <span className="text-2xl">{req.wishIcon || '🎁'}</span>
-                                  <div>
-                                    <h5 className="text-xs font-bold text-white flex items-center gap-1.5">
-                                      <span>{req.requesterName} requested: {req.wishTitle}</span>
-                                      <span className="text-[10px] text-amber-300 font-mono font-bold bg-black/40 px-1.5 py-0.2 rounded">₹ {req.wishCost.toFixed(2)}</span>
-                                    </h5>
-                                    <p className="text-[10px] text-pink-300">Awaiting your approval to grant wish & deduct points</p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleApproveWishRequest(req)}
-                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer shadow active:scale-95"
-                                  >
-                                    Approve & Grant 💝
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeclineWishRequest(req)}
-                                    className="bg-[#242424] hover:bg-[#333] text-gray-300 text-xs px-2.5 py-1.5 rounded-lg cursor-pointer border border-[#3a3a3a]"
-                                  >
-                                    Decline
-                                  </button>
+                    {/* PENDING APPROVAL REQUESTS BANNER */}
+                    {(() => {
+                      const myRole = role === 'parent' ? 'admin' : 'user';
+                      const incomingPendingReqs = wishRequests.filter(r => r.status === 'PENDING' && r.requesterRole !== myRole);
+                      const myPendingReqs = wishRequests.filter(r => r.status === 'PENDING' && r.requesterRole === myRole);
+                      if (incomingPendingReqs.length === 0 && myPendingReqs.length === 0) return null;
+                      return (
+                        <div className="bg-[#181818] border border-amber-500/30 rounded-2xl p-3 sm:p-4 space-y-2">
+                          {incomingPendingReqs.map(req => (
+                            <div key={req.id} className="bg-pink-950/50 border border-pink-500/60 p-3 rounded-xl flex items-center justify-between gap-2 shadow-lg animate-pulse">
+                              <div className="flex items-center gap-2.5">
+                                <span className="text-2xl">{req.wishIcon || '🎁'}</span>
+                                <div>
+                                  <h5 className="text-xs font-bold text-white flex items-center gap-1.5">
+                                    <span>{req.requesterName} requested: {req.wishTitle}</span>
+                                    <span className="text-[10px] text-amber-300 font-mono font-bold bg-black/40 px-1.5 py-0.2 rounded">₹ {req.wishCost.toFixed(2)}</span>
+                                  </h5>
+                                  <p className="text-[10px] text-pink-300">Awaiting your approval to grant wish & deduct points</p>
                                 </div>
                               </div>
-                            ))}
-
-                            {myPendingReqs.map(req => (
-                              <div key={req.id} className="bg-amber-950/40 border border-amber-500/40 p-2.5 rounded-xl flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xl">{req.wishIcon || '🎁'}</span>
-                                  <span className="text-xs font-bold text-amber-200">
-                                    Requested: {req.wishTitle} (₹ {req.wishCost.toFixed(2)})
-                                  </span>
-                                </div>
-                                <span className="text-[10px] font-bold text-amber-300 bg-amber-900/60 border border-amber-700 px-2 py-0.5 rounded-full animate-pulse">
-                                  ⏳ Awaiting {req.targetName}\'s Approval
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl">🎁</span>
-                          <div>
-                            <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
-                              <span>Redeemed Wish Section</span>
-                              <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-mono font-bold">
-                                {redeemedWishesList.length} CLAIMED
-                              </span>
-                            </h4>
-                            <p className="text-[11px] text-gray-400">Sweet promises & dates redeemed using Love Balance</p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setLoveModalTab('redeem')}
-                          className="text-[11px] font-bold text-pink-400 hover:text-pink-300 bg-pink-950/40 border border-pink-500/30 px-3 py-1.5 rounded-xl cursor-pointer hover:bg-pink-900/40 transition-all flex items-center gap-1"
-                        >
-                          <Gift size={13} />
-                          <span>+ Claim Wish</span>
-                        </button>
-                      </div>
-
-                      {redeemedWishesList.length === 0 ? (
-                        <div className="bg-[#141414] border border-[#262626] rounded-xl p-4 text-center space-y-1.5">
-                          <p className="text-xs text-gray-400">No wishes redeemed yet.</p>
-                          <p className="text-[11px] text-gray-500">Collect Love Balance through sweet texts and gestures, then redeem cute dates & treats!</p>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                          {redeemedWishesList.map((rw, idx) => (
-                            <div key={rw.id || idx} className="bg-[#131313] border border-[#2a2a2a] hover:border-amber-500/40 rounded-xl p-3 flex flex-col justify-between space-y-2">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xl p-1.5 bg-[#222] rounded-xl shrink-0">{rw.wishIcon || '🎁'}</span>
-                                  <div>
-                                    <h5 className="text-xs font-bold text-white leading-tight">
-                                      {rw.wishTitle || rw.description.replace(/^\[(Dora|Darsh)\]\s*Redeemed:\s*/i, '').replace(/^Redeemed:\s*/i, '')}
-                                    </h5>
-                                    <span className="text-[10px] text-gray-400 font-mono">{rw.earnedAt}</span>
-                                  </div>
-                                </div>
-                                <span className="text-xs font-mono font-black text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-lg shrink-0">
-                                  ₹ {Math.abs(rw.points).toFixed(2)}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center justify-between pt-1 border-t border-[#222]">
-                                <span className={'text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ' + (
-                                  rw.fulfillmentStatus === 'Fulfilled'
-                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse'
-                                )}>
-                                  {rw.fulfillmentStatus === 'Fulfilled' ? '✅ Granted & Fulfilled' : '⏳ Date / Reward Pending'}
-                                </span>
-
-                                {isParentAdmin && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleWishFulfillment(rw.id)}
-                                    className="text-[10px] font-bold bg-[#242424] hover:bg-[#303030] text-gray-200 hover:text-white px-2.5 py-1 rounded-lg border border-[#3a3a3a] cursor-pointer transition-all active:scale-95"
-                                  >
-                                    {rw.fulfillmentStatus === 'Fulfilled' ? 'Mark Pending' : 'Mark Fulfilled ✅'}
-                                  </button>
-                                )}
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleApproveWishRequest(req)}
+                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer shadow active:scale-95"
+                                >
+                                  Approve & Grant 💝
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeclineWishRequest(req)}
+                                  className="bg-[#242424] hover:bg-[#333] text-gray-300 text-xs px-2.5 py-1.5 rounded-lg cursor-pointer border border-[#3a3a3a]"
+                                >
+                                  Decline
+                                </button>
                               </div>
                             </div>
                           ))}
+
+                          {myPendingReqs.map(req => (
+                            <div key={req.id} className="bg-amber-950/40 border border-amber-500/40 p-2.5 rounded-xl flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xl">{req.wishIcon || '🎁'}</span>
+                                <span className="text-xs font-bold text-amber-200">
+                                  Requested: {req.wishTitle} (₹ {req.wishCost.toFixed(2)})
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-bold text-amber-300 bg-amber-900/60 border border-amber-700 px-2 py-0.5 rounded-full animate-pulse">
+                                ⏳ Awaiting {req.targetName}\'s Approval
+                              </span>
+                            </div>
+                          ))}
                         </div>
-                      )}
-                    </div>
+                      );
+                    })()}
+
 
                     {/* ACTION ROW: ONLY REDEEM WISH BUTTON */}
                     <div className="flex items-center justify-between bg-[#181818] border border-[#282828] p-3 rounded-2xl">
