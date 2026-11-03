@@ -4735,28 +4735,28 @@ export default function App() {
                     </h2>
                     <div className="grid grid-cols-2 gap-2.5 w-full text-xs text-left">
                       <div 
-                        onClick={() => setMsgInput("Summarize a meeting or text")}
+                        onClick={() => setInput("Summarize a meeting or text")}
                         className="p-3 rounded-2xl border border-[#262626] bg-[#141414] hover:bg-[#1e1e1e] text-gray-300 cursor-pointer transition-colors"
                       >
                         <p className="font-semibold text-white mb-0.5">Summarize text</p>
                         <p className="text-[11px] text-gray-400">condense long paragraphs</p>
                       </div>
                       <div 
-                        onClick={() => setMsgInput("Help me write a reply")}
+                        onClick={() => setInput("Help me write a reply")}
                         className="p-3 rounded-2xl border border-[#262626] bg-[#141414] hover:bg-[#1e1e1e] text-gray-300 cursor-pointer transition-colors"
                       >
                         <p className="font-semibold text-white mb-0.5">Help me write</p>
                         <p className="text-[11px] text-gray-400">draft professional reply</p>
                       </div>
                       <div 
-                        onClick={() => setMsgInput("Analyze and break down data")}
+                        onClick={() => setInput("Analyze and break down data")}
                         className="p-3 rounded-2xl border border-[#262626] bg-[#141414] hover:bg-[#1e1e1e] text-gray-300 cursor-pointer transition-colors"
                       >
                         <p className="font-semibold text-white mb-0.5">Analyze data</p>
                         <p className="text-[11px] text-gray-400">find insights and trends</p>
                       </div>
                       <div 
-                        onClick={() => setMsgInput("Code helper and debug syntax")}
+                        onClick={() => setInput("Code helper and debug syntax")}
                         className="p-3 rounded-2xl border border-[#262626] bg-[#141414] hover:bg-[#1e1e1e] text-gray-300 cursor-pointer transition-colors"
                       >
                         <p className="font-semibold text-white mb-0.5">Code helper</p>
