@@ -1799,15 +1799,6 @@ export default function App() {
     }
   }, [dailySelectedDate, isConnected]);
 
-  // Periodic Real-Time Habit Infractions & Negative Balance Check (Every 60s)
-  useEffect(() => {
-    checkDailyHabitInfractions(stealthMessages);
-    const interval = setInterval(() => {
-      checkDailyHabitInfractions(stealthMessagesRef.current);
-    }, 60000);
-    return () => clearInterval(interval);
-  }, [checkDailyHabitInfractions]);
-
   const requestNotificationAccess = useCallback(async () => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       try {
@@ -2236,6 +2227,15 @@ export default function App() {
       } catch(e) {}
     }
   }, [handleLoveBalanceTransaction, stealthMessages]);
+
+  // Periodic Real-Time Habit Infractions & Negative Balance Check (Every 60s)
+  useEffect(() => {
+    checkDailyHabitInfractions(stealthMessages);
+    const interval = setInterval(() => {
+      checkDailyHabitInfractions(stealthMessagesRef.current);
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [checkDailyHabitInfractions, stealthMessages]);
 
 
   const handleOpenClearModal = useCallback((target = null) => {
