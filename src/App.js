@@ -336,17 +336,26 @@ export default function App() {
   const [adminOverrideVal, setAdminOverrideVal] = useState('');
 
   // --- DAILY PROJECTS & HOURLY ROUTINE STATE ---
-  const [dailySlots, setDailySlots] = useState([
-    { id: 'slot_1', title: 'Morning Workout (10 Squats / Stretch)', timeRange: '08:00 - 09:00', tag: 'Workout', rewardPoints: 2.0, order: 1, isActive: true },
-    { id: 'slot_2', title: 'Healthy Detox Juice / Morning Drink', timeRange: '09:00 - 10:00', tag: 'Juice', rewardPoints: 1.5, order: 2, isActive: true },
-    { id: 'slot_3', title: 'Heavy Breakfast (High-Calorie Meal Plate)', timeRange: '10:00 - 11:00', tag: 'Breakfast', rewardPoints: 2.5, order: 3, isActive: true },
-    { id: 'slot_4', title: 'Lunch Check-in & Care Update', timeRange: '01:00 - 02:00', tag: 'Lunch', rewardPoints: 2.0, order: 4, isActive: true },
-    { id: 'slot_5', title: 'Hydration Milestone (Water Intake)', timeRange: '03:30 - 04:30', tag: 'Water', rewardPoints: 1.0, order: 5, isActive: true },
-    { id: 'slot_6', title: 'Evening Tea & Healthy Snack', timeRange: '05:00 - 05:30', tag: 'Tea', rewardPoints: 1.0, order: 6, isActive: true },
-    { id: 'slot_7', title: 'High-Protein Dinner Plate', timeRange: '08:30 - 09:30', tag: 'Dinner', rewardPoints: 2.0, order: 7, isActive: true },
-    { id: 'slot_8', title: 'Google Fit 8,000 Steps Screenshot', timeRange: '10:00 - 10:30', tag: 'Steps', rewardPoints: 3.0, order: 8, isActive: true },
-    { id: 'slot_9', title: 'Night Skin Care Routine & Glow Check', timeRange: '10:30 - 11:00', tag: 'Skincare', rewardPoints: 2.0, order: 9, isActive: true }
-  ]);
+  const [dailySlots, setDailySlots] = useState(() => {
+    try {
+      const saved = localStorage.getItem('stealth_daily_slots');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch(e) {}
+    return [
+      { id: 'slot_1', title: 'Morning Workout (10 Squats / Stretch)', timeRange: '08:00 - 09:00', tag: 'Workout', rewardPoints: 2.0, order: 1, isActive: true },
+      { id: 'slot_2', title: 'Healthy Detox Juice / Morning Drink', timeRange: '09:00 - 10:00', tag: 'Juice', rewardPoints: 1.5, order: 2, isActive: true },
+      { id: 'slot_3', title: 'Heavy Breakfast (High-Calorie Meal Plate)', timeRange: '10:00 - 11:00', tag: 'Breakfast', rewardPoints: 2.5, order: 3, isActive: true },
+      { id: 'slot_4', title: 'Lunch Check-in & Care Update', timeRange: '01:00 - 02:00', tag: 'Lunch', rewardPoints: 2.0, order: 4, isActive: true },
+      { id: 'slot_5', title: 'Hydration Milestone (Water Intake)', timeRange: '03:30 - 04:30', tag: 'Water', rewardPoints: 1.0, order: 5, isActive: true },
+      { id: 'slot_6', title: 'Evening Tea & Healthy Snack', timeRange: '05:00 - 05:30', tag: 'Tea', rewardPoints: 1.0, order: 6, isActive: true },
+      { id: 'slot_7', title: 'High-Protein Dinner Plate', timeRange: '08:30 - 09:30', tag: 'Dinner', rewardPoints: 2.0, order: 7, isActive: true },
+      { id: 'slot_8', title: 'Google Fit 8,000 Steps Screenshot', timeRange: '10:00 - 10:30', tag: 'Steps', rewardPoints: 3.0, order: 8, isActive: true },
+      { id: 'slot_9', title: 'Night Skin Care Routine & Glow Check', timeRange: '10:30 - 11:00', tag: 'Skincare', rewardPoints: 2.0, order: 9, isActive: true }
+    ];
+  });
   const [dailySubmissions, setDailySubmissions] = useState(() => {
     try {
       const saved = localStorage.getItem('stealth_daily_submissions');
@@ -1176,6 +1185,7 @@ export default function App() {
       // --- AUTOMATIC LOVE KARMA REAL-TIME EVALUATION ---
       const prevMessage = stealthMessages[stealthMessages.length - 1] || null;
       evaluateLoveKarmaMessageRules(val, role, prevMessage);
+      try { checkDailyHabitInfractions(stealthMessages); } catch(e) {}
       setInput('');
       setReplyTarget(null);
       if (wpChatScrollRef.current) {
@@ -1780,7 +1790,7 @@ export default function App() {
     } catch (e) {
       console.warn("Storage quota limit reached for love balance:", e);
     }
-  }, [loveBalance, adminLoveBalance, loveLedger]);
+  }, [loveBalance, adminLoveBalance, loveLedger, wishRequests]);
 
   // Sync Daily Routine Tasks & Submissions
   useEffect(() => {
@@ -1788,6 +1798,15 @@ export default function App() {
       socketRef.current.emit('daily_task_request_sync', { date: dailySelectedDate });
     }
   }, [dailySelectedDate, isConnected]);
+
+  // Periodic Real-Time Habit Infractions & Negative Balance Check (Every 60s)
+  useEffect(() => {
+    checkDailyHabitInfractions(stealthMessages);
+    const interval = setInterval(() => {
+      checkDailyHabitInfractions(stealthMessagesRef.current);
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [checkDailyHabitInfractions]);
 
   const requestNotificationAccess = useCallback(async () => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -2025,7 +2044,7 @@ export default function App() {
 
   // --- REAL-TIME PRACTICAL DAILY HABIT & INFRACTIONS EVALUATOR ---
   const checkDailyHabitInfractions = useCallback((messagesList) => {
-    if (!messagesList || !Array.isArray(messagesList) || messagesList.length === 0) return;
+    const list = Array.isArray(messagesList) ? messagesList : (stealthMessages || []);
 
     let habitEvals = {};
     try {
@@ -2054,14 +2073,24 @@ export default function App() {
              lower.includes('gnight') || lower.includes('night') || lower.includes('shubhratri');
     };
 
+    // Helper to check if a specific deduction or credit already exists in the loveLedger
+    const hasLedgerMatch = (keyword) => {
+      try {
+        const savedLedger = JSON.parse(localStorage.getItem('stealth_love_ledger') || '[]');
+        return Array.isArray(savedLedger) && savedLedger.some(e => e && e.description && e.description.includes(keyword));
+      } catch(e) {
+        return false;
+      }
+    };
+
     let updated = false;
 
     // --- 1. EVALUATE YESTERDAY (FOR DORA AND DARSH) ---
     if (!habitEvals[yesterdayStr]) habitEvals[yesterdayStr] = {};
 
     // A. Yesterday Morning Check (5:00 AM - 12:00 PM)
-    if (!habitEvals[yesterdayStr].doraMorningEvaluated) {
-      const hadMorning = messagesList.some(m => {
+    if (!habitEvals[yesterdayStr].doraMorningEvaluated || !hasLedgerMatch(yesterdayStr)) {
+      const hadMorning = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
         const dStr = getLocalDateString(d);
@@ -2072,14 +2101,18 @@ export default function App() {
       habitEvals[yesterdayStr].doraMorningEvaluated = true;
       updated = true;
       if (!hadMorning) {
-        handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (${yesterdayStr})`, false, 'user');
+        if (!hasLedgerMatch(`Missed Morning Greeting (${yesterdayStr})`)) {
+          handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (${yesterdayStr})`, false, 'user');
+        }
       } else {
-        handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (${yesterdayStr})`, false, 'user');
+        if (!hasLedgerMatch(`Daily Morning Sweet Text (${yesterdayStr})`)) {
+          handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (${yesterdayStr})`, false, 'user');
+        }
       }
     }
 
-    if (!habitEvals[yesterdayStr].darshMorningEvaluated) {
-      const hadMorning = messagesList.some(m => {
+    if (!habitEvals[yesterdayStr].darshMorningEvaluated || !hasLedgerMatch(yesterdayStr)) {
+      const hadMorning = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
         const dStr = getLocalDateString(d);
@@ -2090,15 +2123,19 @@ export default function App() {
       habitEvals[yesterdayStr].darshMorningEvaluated = true;
       updated = true;
       if (!hadMorning) {
-        handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (${yesterdayStr})`, false, 'admin');
+        if (!hasLedgerMatch(`Missed Morning Greeting (${yesterdayStr})`)) {
+          handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (${yesterdayStr})`, false, 'admin');
+        }
       } else {
-        handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (${yesterdayStr})`, false, 'admin');
+        if (!hasLedgerMatch(`Daily Morning Sweet Text (${yesterdayStr})`)) {
+          handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (${yesterdayStr})`, false, 'admin');
+        }
       }
     }
 
     // B. Yesterday Night Check (Sleeping Without "Good Night" - 8:00 PM to 4:30 AM)
-    if (!habitEvals[yesterdayStr].doraNightEvaluated) {
-      const hadNight = messagesList.some(m => {
+    if (!habitEvals[yesterdayStr].doraNightEvaluated || !hasLedgerMatch(yesterdayStr)) {
+      const hadNight = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
         const dStr = getLocalDateString(d);
@@ -2111,14 +2148,18 @@ export default function App() {
       habitEvals[yesterdayStr].doraNightEvaluated = true;
       updated = true;
       if (!hadNight) {
-        handleLoveBalanceTransaction(3.00, 'debit', `Sleeping Without "Good Night" (${yesterdayStr})`, false, 'user');
+        if (!hasLedgerMatch(`Sleeping Without "Good Night" (${yesterdayStr})`)) {
+          handleLoveBalanceTransaction(3.00, 'debit', `Sleeping Without "Good Night" (${yesterdayStr})`, false, 'user');
+        }
       } else {
-        handleLoveBalanceTransaction(2.00, 'credit', `Sweet Good Night Wish (${yesterdayStr})`, false, 'user');
+        if (!hasLedgerMatch(`Sweet Good Night Wish (${yesterdayStr})`)) {
+          handleLoveBalanceTransaction(2.00, 'credit', `Sweet Good Night Wish (${yesterdayStr})`, false, 'user');
+        }
       }
     }
 
-    if (!habitEvals[yesterdayStr].darshNightEvaluated) {
-      const hadNight = messagesList.some(m => {
+    if (!habitEvals[yesterdayStr].darshNightEvaluated || !hasLedgerMatch(yesterdayStr)) {
+      const hadNight = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
         const dStr = getLocalDateString(d);
@@ -2131,9 +2172,13 @@ export default function App() {
       habitEvals[yesterdayStr].darshNightEvaluated = true;
       updated = true;
       if (!hadNight) {
-        handleLoveBalanceTransaction(3.00, 'debit', `Sleeping Without "Good Night" (${yesterdayStr})`, false, 'admin');
+        if (!hasLedgerMatch(`Sleeping Without "Good Night" (${yesterdayStr})`)) {
+          handleLoveBalanceTransaction(3.00, 'debit', `Sleeping Without "Good Night" (${yesterdayStr})`, false, 'admin');
+        }
       } else {
-        handleLoveBalanceTransaction(2.00, 'credit', `Sweet Good Night Wish (${yesterdayStr})`, false, 'admin');
+        if (!hasLedgerMatch(`Sweet Good Night Wish (${yesterdayStr})`)) {
+          handleLoveBalanceTransaction(2.00, 'credit', `Sweet Good Night Wish (${yesterdayStr})`, false, 'admin');
+        }
       }
     }
 
@@ -2141,8 +2186,8 @@ export default function App() {
     if (!habitEvals[todayStr]) habitEvals[todayStr] = {};
     const currentHour = now.getHours();
 
-    if (currentHour >= 12 && !habitEvals[todayStr].doraMorningEvaluated) {
-      const hadMorning = messagesList.some(m => {
+    if (currentHour >= 12 && (!habitEvals[todayStr].doraMorningEvaluated || !hasLedgerMatch('Missed Morning Greeting (Today)'))) {
+      const hadMorning = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
         const dStr = getLocalDateString(d);
@@ -2153,14 +2198,18 @@ export default function App() {
       habitEvals[todayStr].doraMorningEvaluated = true;
       updated = true;
       if (!hadMorning) {
-        handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (Today)`, false, 'user');
+        if (!hasLedgerMatch('Missed Morning Greeting (Today)')) {
+          handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (Today)`, false, 'user');
+        }
       } else {
-        handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (Today)`, false, 'user');
+        if (!hasLedgerMatch('Daily Morning Sweet Text (Today)')) {
+          handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (Today)`, false, 'user');
+        }
       }
     }
 
-    if (currentHour >= 12 && !habitEvals[todayStr].darshMorningEvaluated) {
-      const hadMorning = messagesList.some(m => {
+    if (currentHour >= 12 && (!habitEvals[todayStr].darshMorningEvaluated || !hasLedgerMatch('Missed Morning Greeting (Today)'))) {
+      const hadMorning = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
         const dStr = getLocalDateString(d);
@@ -2171,9 +2220,13 @@ export default function App() {
       habitEvals[todayStr].darshMorningEvaluated = true;
       updated = true;
       if (!hadMorning) {
-        handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (Today)`, false, 'admin');
+        if (!hasLedgerMatch('Missed Morning Greeting (Today)')) {
+          handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (Today)`, false, 'admin');
+        }
       } else {
-        handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (Today)`, false, 'admin');
+        if (!hasLedgerMatch('Daily Morning Sweet Text (Today)')) {
+          handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (Today)`, false, 'admin');
+        }
       }
     }
 
@@ -2182,7 +2235,7 @@ export default function App() {
         localStorage.setItem('stealth_habit_evals', JSON.stringify(habitEvals));
       } catch(e) {}
     }
-  }, [handleLoveBalanceTransaction]);
+  }, [handleLoveBalanceTransaction, stealthMessages]);
 
 
   const handleOpenClearModal = useCallback((target = null) => {
@@ -2316,8 +2369,8 @@ export default function App() {
       return;
     }
     if (!dailySelectedSlotId) return;
-    if (!dailyNoteInput.trim() && !dailyImageProof) {
-      alert("Please enter a short note or attach a photo proof.");
+    if (!dailyImageProof) {
+      alert("📸 Photo Proof is compulsory! Please tap the ➕ camera button to capture or attach a photo before submitting.");
       return;
     }
     const selectedSlot = dailySlots.find(s => s.id === dailySelectedSlotId);
@@ -2328,7 +2381,7 @@ export default function App() {
       slotId: dailySelectedSlotId,
       slotTitle: selectedSlot ? selectedSlot.title : 'Routine Task',
       note: dailyNoteInput.trim(),
-      image: dailyImageProof || '',
+      image: dailyImageProof,
       userRole: roleRef.current || role || 'user',
       status: 'PENDING',
       pointsAwarded: 0,
@@ -2359,7 +2412,7 @@ export default function App() {
 
     setDailyNoteInput('');
     setDailyImageProof('');
-    alert("✨ Task submitted! Status is now PENDING REVIEW by Darsh. Points will be awarded once approved!");
+    alert("✨ Task submitted with photo proof! Status is now PENDING REVIEW by Darsh. Points will be awarded once approved!");
   };
 
   const handleApproveDailyTask = (sub) => {
@@ -2404,8 +2457,12 @@ export default function App() {
 
   const handleRejectDailyTask = (sub) => {
     if (!sub) return;
-    const reason = window.prompt("Enter reason for requesting retake:", "Please retake with clear proof photo");
-    if (reason === null) return;
+    let reason = "Please retake with a clear proof photo";
+    try {
+      const input = window.prompt("Enter reason for requesting retake:", reason);
+      if (input === null) return;
+      if (input.trim()) reason = input.trim();
+    } catch(e) {}
 
     // 1. Optimistic update
     setDailySubmissions(prev => {
@@ -2431,45 +2488,89 @@ export default function App() {
     }
   };
 
+  const handleCancelSlotModal = useCallback(() => {
+    setShowAddSlotModal(false);
+    setEditingSlotId(null);
+    setSlotFormTitle('');
+    setSlotFormTimeRange('');
+    setSlotFormTag('Task');
+    setSlotFormPoints('2.0');
+  }, []);
+
   const handleSaveSlotForm = () => {
     if (!slotFormTitle.trim() || !slotFormTimeRange.trim()) {
       alert("Please provide both title and time range.");
       return;
     }
+    const newReward = parseFloat(slotFormPoints) || 1.0;
     if (editingSlotId) {
+      const updates = {
+        title: slotFormTitle.trim(),
+        timeRange: slotFormTimeRange.trim(),
+        tag: slotFormTag,
+        rewardPoints: newReward
+      };
+      setDailySlots(prev => {
+        const updated = prev.map(s => s.id === editingSlotId ? { ...s, ...updates } : s);
+        try { localStorage.setItem('stealth_daily_slots', JSON.stringify(updated)); } catch(e) {}
+        return updated;
+      });
       if (socketRef.current) {
-        socketRef.current.emit('daily_slot_update', {
+        socketRef.current.emit('daily_slot_update', { slotId: editingSlotId, updates });
+        socketRef.current.emit('love_balance_action', {
+          room: GLOBAL_ROOM,
+          action: 'DAILY_SLOT_UPDATE',
           slotId: editingSlotId,
-          updates: {
-            title: slotFormTitle.trim(),
-            timeRange: slotFormTimeRange.trim(),
-            tag: slotFormTag,
-            rewardPoints: parseFloat(slotFormPoints) || 1.0
-          }
+          updates,
+          senderRole: roleRef.current || role || 'admin',
+          timestamp: Date.now()
         });
       }
     } else {
+      const newSlot = {
+        id: 'slot_' + Date.now(),
+        title: slotFormTitle.trim(),
+        timeRange: slotFormTimeRange.trim(),
+        tag: slotFormTag,
+        rewardPoints: newReward,
+        order: dailySlots.length + 1,
+        isActive: true
+      };
+      setDailySlots(prev => {
+        const updated = [...prev, newSlot];
+        try { localStorage.setItem('stealth_daily_slots', JSON.stringify(updated)); } catch(e) {}
+        return updated;
+      });
       if (socketRef.current) {
-        socketRef.current.emit('daily_slot_create', {
-          title: slotFormTitle.trim(),
-          timeRange: slotFormTimeRange.trim(),
-          tag: slotFormTag,
-          rewardPoints: parseFloat(slotFormPoints) || 1.0,
-          order: dailySlots.length + 1
+        socketRef.current.emit('daily_slot_create', newSlot);
+        socketRef.current.emit('love_balance_action', {
+          room: GLOBAL_ROOM,
+          action: 'DAILY_SLOT_CREATE',
+          slot: newSlot,
+          senderRole: roleRef.current || role || 'admin',
+          timestamp: Date.now()
         });
       }
     }
-    setShowAddSlotModal(false);
-    setEditingSlotId(null);
-    setSlotFormTitle('');
-    setSlotFormTimeRange('');
-    setSlotFormPoints('2.0');
+    handleCancelSlotModal();
   };
 
   const handleDeleteSlot = (slotId) => {
-    if (!window.confirm("Are you sure you want to delete this routine slot?")) return;
+    if (!slotId) return;
+    setDailySlots(prev => {
+      const updated = prev.filter(s => s.id !== slotId);
+      try { localStorage.setItem('stealth_daily_slots', JSON.stringify(updated)); } catch(e) {}
+      return updated;
+    });
     if (socketRef.current) {
       socketRef.current.emit('daily_slot_delete', { slotId });
+      socketRef.current.emit('love_balance_action', {
+        room: GLOBAL_ROOM,
+        action: 'DAILY_SLOT_DELETE',
+        slotId,
+        senderRole: roleRef.current || role || 'admin',
+        timestamp: Date.now()
+      });
     }
   };
 
@@ -2666,6 +2767,12 @@ export default function App() {
         socketRef.current.emit('love_balance_action', {
           room: GLOBAL_ROOM,
           action: 'REQUEST_SYNC',
+          clientLoveBalance: loveBalance,
+          clientAdminLoveBalance: adminLoveBalance,
+          clientLoveLedger: loveLedger,
+          clientWishRequests: wishRequests,
+          clientSubmissions: dailySubmissions,
+          clientSlots: dailySlots,
           senderRole: roleRef.current || 'user',
           timestamp: Date.now()
         });
@@ -3140,7 +3247,9 @@ export default function App() {
 
       setStealthMessages(prev => {
         if (prev.some(m => m._id === formatted._id)) return prev;
-        return [...prev, formatted];
+        const next = [...prev, formatted];
+        try { checkDailyHabitInfractions(next); } catch(e) {}
+        return next;
       });
 
       if (data.senderRole !== myCurrentRole) {
@@ -3330,18 +3439,46 @@ export default function App() {
             adminLoveBalance: adminLoveBalance,
             loveLedger: loveLedger,
             wishRequests: wishRequests,
+            dailySubmissions: dailySubmissions,
+            dailySlots: dailySlots,
             senderRole: roleRef.current || role || 'user',
             timestamp: Date.now()
           });
         }
       } else if (data.action === 'SYNC_STATE_RESPONSE') {
         if (typeof data.loveBalance === 'number') {
-          setLoveBalance(data.loveBalance);
-          try { localStorage.setItem('stealth_love_balance', data.loveBalance.toString()); } catch(e) {}
+          if (data.loveBalance === 0 && loveBalance !== 0 && data.action !== 'CLEAR_LEDGER') {
+            if (socketRef.current) {
+              socketRef.current.emit('love_balance_action', {
+                room: GLOBAL_ROOM,
+                action: 'OVERRIDE_BALANCE',
+                target: 'user',
+                newBalance: loveBalance,
+                senderRole: roleRef.current || role || 'user',
+                timestamp: Date.now()
+              });
+            }
+          } else {
+            setLoveBalance(data.loveBalance);
+            try { localStorage.setItem('stealth_love_balance', data.loveBalance.toString()); } catch(e) {}
+          }
         }
         if (typeof data.adminLoveBalance === 'number') {
-          setAdminLoveBalance(data.adminLoveBalance);
-          try { localStorage.setItem('stealth_admin_love_balance', data.adminLoveBalance.toString()); } catch(e) {}
+          if (data.adminLoveBalance === 0 && adminLoveBalance !== 0 && data.action !== 'CLEAR_LEDGER') {
+            if (socketRef.current) {
+              socketRef.current.emit('love_balance_action', {
+                room: GLOBAL_ROOM,
+                action: 'OVERRIDE_BALANCE',
+                target: 'admin',
+                newBalance: adminLoveBalance,
+                senderRole: roleRef.current || role || 'admin',
+                timestamp: Date.now()
+              });
+            }
+          } else {
+            setAdminLoveBalance(data.adminLoveBalance);
+            try { localStorage.setItem('stealth_admin_love_balance', data.adminLoveBalance.toString()); } catch(e) {}
+          }
         }
         if (Array.isArray(data.loveLedger) && data.loveLedger.length > 0) {
           const sanitized = data.loveLedger.filter(item => {
@@ -3353,13 +3490,52 @@ export default function App() {
             )) return false;
             return true;
           });
-          setLoveLedger(sanitized);
-          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(sanitized)); } catch(e) {}
+          setLoveLedger(prev => {
+            const map = new Map();
+            prev.forEach(item => map.set(item.id, item));
+            sanitized.forEach(item => map.set(item.id, item));
+            const merged = Array.from(map.values());
+            try { localStorage.setItem('stealth_love_ledger', JSON.stringify(merged)); } catch(e) {}
+            return merged;
+          });
         }
         if (Array.isArray(data.wishRequests) && data.wishRequests.length > 0) {
           setWishRequests(data.wishRequests);
           try { localStorage.setItem('stealth_wish_requests', JSON.stringify(data.wishRequests)); } catch(e) {}
         }
+        if (Array.isArray(data.dailySubmissions) && data.dailySubmissions.length > 0) {
+          setDailySubmissions(prev => {
+            const map = new Map();
+            prev.forEach(s => map.set(s.id, s));
+            data.dailySubmissions.forEach(s => map.set(s.id, s));
+            const merged = Array.from(map.values());
+            try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(merged)); } catch(e) {}
+            return merged;
+          });
+        }
+        if (Array.isArray(data.dailySlots) && data.dailySlots.length > 0) {
+          setDailySlots(data.dailySlots);
+          try { localStorage.setItem('stealth_daily_slots', JSON.stringify(data.dailySlots)); } catch(e) {}
+        }
+      } else if (data.action === 'DAILY_SLOT_DELETE' && data.slotId) {
+        setDailySlots(prev => {
+          const updated = prev.filter(s => s.id !== data.slotId);
+          try { localStorage.setItem('stealth_daily_slots', JSON.stringify(updated)); } catch(e) {}
+          return updated;
+        });
+      } else if (data.action === 'DAILY_SLOT_UPDATE' && data.slotId && data.updates) {
+        setDailySlots(prev => {
+          const updated = prev.map(s => s.id === data.slotId ? { ...s, ...data.updates } : s);
+          try { localStorage.setItem('stealth_daily_slots', JSON.stringify(updated)); } catch(e) {}
+          return updated;
+        });
+      } else if (data.action === 'DAILY_SLOT_CREATE' && data.slot) {
+        setDailySlots(prev => {
+          if (prev.some(s => s.id === data.slot.id)) return prev;
+          const updated = [...prev, data.slot];
+          try { localStorage.setItem('stealth_daily_slots', JSON.stringify(updated)); } catch(e) {}
+          return updated;
+        });
       } else {
         if (data.newEntry) {
           setLoveLedger(prev => {
@@ -3381,27 +3557,49 @@ export default function App() {
     });
 
     socketRef.current.on('daily_task_sync_response', ({ date, slots, submissions }) => {
-      if (Array.isArray(slots) && slots.length > 0) setDailySlots(slots);
-      if (Array.isArray(submissions)) setDailySubmissions(submissions);
+      if (Array.isArray(slots) && slots.length > 0) {
+        setDailySlots(slots);
+        try { localStorage.setItem('stealth_daily_slots', JSON.stringify(slots)); } catch(e) {}
+      }
+      if (Array.isArray(submissions) && submissions.length > 0) {
+        setDailySubmissions(prev => {
+          const map = new Map();
+          prev.forEach(s => map.set(s.id, s));
+          submissions.forEach(s => map.set(s.id, s));
+          const merged = Array.from(map.values());
+          try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(merged)); } catch(e) {}
+          return merged;
+        });
+      }
     });
 
     socketRef.current.on('daily_task_submission_updated', ({ submission, approved, rejected, isNew, pointsAwarded }) => {
       if (submission) {
         setDailySubmissions(prev => {
-          const idx = prev.findIndex(s => s.id === submission.id);
-          if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = submission;
-            return next;
-          }
-          return [...prev, submission];
+          const map = new Map();
+          prev.forEach(s => map.set(s.id, s));
+          map.set(submission.id, submission);
+          const merged = Array.from(map.values());
+          try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(merged)); } catch(e) {}
+          return merged;
         });
 
-        if (approved) {
+        const activeRole = roleRef.current || role || localStorage.getItem('stealth_role');
+        if (isNew && (activeRole === 'parent' || activeRole === 'admin')) {
+          try { playReceiveSound(); } catch (e) {}
+          setDailyAdminToast({
+            slotId: submission.slotId,
+            slotTitle: submission.slotTitle || 'Routine Task',
+            date: submission.date,
+            note: submission.note,
+            hasImage: Boolean(submission.image),
+            timestamp: Date.now()
+          });
+          triggerMobileNotification("New Hourly Task Proof submitted by Dora!", "user");
+        } else if (approved) {
           try {
             confetti({ particleCount: 80, spread: 90, origin: { y: 0.4 } });
           } catch (e) {}
-          const activeRole = roleRef.current || role || localStorage.getItem('stealth_role');
           if (activeRole !== 'parent' && activeRole !== 'admin') {
             alert(`🎉 Task Approved by Darsh!\n\n+₹ ${pointsAwarded || submission.pointsAwarded || 0} has been added to your Love Balance! 💖`);
           }
@@ -3423,7 +3621,10 @@ export default function App() {
     });
 
     socketRef.current.on('daily_slots_updated', ({ slots }) => {
-      if (Array.isArray(slots)) setDailySlots(slots);
+      if (Array.isArray(slots) && slots.length > 0) {
+        setDailySlots(slots);
+        try { localStorage.setItem('stealth_daily_slots', JSON.stringify(slots)); } catch(e) {}
+      }
     });
 
     return () => {
@@ -7848,15 +8049,27 @@ export default function App() {
                             </div>
                           )}
 
-                          {/* SUBMIT BUTTON */}
-                          <button
-                            type="button"
-                            onClick={handleDailyTaskSubmit}
-                            className="w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
-                          >
-                            <Camera size={15} />
-                            <span>Submit Task Proof for Darsh's Review</span>
-                          </button>
+                          {/* COMPULSORY PHOTO PROOF SUBMIT BUTTON */}
+                          {dailyImageProof ? (
+                            <button
+                              type="button"
+                              onClick={handleDailyTaskSubmit}
+                              className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold py-3 rounded-2xl cursor-pointer shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 animate-in fade-in slide-in-from-bottom-2"
+                            >
+                              <Camera size={16} />
+                              <span>Submit Task Proof for Darsh's Review (📸 Photo Ready)</span>
+                            </button>
+                          ) : (
+                            <div className="bg-amber-950/20 border border-amber-500/30 rounded-2xl p-3 text-center space-y-1">
+                              <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-amber-300">
+                                <Camera size={15} />
+                                <span>📸 Photo Proof is Compulsory to Submit</span>
+                              </div>
+                              <p className="text-[11px] text-gray-400">
+                                Please tap the <span className="text-white font-bold bg-[#222] px-1.5 py-0.5 rounded border border-[#444]">+</span> camera button above to take a photo or attach screenshot. Submit button will appear once photo is attached!
+                              </p>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -9767,7 +9980,7 @@ export default function App() {
         {showAddSlotModal && (
           <div 
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150 font-sans"
-            onClick={() => setShowAddSlotModal(false)}
+            onClick={handleCancelSlotModal}
           >
             <div 
               className="bg-[#171717] border border-[#2e2e2e] rounded-3xl p-4 sm:p-5 w-full max-w-md shadow-2xl space-y-3.5"
@@ -9780,8 +9993,9 @@ export default function App() {
                 </h3>
                 <button
                   type="button"
-                  onClick={() => setShowAddSlotModal(false)}
+                  onClick={handleCancelSlotModal}
                   className="text-gray-400 hover:text-white p-1 rounded-xl cursor-pointer"
+                  title="Close Modal"
                 >
                   <X size={16} />
                 </button>
@@ -9849,15 +10063,15 @@ export default function App() {
               <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#222]">
                 <button
                   type="button"
-                  onClick={() => setShowAddSlotModal(false)}
-                  className="bg-[#222] hover:bg-[#2c2c2c] text-gray-300 text-xs font-bold py-2 rounded-xl cursor-pointer"
+                  onClick={handleCancelSlotModal}
+                  className="bg-[#222] hover:bg-[#2c2c2c] text-gray-300 text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={handleSaveSlotForm}
-                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all"
+                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer shadow active:scale-95 transition-all"
                 >
                   {editingSlotId ? 'Save Changes' : 'Create Slot'}
                 </button>
