@@ -1550,6 +1550,11 @@ export default function App() {
     if (viewMode === 'admin_dashboard' && role !== 'parent') {
       setViewMode('real_gpt');
     }
+    // Only Dora uploads tasks; Darsh (admin) checks & approves inside the Admin Dashboard
+    if (viewMode === 'daily_projects' && role === 'parent') {
+      setViewMode('admin_dashboard');
+      setDailyAdminTab('review');
+    }
   }, [role, viewMode]);
 
   useEffect(() => {
@@ -2136,6 +2141,10 @@ export default function App() {
   };
 
   const handleDailyTaskSubmit = () => {
+    if (roleRef.current === 'parent' || role === 'parent') {
+      alert("Task upload is only for Dora. Admin (Darsh) reviews and approves inside the Admin Dashboard.");
+      return;
+    }
     if (!dailySelectedSlotId) return;
     if (!dailyNoteInput.trim() && !dailyImageProof) {
       alert("Please enter a short note or attach a photo proof.");
@@ -4089,14 +4098,38 @@ export default function App() {
             )}
 
             <div 
-              onClick={() => { setViewMode('daily_projects'); closeSidebarOnMobile(); }}
-              className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${viewMode === 'daily_projects' ? 'bg-[#212121] text-white font-medium' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
+              onClick={() => { 
+                if (role === 'parent') {
+                  setViewMode('admin_dashboard');
+                  setDailyAdminTab('review');
+                } else {
+                  setViewMode('daily_projects');
+                }
+                closeSidebarOnMobile(); 
+              }}
+              className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${
+                (role !== 'parent' && viewMode === 'daily_projects') || (role === 'parent' && viewMode === 'admin_dashboard' && dailyAdminTab === 'review')
+                  ? 'bg-[#212121] text-white font-medium' 
+                  : 'text-[#ececf1] hover:bg-[#1a1a1a]'
+              }`}
             >
               <div className="flex items-center gap-2.5">
-                <FolderGit2 size={16} className={viewMode === 'daily_projects' ? 'text-blue-400' : 'text-[#9b9b9b]'} />
-                <span>Projects</span>
+                <FolderGit2 size={16} className={(role !== 'parent' && viewMode === 'daily_projects') || (role === 'parent' && viewMode === 'admin_dashboard' && dailyAdminTab === 'review') ? 'text-blue-400' : 'text-[#9b9b9b]'} />
+                <span>{role === 'parent' ? "Dora's Tasks (Admin)" : "Projects"}</span>
               </div>
-              <span className="text-[9px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-1.5 py-0.2 rounded font-mono font-bold">HOURLY</span>
+              <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold ${
+                role === 'parent'
+                  ? (dailySubmissions.filter(s => s.status === 'PENDING').length > 0 
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse' 
+                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30')
+                  : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+              }`}>
+                {role === 'parent' 
+                  ? (dailySubmissions.filter(s => s.status === 'PENDING').length > 0 
+                      ? `${dailySubmissions.filter(s => s.status === 'PENDING').length} PENDING` 
+                      : 'CHECK') 
+                  : 'HOURLY'}
+              </span>
             </div>
 
             <div 
@@ -5786,6 +5819,23 @@ export default function App() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => {
+                          setDailyAdminTab('review');
+                          const el = document.getElementById('admin-part-5-daily-tasks');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 active:scale-95 shadow ${
+                          dailySubmissions.filter(s => s.status === 'PENDING').length > 0
+                            ? 'bg-amber-500 text-black border border-amber-300 animate-pulse'
+                            : 'bg-[#242424] hover:bg-[#333] border border-[#3a3a3a] text-emerald-300'
+                        }`}
+                        title="Review Dora's Hourly Tasks Proofs & Submissions"
+                      >
+                        <Briefcase size={13} />
+                        <span>Dora Tasks {dailySubmissions.filter(s => s.status === 'PENDING').length > 0 ? `(${dailySubmissions.filter(s => s.status === 'PENDING').length} PENDING)` : ''}</span>
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setViewMode('real_gpt')}
                         className="bg-[#242424] hover:bg-[#333] border border-[#3a3a3a] text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 active:scale-95 shadow"
                       >
@@ -6374,8 +6424,8 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* PART 5: DAILY PROJECTS & HOURLY TASK MANAGER */}
-                  <div className="bg-[#121212] border-2 border-emerald-500/40 hover:border-emerald-500/60 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-2xl space-y-3 lg:col-span-2 text-left font-sans">
+                  {/* PART 5: DAILY PROJECTS & HOURLY TASK MANAGER (FOR DARSH TO CHECK & APPROVE) */}
+                  <div id="admin-part-5-daily-tasks" className="bg-[#121212] border-2 border-emerald-500/40 hover:border-emerald-500/60 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-2xl space-y-3 lg:col-span-2 text-left font-sans scroll-mt-4">
                     {/* PART 5 HEADER */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#222] pb-2.5">
                       <div className="flex items-center gap-2">
@@ -6950,8 +7000,8 @@ export default function App() {
                         </div>
                       )}
 
-                      {/* SUBMISSION FORM (ONLY IF NOT SUBMITTED OR REJECTED) */}
-                      {(!activeSub || activeSub.status === 'REJECTED') && (
+                      {/* SUBMISSION FORM (EXCLUSIVELY FOR DORA - HIDDEN FROM DARSH) */}
+                      {role !== 'parent' && (!activeSub || activeSub.status === 'REJECTED') && (
                         <div className="space-y-3 pt-1">
                           <div className="text-xs font-bold text-gray-300 flex items-center gap-1.5">
                             <span>Upload Proof for {activeSlot.title}:</span>
@@ -7025,6 +7075,30 @@ export default function App() {
                           >
                             <Camera size={15} />
                             <span>Submit Task Proof for Darsh's Review</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* DARSH ADMIN CALLOUT IF ACCESSED AS PARENT */}
+                      {role === 'parent' && (
+                        <div className="bg-gradient-to-r from-amber-950/40 via-[#1c1813] to-amber-950/40 border border-amber-500/40 p-4 rounded-2xl text-center space-y-2 animate-in fade-in">
+                          <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center justify-center mx-auto text-base">
+                            👑
+                          </div>
+                          <h4 className="text-sm font-bold text-white">Admin Checking Mode (Darsh)</h4>
+                          <p className="text-xs text-gray-300 max-w-md mx-auto leading-relaxed">
+                            Routine tasks are for Dora to upload. Check proofs, view full-resolution photos, and approve awards inside the Admin Dashboard.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setViewMode('admin_dashboard');
+                              setDailyAdminTab('review');
+                            }}
+                            className="bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold px-4 py-2 rounded-xl cursor-pointer shadow transition-all active:scale-95 inline-flex items-center gap-1.5"
+                          >
+                            <Check size={14} />
+                            <span>Open Admin Dashboard Review</span>
                           </button>
                         </div>
                       )}
