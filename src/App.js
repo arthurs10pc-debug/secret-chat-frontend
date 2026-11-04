@@ -9,7 +9,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2, Heart, Coins, Award, Scale, Gift, SlidersHorizontal, Bell, BellRing, Filter, CheckCircle2, XCircle, ArrowLeft, MoreVertical, Paperclip
+  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2, Heart, Coins, Award, Scale, Gift, SlidersHorizontal, Bell, BellRing, Filter, CheckCircle2, XCircle, ArrowLeft, MoreVertical, Paperclip, Camera, Briefcase, Calendar, CheckCircle
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -327,6 +327,37 @@ export default function App() {
   });
   const [activeLbTarget, setActiveLbTarget] = useState('user'); // 'user' (Partner A) or 'admin' (Admin H)
   const [adminOverrideVal, setAdminOverrideVal] = useState('');
+
+  // --- DAILY PROJECTS & HOURLY ROUTINE STATE ---
+  const [dailySlots, setDailySlots] = useState([
+    { id: 'slot_1', title: 'Morning Workout (10 Squats / Stretch)', timeRange: '08:00 - 09:00', tag: 'Workout', rewardPoints: 2.0, order: 1, isActive: true },
+    { id: 'slot_2', title: 'Healthy Detox Juice / Morning Drink', timeRange: '09:00 - 10:00', tag: 'Juice', rewardPoints: 1.5, order: 2, isActive: true },
+    { id: 'slot_3', title: 'Heavy Breakfast (High-Calorie Meal Plate)', timeRange: '10:00 - 11:00', tag: 'Breakfast', rewardPoints: 2.5, order: 3, isActive: true },
+    { id: 'slot_4', title: 'Lunch Check-in & Care Update', timeRange: '01:00 - 02:00', tag: 'Lunch', rewardPoints: 2.0, order: 4, isActive: true },
+    { id: 'slot_5', title: 'Hydration Milestone (Water Intake)', timeRange: '03:30 - 04:30', tag: 'Water', rewardPoints: 1.0, order: 5, isActive: true },
+    { id: 'slot_6', title: 'Evening Tea & Healthy Snack', timeRange: '05:00 - 05:30', tag: 'Tea', rewardPoints: 1.0, order: 6, isActive: true },
+    { id: 'slot_7', title: 'High-Protein Dinner Plate', timeRange: '08:30 - 09:30', tag: 'Dinner', rewardPoints: 2.0, order: 7, isActive: true },
+    { id: 'slot_8', title: 'Google Fit 8,000 Steps Screenshot', timeRange: '10:00 - 10:30', tag: 'Steps', rewardPoints: 3.0, order: 8, isActive: true },
+    { id: 'slot_9', title: 'Night Skin Care Routine & Glow Check', timeRange: '10:30 - 11:00', tag: 'Skincare', rewardPoints: 2.0, order: 9, isActive: true }
+  ]);
+  const [dailySubmissions, setDailySubmissions] = useState([]);
+  const [dailySelectedDate, setDailySelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [dailySelectedSlotId, setDailySelectedSlotId] = useState('slot_1');
+  const [dailyNoteInput, setDailyNoteInput] = useState('');
+  const [dailyImageProof, setDailyImageProof] = useState('');
+  const [dailySubmitting, setDailySubmitting] = useState(false);
+  const [dailyPreviewModalImg, setDailyPreviewModalImg] = useState(null);
+  const [dailyAdminToast, setDailyAdminToast] = useState(null);
+  const [dailyAdminTab, setDailyAdminTab] = useState('review'); // 'review' | 'slots'
+  const [showAddSlotModal, setShowAddSlotModal] = useState(false);
+  const [editingSlotId, setEditingSlotId] = useState(null);
+  const [slotFormTitle, setSlotFormTitle] = useState('');
+  const [slotFormTimeRange, setSlotFormTimeRange] = useState('');
+  const [slotFormTag, setSlotFormTag] = useState('Task');
+  const [slotFormPoints, setSlotFormPoints] = useState('2.0');
+  const [dailyAITip, setDailyAITip] = useState('');
+  const [dailyAILoading, setDailyAILoading] = useState(false);
+  const dailyFileInputRef = useRef(null);
 
   // Mobile Notification Permission State
   // Touch Swipe Gesture State for Mobile Sidebar (Left-to-Right Opens)
@@ -1737,6 +1768,13 @@ export default function App() {
     }
   }, [loveBalance, adminLoveBalance, loveLedger]);
 
+  // Sync Daily Routine Tasks & Submissions
+  useEffect(() => {
+    if (socketRef.current && isConnected) {
+      socketRef.current.emit('daily_task_request_sync', { date: dailySelectedDate });
+    }
+  }, [dailySelectedDate, isConnected]);
+
   const requestNotificationAccess = useCallback(async () => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       try {
@@ -2058,6 +2096,160 @@ export default function App() {
       alert('Love Nudge dispatched to ' + (target === 'user' ? 'Dora' : 'Darsh') + '!');
     }
   }, []);
+
+  const compressImage = (file, maxWidth = 1280, quality = 0.8) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => resolve(e.target.result);
+        img.src = e.target.result;
+      };
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleDailyImageSelected = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    try {
+      const compressed = await compressImage(file);
+      setDailyImageProof(compressed);
+    } catch (err) {
+      console.warn('Image processing error:', err);
+    }
+  };
+
+  const handleDailyTaskSubmit = () => {
+    if (!dailySelectedSlotId) return;
+    if (!dailyNoteInput.trim() && !dailyImageProof) {
+      alert("Please enter a short note or attach a photo proof.");
+      return;
+    }
+    const selectedSlot = dailySlots.find(s => s.id === dailySelectedSlotId);
+    if (socketRef.current) {
+      socketRef.current.emit('daily_task_submit', {
+        date: dailySelectedDate,
+        slotId: dailySelectedSlotId,
+        slotTitle: selectedSlot ? selectedSlot.title : 'Routine Task',
+        note: dailyNoteInput.trim(),
+        image: dailyImageProof,
+        userRole: roleRef.current || role || 'user'
+      });
+    }
+    setDailyNoteInput('');
+    setDailyImageProof('');
+    alert("✨ Task submitted! Status is now PENDING REVIEW by Darsh. Points will be awarded once approved!");
+  };
+
+  const handleApproveDailyTask = (sub) => {
+    if (!sub || !socketRef.current) return;
+    const slot = dailySlots.find(s => s.id === sub.slotId);
+    const pts = slot ? slot.rewardPoints : 2.0;
+    socketRef.current.emit('daily_task_approve', {
+      submissionId: sub.id,
+      points: pts,
+      feedback: 'Approved by Darsh',
+      slotTitle: slot ? slot.title : 'Routine Task'
+    });
+  };
+
+  const handleRejectDailyTask = (sub) => {
+    if (!sub || !socketRef.current) return;
+    const reason = window.prompt("Enter reason for requesting retake:", "Please retake with clear proof photo");
+    if (reason === null) return;
+    socketRef.current.emit('daily_task_reject', {
+      submissionId: sub.id,
+      feedback: reason
+    });
+  };
+
+  const handleSaveSlotForm = () => {
+    if (!slotFormTitle.trim() || !slotFormTimeRange.trim()) {
+      alert("Please provide both title and time range.");
+      return;
+    }
+    if (editingSlotId) {
+      if (socketRef.current) {
+        socketRef.current.emit('daily_slot_update', {
+          slotId: editingSlotId,
+          updates: {
+            title: slotFormTitle.trim(),
+            timeRange: slotFormTimeRange.trim(),
+            tag: slotFormTag,
+            rewardPoints: parseFloat(slotFormPoints) || 1.0
+          }
+        });
+      }
+    } else {
+      if (socketRef.current) {
+        socketRef.current.emit('daily_slot_create', {
+          title: slotFormTitle.trim(),
+          timeRange: slotFormTimeRange.trim(),
+          tag: slotFormTag,
+          rewardPoints: parseFloat(slotFormPoints) || 1.0,
+          order: dailySlots.length + 1
+        });
+      }
+    }
+    setShowAddSlotModal(false);
+    setEditingSlotId(null);
+    setSlotFormTitle('');
+    setSlotFormTimeRange('');
+    setSlotFormPoints('2.0');
+  };
+
+  const handleDeleteSlot = (slotId) => {
+    if (!window.confirm("Are you sure you want to delete this routine slot?")) return;
+    if (socketRef.current) {
+      socketRef.current.emit('daily_slot_delete', { slotId });
+    }
+  };
+
+  const handleAskAICoach = async (topic) => {
+    setDailyAILoading(true);
+    setDailyAITip('');
+    try {
+      const prompt = `Give a short, friendly, cute and highly motivating 2-sentence tip for a girl's daily routine: Topic: ${topic}. Focus on healthy weight gain, glowing skin, or completing 8000 steps. Keep it sweet, caring, and under 35 words.`;
+      const response = await fetch("https://text.pollinations.ai/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            { role: "system", content: "You are a warm, sweet, encouraging personal daily habit and wellness coach." },
+            { role: "user", content: prompt }
+          ],
+          model: "openai",
+          seed: Math.floor(Math.random() * 99999)
+        })
+      });
+      if (response.ok) {
+        const text = await response.text();
+        setDailyAITip(text || "Drink water, stay active, and fuel your body with wholesome calorie-dense treats today!");
+      } else {
+        setDailyAITip("Remember: Small daily habits build amazing results! Eat well, hydrate, and get those 8,000 steps in today! 💖");
+      }
+    } catch (e) {
+      setDailyAITip("Remember: Small daily habits build amazing results! Eat well, hydrate, and get those 8,000 steps in today! 💖");
+    } finally {
+      setDailyAILoading(false);
+    }
+  };
 
   const handleToggleWishFulfillment = useCallback((wishId) => {
     setLoveLedger(prev => prev.map(item => {
@@ -2916,6 +3108,52 @@ export default function App() {
           } catch (e) {}
         }
       }
+    });
+
+    socketRef.current.on('daily_task_sync_response', ({ date, slots, submissions }) => {
+      if (Array.isArray(slots) && slots.length > 0) setDailySlots(slots);
+      if (Array.isArray(submissions)) setDailySubmissions(submissions);
+    });
+
+    socketRef.current.on('daily_task_submission_updated', ({ submission, approved, rejected, isNew, pointsAwarded }) => {
+      if (submission) {
+        setDailySubmissions(prev => {
+          const idx = prev.findIndex(s => s.id === submission.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = submission;
+            return next;
+          }
+          return [...prev, submission];
+        });
+
+        if (approved) {
+          try {
+            confetti({ particleCount: 80, spread: 90, origin: { y: 0.4 } });
+          } catch (e) {}
+          const activeRole = roleRef.current || role || localStorage.getItem('stealth_role');
+          if (activeRole !== 'parent' && activeRole !== 'admin') {
+            alert(`🎉 Task Approved by Darsh!\n\n+₹ ${pointsAwarded || submission.pointsAwarded || 0} has been added to your Love Balance! 💖`);
+          }
+        } else if (rejected) {
+          const activeRole = roleRef.current || role || localStorage.getItem('stealth_role');
+          if (activeRole !== 'parent' && activeRole !== 'admin') {
+            alert(`Note: Darsh requested a retake on this task:\n"${submission.adminFeedback || 'Please retake with clear proof'}"`);
+          }
+        }
+      }
+    });
+
+    socketRef.current.on('daily_task_admin_alert', (alertData) => {
+      const activeRole = roleRef.current || role || localStorage.getItem('stealth_role');
+      if (activeRole === 'parent' || activeRole === 'admin') {
+        try { playReceiveSound(); } catch (e) {}
+        setDailyAdminToast(alertData);
+      }
+    });
+
+    socketRef.current.on('daily_slots_updated', ({ slots }) => {
+      if (Array.isArray(slots)) setDailySlots(slots);
     });
 
     return () => {
@@ -3850,8 +4088,15 @@ export default function App() {
               </div>
             )}
 
-            <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-2 px-3 rounded-xl cursor-pointer transition-colors">
-              <FolderGit2 size={16} className="text-[#9b9b9b]" /> Projects
+            <div 
+              onClick={() => { setViewMode('daily_projects'); closeSidebarOnMobile(); }}
+              className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${viewMode === 'daily_projects' ? 'bg-[#212121] text-white font-medium' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
+            >
+              <div className="flex items-center gap-2.5">
+                <FolderGit2 size={16} className={viewMode === 'daily_projects' ? 'text-blue-400' : 'text-[#9b9b9b]'} />
+                <span>Projects</span>
+              </div>
+              <span className="text-[9px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-1.5 py-0.2 rounded font-mono font-bold">HOURLY</span>
             </div>
 
             <div 
@@ -6129,8 +6374,718 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* PART 5: DAILY PROJECTS & HOURLY TASK MANAGER */}
+                  <div className="bg-[#121212] border-2 border-emerald-500/40 hover:border-emerald-500/60 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-2xl space-y-3 lg:col-span-2 text-left font-sans">
+                    {/* PART 5 HEADER */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#222] pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-base">
+                          <Briefcase size={16} />
+                        </div>
+                        <div>
+                          <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
+                            <span>Part 5: Daily Projects & Routine Tasks</span>
+                            <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.2 rounded font-mono">
+                              HOURLY ENGINE
+                            </span>
+                          </h3>
+                          <p className="text-[10px] text-gray-400">Review Dora's submissions, download high-res proof & customize routine slots</p>
+                        </div>
+                      </div>
+
+                      {/* TAB SWITCHER & DATE PICKER */}
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <div className="flex bg-[#181818] p-0.5 rounded-xl border border-[#2a2a2a] text-xs font-bold">
+                          <button
+                            type="button"
+                            onClick={() => setDailyAdminTab('review')}
+                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                              dailyAdminTab === 'review' ? 'bg-emerald-600 text-white shadow' : 'text-gray-400 hover:text-white'
+                            }`}
+                          >
+                            <span>Review Tasks</span>
+                            {dailySubmissions.filter(s => s.status === 'PENDING').length > 0 && (
+                              <span className="bg-amber-400 text-black text-[9px] font-black px-1.5 py-0.2 rounded-full animate-bounce">
+                                {dailySubmissions.filter(s => s.status === 'PENDING').length}
+                              </span>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDailyAdminTab('slots')}
+                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                              dailyAdminTab === 'slots' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'
+                            }`}
+                          >
+                            ⚙️ Slot Manager
+                          </button>
+                        </div>
+
+                        <input
+                          type="date"
+                          value={dailySelectedDate}
+                          onChange={(e) => setDailySelectedDate(e.target.value)}
+                          className="bg-[#181818] border border-[#333] text-white text-xs px-2 py-1 rounded-xl outline-none font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    {/* REVIEW TAB */}
+                    {dailyAdminTab === 'review' && (
+                      <div className="space-y-3">
+                        {/* SUMMARY CARDS */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                          <div className="bg-[#181818] border border-[#262626] p-2 rounded-xl">
+                            <span className="text-[10px] text-gray-400">Total Slots</span>
+                            <div className="text-sm font-bold text-white font-mono">{dailySlots.filter(s => s.isActive).length}</div>
+                          </div>
+                          <div className="bg-[#181818] border border-amber-500/30 p-2 rounded-xl">
+                            <span className="text-[10px] text-amber-300">Pending Review</span>
+                            <div className="text-sm font-bold text-amber-400 font-mono">
+                              {dailySubmissions.filter(s => s.status === 'PENDING').length}
+                            </div>
+                          </div>
+                          <div className="bg-[#181818] border border-emerald-500/30 p-2 rounded-xl">
+                            <span className="text-[10px] text-emerald-300">Approved</span>
+                            <div className="text-sm font-bold text-emerald-400 font-mono">
+                              {dailySubmissions.filter(s => s.status === 'APPROVED').length}
+                            </div>
+                          </div>
+                          <div className="bg-[#181818] border border-blue-500/30 p-2 rounded-xl">
+                            <span className="text-[10px] text-blue-300">Points Awarded</span>
+                            <div className="text-sm font-bold text-blue-400 font-mono">
+                              ₹ {dailySubmissions.filter(s => s.status === 'APPROVED').reduce((acc, curr) => acc + (curr.pointsAwarded || 0), 0).toFixed(2)}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* SUBMISSIONS LIST */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                          {dailySlots.filter(s => s.isActive).map((slot) => {
+                            const sub = dailySubmissions.find(s => s.slotId === slot.id);
+                            const isApproved = sub && sub.status === 'APPROVED';
+                            const isPending = sub && sub.status === 'PENDING';
+                            const isRejected = sub && sub.status === 'REJECTED';
+
+                            return (
+                              <div
+                                key={slot.id}
+                                className={`p-3 rounded-2xl border transition-all ${
+                                  isPending 
+                                    ? 'bg-[#1a1813] border-amber-500/60 shadow-lg' 
+                                    : isApproved 
+                                      ? 'bg-[#121815] border-emerald-500/40' 
+                                      : 'bg-[#161616] border-[#262626]'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.2 rounded font-mono font-bold">
+                                        {slot.timeRange}
+                                      </span>
+                                      <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.2 rounded">
+                                        {slot.tag}
+                                      </span>
+                                    </div>
+                                    <h4 className="text-xs font-bold text-white mt-1">{slot.title}</h4>
+                                  </div>
+                                  <span className="text-xs font-bold text-emerald-400 font-mono shrink-0">
+                                    +₹ {Number(slot.rewardPoints || 0).toFixed(2)}
+                                  </span>
+                                </div>
+
+                                {sub ? (
+                                  <div className="mt-2.5 space-y-2 pt-2 border-t border-[#222]">
+                                    {sub.note && (
+                                      <p className="text-xs text-gray-300 italic bg-[#101010] p-2 rounded-xl border border-[#242424]">
+                                        "{sub.note}"
+                                      </p>
+                                    )}
+
+                                    {sub.image && (
+                                      <div className="flex items-center gap-2.5">
+                                        <img
+                                          src={sub.image}
+                                          alt="Proof"
+                                          className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-xl border border-[#333] cursor-pointer hover:scale-105 transition-transform shrink-0"
+                                          onClick={() => setDailyPreviewModalImg(sub.image)}
+                                        />
+                                        <div className="space-y-1 text-[11px] flex-1 min-w-0">
+                                          <button
+                                            type="button"
+                                            onClick={() => setDailyPreviewModalImg(sub.image)}
+                                            className="text-blue-400 hover:text-blue-300 flex items-center gap-1 font-semibold cursor-pointer"
+                                          >
+                                            <Eye size={12} />
+                                            <span>Full Preview</span>
+                                          </button>
+                                          <a
+                                            href={sub.image}
+                                            download={`dora_task_${dailySelectedDate}_${slot.id}.jpg`}
+                                            className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-semibold cursor-pointer"
+                                          >
+                                            <Download size={12} />
+                                            <span>Download Photo</span>
+                                          </a>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* ACTION BUTTONS FOR DARSH */}
+                                    <div className="pt-1 flex items-center gap-2">
+                                      {isPending ? (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleApproveDailyTask(sub)}
+                                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 px-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all text-center flex items-center justify-center gap-1"
+                                          >
+                                            <Check size={13} />
+                                            <span>Approve & Award +₹{slot.rewardPoints}</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRejectDailyTask(sub)}
+                                            className="bg-rose-950/60 hover:bg-rose-900/80 border border-rose-500/40 text-rose-300 text-xs font-semibold py-1.5 px-2.5 rounded-xl cursor-pointer active:scale-95"
+                                          >
+                                            Retake
+                                          </button>
+                                        </>
+                                      ) : isApproved ? (
+                                        <div className="w-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-xs font-bold py-1 px-2 rounded-xl text-center flex items-center justify-center gap-1">
+                                          <span>✓ Approved & Awarded (+₹{sub.pointsAwarded})</span>
+                                        </div>
+                                      ) : isRejected ? (
+                                        <div className="w-full bg-rose-950/60 border border-rose-500/30 text-rose-300 text-xs font-bold py-1 px-2 rounded-xl text-center">
+                                          <span>Retake Requested</span>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="mt-2 pt-2 border-t border-[#222] text-[10px] text-gray-500 italic">
+                                    No submission from Dora yet for this time slot.
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SLOTS MANAGER TAB (DYNAMIC ADD / EDIT / DELETE) */}
+                    {dailyAdminTab === 'slots' && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-gray-300">
+                            Configure Hourly Routine Slots:
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingSlotId(null);
+                              setSlotFormTitle('');
+                              setSlotFormTimeRange('');
+                              setSlotFormTag('Task');
+                              setSlotFormPoints('2.0');
+                              setShowAddSlotModal(true);
+                            }}
+                            className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-1 px-3 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1"
+                          >
+                            <Plus size={13} />
+                            <span>Add New Routine Slot</span>
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {dailySlots.map((slot) => (
+                            <div key={slot.id} className="bg-[#181818] border border-[#2a2a2a] p-3 rounded-2xl flex items-center justify-between gap-2">
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.2 rounded font-mono font-bold">
+                                    {slot.timeRange}
+                                  </span>
+                                  <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.2 rounded">
+                                    {slot.tag}
+                                  </span>
+                                  <span className="text-xs font-bold text-emerald-400 font-mono">
+                                    +₹{slot.rewardPoints}
+                                  </span>
+                                </div>
+                                <h4 className="text-xs font-bold text-white">{slot.title}</h4>
+                              </div>
+
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingSlotId(slot.id);
+                                    setSlotFormTitle(slot.title);
+                                    setSlotFormTimeRange(slot.timeRange);
+                                    setSlotFormTag(slot.tag);
+                                    setSlotFormPoints(String(slot.rewardPoints));
+                                    setShowAddSlotModal(true);
+                                  }}
+                                  className="text-gray-400 hover:text-white p-1 rounded-lg bg-[#222]"
+                                  title="Edit Slot"
+                                >
+                                  <Edit3 size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSlot(slot.id)}
+                                  className="text-gray-400 hover:text-rose-400 p-1 rounded-lg bg-[#222]"
+                                  title="Delete Slot"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                 </div>
 
+              </section>
+            )}
+
+            {/* DORA'S DAILY PROJECTS & HOURLY REPORT VIEW */}
+            {viewMode === 'daily_projects' && (
+              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-4 scrollbar-none font-sans">
+                {/* TOP HEADER & DATE BAR */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2 border-b border-[#222]">
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('real_gpt')}
+                      className="text-gray-400 hover:text-white p-1 rounded-xl cursor-pointer transition-colors"
+                      title="Back to ChatGPT Chat"
+                    >
+                      <ArrowLeft size={18} />
+                    </button>
+                    <div className="w-8 h-8 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                      <Briefcase size={16} />
+                    </div>
+                    <div>
+                      <h2 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                        <span>Daily Projects & Hourly Routine</span>
+                        <span className="text-[9px] bg-blue-500/20 text-blue-300 border border-blue-500/40 px-1.5 py-0.2 rounded font-mono font-bold">
+                          DORA
+                        </span>
+                      </h2>
+                      <p className="text-[11px] text-gray-400">Submit hourly tasks & routine proofs for Darsh's review & rewards</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <input
+                      type="date"
+                      value={dailySelectedDate}
+                      onChange={(e) => setDailySelectedDate(e.target.value)}
+                      className="bg-[#181818] border border-[#333] text-white text-xs px-2.5 py-1 rounded-xl outline-none focus:border-blue-500 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setDailySelectedDate(new Date().toISOString().split('T')[0])}
+                      className="bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 px-2 py-1 rounded-xl text-xs font-bold cursor-pointer transition-all"
+                    >
+                      Today
+                    </button>
+                  </div>
+                </div>
+
+                {/* SUMMARY STATS BAR */}
+                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="bg-[#141414] border border-[#262626] p-2.5 rounded-2xl">
+                    <div className="text-[10px] text-gray-400">Total Routine Slots</div>
+                    <div className="text-base font-bold text-white font-mono">{dailySlots.filter(s => s.isActive).length}</div>
+                  </div>
+                  <div className="bg-[#141414] border border-[#262626] p-2.5 rounded-2xl">
+                    <div className="text-[10px] text-gray-400">Completed (Approved)</div>
+                    <div className="text-base font-bold text-emerald-400 font-mono">
+                      {dailySubmissions.filter(s => s.status === 'APPROVED').length} ✓
+                    </div>
+                  </div>
+                  <div className="bg-[#141414] border border-[#262626] p-2.5 rounded-2xl">
+                    <div className="text-[10px] text-gray-400">Under Review</div>
+                    <div className="text-base font-bold text-amber-400 font-mono">
+                      {dailySubmissions.filter(s => s.status === 'PENDING').length} ⏳
+                    </div>
+                  </div>
+                </div>
+
+                {/* THE HOURLY REPORT TIMELINE BAR (MATCHING USER'S SCREENSHOT) */}
+                <div className="bg-[#0f172a] rounded-2xl sm:rounded-3xl p-3 sm:p-4 shadow-xl border border-blue-900/40 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs shadow">
+                        <Briefcase size={13} />
+                      </div>
+                      <span className="text-xs sm:text-sm font-black text-white tracking-wide">
+                        Hourly Report
+                      </span>
+                      <span className="w-4 h-4 rounded-full bg-blue-500/20 text-blue-300 text-[10px] font-bold flex items-center justify-center cursor-help" title="Tap a slot pill to submit or review proof">
+                        i
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-blue-300 font-mono">Scroll horizontal ➔</span>
+                  </div>
+
+                  {/* HORIZONTAL SCROLLING SLOT PILLS ROW */}
+                  <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none pt-1">
+                    {dailySlots.filter(s => s.isActive).map((slot) => {
+                      const sub = dailySubmissions.find(s => s.slotId === slot.id);
+                      const isSelected = dailySelectedSlotId === slot.id;
+                      const isApproved = sub && sub.status === 'APPROVED';
+                      const isPending = sub && sub.status === 'PENDING';
+                      const isRejected = sub && sub.status === 'REJECTED';
+
+                      const timeParts = slot.timeRange.split('-').map(t => t.trim());
+                      const topTime = timeParts[0] || slot.timeRange;
+                      const botTime = timeParts[1] || '';
+
+                      return (
+                        <div
+                          key={slot.id}
+                          onClick={() => setDailySelectedSlotId(slot.id)}
+                          className={`min-w-[90px] sm:min-w-[105px] max-w-[115px] p-2 sm:p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col items-center justify-between text-center select-none shrink-0 ${
+                            isSelected 
+                              ? 'bg-blue-950/80 border-blue-500 ring-2 ring-blue-400 shadow-lg scale-105' 
+                              : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-800 shadow-sm'
+                          }`}
+                        >
+                          {/* TIME HEADER */}
+                          <div className="space-y-0.5">
+                            <div className={`text-xs sm:text-sm font-black ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                              {topTime}
+                            </div>
+                            {botTime && (
+                              <div className={`text-[10px] font-medium ${isSelected ? 'text-blue-300' : 'text-gray-500'}`}>
+                                {botTime}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* STATUS BADGE */}
+                          <div className="my-1.5 w-full">
+                            {isApproved ? (
+                              <div className="bg-emerald-600 text-white text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
+                                <span>✓</span>
+                                <span>Done</span>
+                              </div>
+                            ) : isPending ? (
+                              <div className="bg-amber-500 text-black text-[9px] font-bold py-0.5 px-1.5 rounded-full flex items-center justify-center gap-0.5 shadow-sm animate-pulse">
+                                <span>⏳</span>
+                                <span>Review</span>
+                              </div>
+                            ) : isRejected ? (
+                              <div className="bg-rose-600 text-white text-[9px] font-bold py-0.5 px-1.5 rounded-full flex items-center justify-center shadow-sm">
+                                <span>Retake</span>
+                              </div>
+                            ) : slot.tag === 'Lunch' ? (
+                              <div className="bg-amber-600 text-white text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
+                                <span>🍴</span>
+                                <span>Lunch</span>
+                              </div>
+                            ) : slot.tag === 'Tea' ? (
+                              <div className="bg-blue-600 text-white text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
+                                <span>☕</span>
+                                <span>Tea</span>
+                              </div>
+                            ) : (
+                              <div className={`text-[9px] py-0.5 px-1.5 rounded-full font-medium ${isSelected ? 'bg-blue-900/50 text-blue-200' : 'bg-gray-100 text-gray-600'}`}>
+                                {slot.tag || 'Pending'}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* EYE ICON VIEW BUTTON (EXACTLY AS IN SCREENSHOT) */}
+                          {sub && sub.image ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDailyPreviewModalImg(sub.image);
+                              }}
+                              className="w-6 h-6 rounded-full border border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-sm active:scale-95 mt-0.5"
+                              title="View Proof Photo"
+                            >
+                              <Eye size={12} />
+                            </button>
+                          ) : (
+                            <div className="w-6 h-6 rounded-full border border-gray-300 text-gray-300 flex items-center justify-center mt-0.5">
+                              <Eye size={12} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ACTIVE SLOT SUBMISSION / STATUS CARD */}
+                {(() => {
+                  const activeSlot = dailySlots.find(s => s.id === dailySelectedSlotId) || dailySlots[0];
+                  if (!activeSlot) return null;
+                  const activeSub = dailySubmissions.find(s => s.slotId === activeSlot.id);
+                  const isApproved = activeSub && activeSub.status === 'APPROVED';
+                  const isPending = activeSub && activeSub.status === 'PENDING';
+                  const isRejected = activeSub && activeSub.status === 'REJECTED';
+
+                  return (
+                    <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-2xl space-y-4">
+                      {/* SLOT HEADER */}
+                      <div className="flex items-start justify-between gap-2 border-b border-[#222] pb-3">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-full font-mono font-bold">
+                              {activeSlot.timeRange}
+                            </span>
+                            <span className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full font-semibold">
+                              {activeSlot.tag}
+                            </span>
+                          </div>
+                          <h3 className="text-sm sm:text-base font-bold text-white mt-1">
+                            {activeSlot.title}
+                          </h3>
+                        </div>
+
+                        <div className="bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1 rounded-xl text-right shrink-0">
+                          <div className="text-[9px] text-gray-400">Reward</div>
+                          <div className="text-xs font-mono font-bold text-emerald-400">
+                            +₹ {Number(activeSlot.rewardPoints || 0).toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* STATUS BANNER */}
+                      {isApproved ? (
+                        <div className="bg-emerald-950/40 border border-emerald-500/40 p-3 rounded-2xl flex items-center justify-between gap-2 text-xs text-emerald-300">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">🎉</span>
+                            <div>
+                              <div className="font-bold text-white">Task Approved by Darsh!</div>
+                              <div className="text-[11px] text-emerald-300">
+                                +₹ {activeSub.pointsAwarded || activeSlot.rewardPoints} Love Balance has been credited!
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-emerald-600 text-white text-[10px] font-bold py-1 px-2.5 rounded-xl">
+                            ✓ Done
+                          </div>
+                        </div>
+                      ) : isPending ? (
+                        <div className="bg-amber-950/40 border border-amber-500/40 p-3 rounded-2xl flex items-center justify-between gap-2 text-xs text-amber-300 animate-in fade-in">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg animate-spin" style={{ animationDuration: '3s' }}>⏳</span>
+                            <div>
+                              <div className="font-bold text-white">Under Review by Darsh</div>
+                              <div className="text-[11px] text-amber-300">
+                                Proof submitted. Status will change to green "Done" once Darsh approves!
+                              </div>
+                            </div>
+                          </div>
+                          <div className="bg-amber-500 text-black text-[10px] font-bold py-1 px-2 rounded-xl">
+                            Pending Approval
+                          </div>
+                        </div>
+                      ) : isRejected ? (
+                        <div className="bg-rose-950/40 border border-rose-500/40 p-3 rounded-2xl flex items-center justify-between gap-2 text-xs text-rose-300">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">⚠️</span>
+                            <div>
+                              <div className="font-bold text-white">Retake Requested</div>
+                              <div className="text-[11px] text-rose-300">
+                                {activeSub.adminFeedback || "Please retake with clear proof photo."}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {/* EXISTING SUBMISSION PREVIEW */}
+                      {activeSub && (activeSub.image || activeSub.note) && (
+                        <div className="bg-[#101010] border border-[#222] p-3 rounded-2xl space-y-2">
+                          <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                            Your Submitted Proof:
+                          </div>
+                          {activeSub.note && (
+                            <p className="text-xs text-gray-200 italic bg-[#181818] p-2 rounded-xl border border-[#242424]">
+                              "{activeSub.note}"
+                            </p>
+                          )}
+                          {activeSub.image && (
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={activeSub.image}
+                                alt="Proof"
+                                className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-xl border border-[#333] cursor-pointer hover:scale-105 transition-transform"
+                                onClick={() => setDailyPreviewModalImg(activeSub.image)}
+                              />
+                              <div className="space-y-1 text-xs">
+                                <button
+                                  type="button"
+                                  onClick={() => setDailyPreviewModalImg(activeSub.image)}
+                                  className="text-blue-400 hover:text-blue-300 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Eye size={13} />
+                                  <span>View High-Res Photo</span>
+                                </button>
+                                <a
+                                  href={activeSub.image}
+                                  download={`proof_${activeSlot.id}.jpg`}
+                                  className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Download size={13} />
+                                  <span>Download</span>
+                                </a>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* SUBMISSION FORM (ONLY IF NOT SUBMITTED OR REJECTED) */}
+                      {(!activeSub || activeSub.status === 'REJECTED') && (
+                        <div className="space-y-3 pt-1">
+                          <div className="text-xs font-bold text-gray-300 flex items-center gap-1.5">
+                            <span>Upload Proof for {activeSlot.title}:</span>
+                          </div>
+
+                          {/* SINGLE TEXT LINE INPUT + CAMERA PLUS BUTTON (EXACTLY AS ASKED) */}
+                          <div className="flex items-center gap-2 bg-[#101010] border border-[#333] focus-within:border-blue-500 rounded-2xl px-3 py-2 transition-all shadow-inner">
+                            <input
+                              type="text"
+                              value={dailyNoteInput}
+                              onChange={(e) => setDailyNoteInput(e.target.value)}
+                              placeholder={`Enter note (e.g. 10 squats done / juice glass / 8k steps proof)...`}
+                              className="flex-1 bg-transparent text-xs text-white placeholder-gray-500 outline-none min-w-0"
+                            />
+
+                            {/* HIDDEN FILE INPUT */}
+                            <input
+                              ref={dailyFileInputRef}
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              onChange={handleDailyImageSelected}
+                              className="hidden"
+                            />
+
+                            {/* PLUS CAMERA BUTTON */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (dailyFileInputRef.current) dailyFileInputRef.current.click();
+                              }}
+                              className={`p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0 ${
+                                dailyImageProof 
+                                  ? 'bg-emerald-600 text-white' 
+                                  : 'bg-[#222] hover:bg-blue-600 text-gray-300 hover:text-white'
+                              }`}
+                              title="Click to take camera photo or upload screenshot"
+                            >
+                              <Plus size={16} />
+                            </button>
+                          </div>
+
+                          {/* IMAGE PREVIEW BOX IF SELECTED */}
+                          {dailyImageProof && (
+                            <div className="flex items-center gap-3 bg-[#181818] border border-emerald-500/30 p-2.5 rounded-2xl animate-in zoom-in-95">
+                              <img
+                                src={dailyImageProof}
+                                alt="Selected Proof"
+                                className="w-16 h-16 object-cover rounded-xl border border-[#333]"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold text-emerald-400">Photo Proof Ready</p>
+                                <p className="text-[10px] text-gray-400">Click submit to send to Darsh</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setDailyImageProof('')}
+                                className="text-gray-400 hover:text-rose-400 p-1 rounded cursor-pointer"
+                                title="Remove photo"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                          )}
+
+                          {/* SUBMIT BUTTON */}
+                          <button
+                            type="button"
+                            onClick={handleDailyTaskSubmit}
+                            className="w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+                          >
+                            <Camera size={15} />
+                            <span>Submit Task Proof for Darsh's Review</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* CHATGPT DAILY HABIT COACH WIDGET */}
+                      <div className="bg-[#101010] border border-[#222] rounded-2xl p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
+                            <Sparkles size={13} />
+                            <span>ChatGPT Daily Routine Assistant</span>
+                          </span>
+                          {dailyAILoading && <Loader2 size={12} className="animate-spin text-amber-400" />}
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => handleAskAICoach('10 Squats & Workout Routine')}
+                            className="text-[10px] bg-[#1c1c1c] hover:bg-[#282828] text-gray-300 px-2 py-1 rounded-lg border border-[#333] cursor-pointer"
+                          >
+                            💪 Squats Form
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAskAICoach('Healthy Morning Detox Juice')}
+                            className="text-[10px] bg-[#1c1c1c] hover:bg-[#282828] text-gray-300 px-2 py-1 rounded-lg border border-[#333] cursor-pointer"
+                          >
+                            🥤 Detox Juice
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAskAICoach('Heavy Breakfast for Weight Gain')}
+                            className="text-[10px] bg-[#1c1c1c] hover:bg-[#282828] text-gray-300 px-2 py-1 rounded-lg border border-[#333] cursor-pointer"
+                          >
+                            🍳 Weight Gain Meal
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAskAICoach('8,000 Steps Daily Motivation')}
+                            className="text-[10px] bg-[#1c1c1c] hover:bg-[#282828] text-gray-300 px-2 py-1 rounded-lg border border-[#333] cursor-pointer"
+                          >
+                            🚶 8K Steps
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAskAICoach('Night Glowing Skin Care')}
+                            className="text-[10px] bg-[#1c1c1c] hover:bg-[#282828] text-gray-300 px-2 py-1 rounded-lg border border-[#333] cursor-pointer"
+                          >
+                            ✨ Skincare Tip
+                          </button>
+                        </div>
+
+                        {dailyAITip && (
+                          <div className="bg-[#181818] border border-amber-500/30 p-2.5 rounded-xl text-xs text-amber-200 italic animate-in fade-in">
+                            "{dailyAITip}"
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </section>
             )}
 
@@ -6715,7 +7670,7 @@ export default function App() {
               </section>
             )}
 
-            {viewMode !== 'admin_dashboard' && (
+            {viewMode !== 'admin_dashboard' && viewMode !== 'daily_projects' && (
               <div className="px-3 sm:px-6 lg:px-8 pb-3 sm:pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
               {replyTarget && (
                 <div className="mb-2 bg-[#1a1a1a] border border-[#333] px-3.5 py-1.5 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-150">
@@ -7890,6 +8845,190 @@ export default function App() {
                 >
                   <Trash2 size={13} />
                   <span>Yes, Clear Now</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* FULL IMAGE PROOF PREVIEW & DOWNLOAD MODAL */}
+        {dailyPreviewModalImg && (
+          <div 
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-3 sm:p-6 animate-in fade-in duration-150 font-sans"
+            onClick={() => setDailyPreviewModalImg(null)}
+          >
+            <div 
+              className="relative max-w-2xl w-full bg-[#141414] border border-[#333] rounded-3xl p-3 sm:p-4 shadow-2xl flex flex-col max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-[#222]">
+                <div className="flex items-center gap-2">
+                  <span className="text-base font-bold text-white flex items-center gap-1.5">
+                    <span>📸</span>
+                    <span>Task Proof Photo</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={dailyPreviewModalImg}
+                    download={`task_proof_${Date.now()}.jpg`}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow active:scale-95 transition-all cursor-pointer"
+                    title="Download Photo"
+                  >
+                    <Download size={14} />
+                    <span>Download</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setDailyPreviewModalImg(null)}
+                    className="text-gray-400 hover:text-white p-1 rounded-xl cursor-pointer"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-auto flex items-center justify-center py-4">
+                <img 
+                  src={dailyPreviewModalImg} 
+                  alt="Proof" 
+                  className="max-h-[70vh] w-auto max-w-full rounded-2xl object-contain shadow-lg"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ADMIN REAL-TIME TASK NOTIFICATION TOAST BANNER */}
+        {dailyAdminToast && (role === 'parent' || role === 'admin') && (
+          <div className="fixed top-4 right-4 z-50 max-w-sm w-full bg-[#1c1917] border-2 border-amber-500 rounded-2xl p-3.5 shadow-2xl animate-in slide-in-from-top-4 duration-200 font-sans">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🔔</span>
+                <div>
+                  <h4 className="text-xs font-bold text-amber-300">New Task Proof Submitted!</h4>
+                  <p className="text-[11px] text-gray-200 font-semibold">{dailyAdminToast.slotTitle}</p>
+                  {dailyAdminToast.note && <p className="text-[10px] text-gray-400 italic">"{dailyAdminToast.note}"</p>}
+                </div>
+              </div>
+              <button 
+                onClick={() => setDailyAdminToast(null)}
+                className="text-gray-400 hover:text-white p-0.5 cursor-pointer"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="mt-2.5 flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setViewMode('admin_dashboard');
+                  setDailyAdminTab('review');
+                  setDailyAdminToast(null);
+                }}
+                className="flex-1 bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold py-1 px-2.5 rounded-lg text-center cursor-pointer shadow active:scale-95 transition-all"
+              >
+                Review Now in Admin Dashboard →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ADD / EDIT ROUTINE SLOT MODAL (FOR DARSH) */}
+        {showAddSlotModal && (
+          <div 
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150 font-sans"
+            onClick={() => setShowAddSlotModal(false)}
+          >
+            <div 
+              className="bg-[#171717] border border-[#2e2e2e] rounded-3xl p-4 sm:p-5 w-full max-w-md shadow-2xl space-y-3.5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
+                <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                  <Briefcase size={16} className="text-blue-400" />
+                  <span>{editingSlotId ? 'Edit Routine Slot' : 'Add New Routine Slot'}</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowAddSlotModal(false)}
+                  className="text-gray-400 hover:text-white p-1 rounded-xl cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="space-y-2.5 text-xs">
+                <div>
+                  <label className="text-gray-300 font-semibold block mb-1">Slot Title:</label>
+                  <input
+                    type="text"
+                    value={slotFormTitle}
+                    onChange={(e) => setSlotFormTitle(e.target.value)}
+                    placeholder="e.g. Morning Workout (10 Squats)"
+                    className="w-full bg-[#101010] border border-[#333] text-white p-2 rounded-xl outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-gray-300 font-semibold block mb-1">Time Range (e.g. 08:00 - 09:00):</label>
+                  <input
+                    type="text"
+                    value={slotFormTimeRange}
+                    onChange={(e) => setSlotFormTimeRange(e.target.value)}
+                    placeholder="e.g. 08:00 - 09:00"
+                    className="w-full bg-[#101010] border border-[#333] text-white p-2 rounded-xl outline-none focus:border-blue-500 font-mono"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-gray-300 font-semibold block mb-1">Category / Tag:</label>
+                    <select
+                      value={slotFormTag}
+                      onChange={(e) => setSlotFormTag(e.target.value)}
+                      className="w-full bg-[#101010] border border-[#333] text-white p-2 rounded-xl outline-none focus:border-blue-500"
+                    >
+                      <option value="Workout">Workout</option>
+                      <option value="Juice">Juice</option>
+                      <option value="Breakfast">Breakfast</option>
+                      <option value="Lunch">Lunch</option>
+                      <option value="Water">Water</option>
+                      <option value="Tea">Tea</option>
+                      <option value="Dinner">Dinner</option>
+                      <option value="Steps">Steps</option>
+                      <option value="Skincare">Skincare</option>
+                      <option value="Task">Task</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-gray-300 font-semibold block mb-1">Reward Points (₹):</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0.5"
+                      value={slotFormPoints}
+                      onChange={(e) => setSlotFormPoints(e.target.value)}
+                      placeholder="2.0"
+                      className="w-full bg-[#101010] border border-[#333] text-white p-2 rounded-xl outline-none focus:border-blue-500 font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#222]">
+                <button
+                  type="button"
+                  onClick={() => setShowAddSlotModal(false)}
+                  className="bg-[#222] hover:bg-[#2c2c2c] text-gray-300 text-xs font-bold py-2 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveSlotForm}
+                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all"
+                >
+                  {editingSlotId ? 'Save Changes' : 'Create Slot'}
                 </button>
               </div>
             </div>
