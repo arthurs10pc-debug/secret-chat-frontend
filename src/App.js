@@ -16,6 +16,13 @@ const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
 const SECRET_KEY = "StealthMasterKey99";
 const GLOBAL_ROOM = "stealth_master_room";
 
+const getLocalDateString = (d = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const PUBLIC_VAPID_KEY = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-8vMeAtA5cHmDkJ0d8Q9cW4vG0mJ5M3Q5lK0P8vWq6X5LwG0J7j6W0Yg';
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "🙏", "👌", "💯", "🤫", "✨"];
@@ -340,8 +347,15 @@ export default function App() {
     { id: 'slot_8', title: 'Google Fit 8,000 Steps Screenshot', timeRange: '10:00 - 10:30', tag: 'Steps', rewardPoints: 3.0, order: 8, isActive: true },
     { id: 'slot_9', title: 'Night Skin Care Routine & Glow Check', timeRange: '10:30 - 11:00', tag: 'Skincare', rewardPoints: 2.0, order: 9, isActive: true }
   ]);
-  const [dailySubmissions, setDailySubmissions] = useState([]);
-  const [dailySelectedDate, setDailySelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [dailySubmissions, setDailySubmissions] = useState(() => {
+    try {
+      const saved = localStorage.getItem('stealth_daily_submissions');
+      return saved ? JSON.parse(saved) : [];
+    } catch(e) {
+      return [];
+    }
+  });
+  const [dailySelectedDate, setDailySelectedDate] = useState(() => getLocalDateString());
   const [dailySelectedSlotId, setDailySelectedSlotId] = useState('slot_1');
   const [dailyNoteInput, setDailyNoteInput] = useState('');
   const [dailyImageProof, setDailyImageProof] = useState('');
@@ -1550,11 +1564,6 @@ export default function App() {
     if (viewMode === 'admin_dashboard' && role !== 'parent') {
       setViewMode('real_gpt');
     }
-    // Only Dora uploads tasks; Darsh (admin) checks & approves inside the Admin Dashboard
-    if (viewMode === 'daily_projects' && role === 'parent') {
-      setViewMode('admin_dashboard');
-      setDailyAdminTab('review');
-    }
   }, [role, viewMode]);
 
   useEffect(() => {
@@ -1840,13 +1849,13 @@ export default function App() {
 
     if (target === 'user') {
       setLoveBalance(prev => {
-        const next = Math.max(0, parseFloat((prev + finalDelta).toFixed(2)));
+        const next = parseFloat((prev + finalDelta).toFixed(2));
         try { localStorage.setItem('stealth_love_balance', next.toString()); } catch(e) {}
         return next;
       });
     } else {
       setAdminLoveBalance(prev => {
-        const next = Math.max(0, parseFloat((prev + finalDelta).toFixed(2)));
+        const next = parseFloat((prev + finalDelta).toFixed(2));
         try { localStorage.setItem('stealth_admin_love_balance', next.toString()); } catch(e) {}
         return next;
       });
@@ -2014,6 +2023,167 @@ export default function App() {
     }
   }, [handleLoveBalanceTransaction]);
 
+  // --- REAL-TIME PRACTICAL DAILY HABIT & INFRACTIONS EVALUATOR ---
+  const checkDailyHabitInfractions = useCallback((messagesList) => {
+    if (!messagesList || !Array.isArray(messagesList) || messagesList.length === 0) return;
+
+    let habitEvals = {};
+    try {
+      habitEvals = JSON.parse(localStorage.getItem('stealth_habit_evals') || '{}');
+    } catch(e) {}
+
+    const now = new Date();
+    const todayStr = getLocalDateString(now);
+    const yesterdayDate = new Date(Date.now() - 86400000);
+    const yesterdayStr = getLocalDateString(yesterdayDate);
+
+    const isMorningMsg = (text) => {
+      if (!text || typeof text !== 'string') return false;
+      const lower = text.toLowerCase();
+      return lower.includes('good morning') || lower.includes('morning') || lower.includes('gm') || 
+             lower.includes('gud mrng') || lower.includes('suprabhat') || lower.includes('subah') ||
+             lower.includes('goodmrng') || lower.includes('mrg') || lower.includes('uth jao');
+    };
+
+    const isGoodNightMsg = (text) => {
+      if (!text || typeof text !== 'string') return false;
+      const lower = text.toLowerCase();
+      return lower.includes('good night') || lower.includes('goodnight') || lower.includes('gn') || 
+             lower.includes('gud nite') || lower.includes('sweet dreams') || lower.includes('shubh ratri') || 
+             lower.includes('sleep tight') || lower.includes('so jao') || lower.includes('sleep well') ||
+             lower.includes('gnight') || lower.includes('night') || lower.includes('shubhratri');
+    };
+
+    let updated = false;
+
+    // --- 1. EVALUATE YESTERDAY (FOR DORA AND DARSH) ---
+    if (!habitEvals[yesterdayStr]) habitEvals[yesterdayStr] = {};
+
+    // A. Yesterday Morning Check (5:00 AM - 12:00 PM)
+    if (!habitEvals[yesterdayStr].doraMorningEvaluated) {
+      const hadMorning = messagesList.some(m => {
+        if (!m.timestamp && !m.createdAt) return false;
+        const d = new Date(m.timestamp || m.createdAt);
+        const dStr = getLocalDateString(d);
+        const h = d.getHours();
+        const isDora = m.senderRole === 'user' || m.senderRole === 'A';
+        return isDora && dStr === yesterdayStr && h >= 5 && h < 12 && isMorningMsg(m.text || '');
+      });
+      habitEvals[yesterdayStr].doraMorningEvaluated = true;
+      updated = true;
+      if (!hadMorning) {
+        handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (${yesterdayStr})`, false, 'user');
+      } else {
+        handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (${yesterdayStr})`, false, 'user');
+      }
+    }
+
+    if (!habitEvals[yesterdayStr].darshMorningEvaluated) {
+      const hadMorning = messagesList.some(m => {
+        if (!m.timestamp && !m.createdAt) return false;
+        const d = new Date(m.timestamp || m.createdAt);
+        const dStr = getLocalDateString(d);
+        const h = d.getHours();
+        const isDarsh = m.senderRole === 'parent' || m.senderRole === 'admin' || m.senderRole === 'H';
+        return isDarsh && dStr === yesterdayStr && h >= 5 && h < 12 && isMorningMsg(m.text || '');
+      });
+      habitEvals[yesterdayStr].darshMorningEvaluated = true;
+      updated = true;
+      if (!hadMorning) {
+        handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (${yesterdayStr})`, false, 'admin');
+      } else {
+        handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (${yesterdayStr})`, false, 'admin');
+      }
+    }
+
+    // B. Yesterday Night Check (Sleeping Without "Good Night" - 8:00 PM to 4:30 AM)
+    if (!habitEvals[yesterdayStr].doraNightEvaluated) {
+      const hadNight = messagesList.some(m => {
+        if (!m.timestamp && !m.createdAt) return false;
+        const d = new Date(m.timestamp || m.createdAt);
+        const dStr = getLocalDateString(d);
+        const h = d.getHours();
+        const isDora = m.senderRole === 'user' || m.senderRole === 'A';
+        const matchesYesterdayEve = dStr === yesterdayStr && h >= 20;
+        const matchesTodayWeeHours = dStr === todayStr && h < 5;
+        return isDora && (matchesYesterdayEve || matchesTodayWeeHours) && isGoodNightMsg(m.text || '');
+      });
+      habitEvals[yesterdayStr].doraNightEvaluated = true;
+      updated = true;
+      if (!hadNight) {
+        handleLoveBalanceTransaction(3.00, 'debit', `Sleeping Without "Good Night" (${yesterdayStr})`, false, 'user');
+      } else {
+        handleLoveBalanceTransaction(2.00, 'credit', `Sweet Good Night Wish (${yesterdayStr})`, false, 'user');
+      }
+    }
+
+    if (!habitEvals[yesterdayStr].darshNightEvaluated) {
+      const hadNight = messagesList.some(m => {
+        if (!m.timestamp && !m.createdAt) return false;
+        const d = new Date(m.timestamp || m.createdAt);
+        const dStr = getLocalDateString(d);
+        const h = d.getHours();
+        const isDarsh = m.senderRole === 'parent' || m.senderRole === 'admin' || m.senderRole === 'H';
+        const matchesYesterdayEve = dStr === yesterdayStr && h >= 20;
+        const matchesTodayWeeHours = dStr === todayStr && h < 5;
+        return isDarsh && (matchesYesterdayEve || matchesTodayWeeHours) && isGoodNightMsg(m.text || '');
+      });
+      habitEvals[yesterdayStr].darshNightEvaluated = true;
+      updated = true;
+      if (!hadNight) {
+        handleLoveBalanceTransaction(3.00, 'debit', `Sleeping Without "Good Night" (${yesterdayStr})`, false, 'admin');
+      } else {
+        handleLoveBalanceTransaction(2.00, 'credit', `Sweet Good Night Wish (${yesterdayStr})`, false, 'admin');
+      }
+    }
+
+    // --- 2. EVALUATE TODAY (IF PAST NOON 12:00 PM) ---
+    if (!habitEvals[todayStr]) habitEvals[todayStr] = {};
+    const currentHour = now.getHours();
+
+    if (currentHour >= 12 && !habitEvals[todayStr].doraMorningEvaluated) {
+      const hadMorning = messagesList.some(m => {
+        if (!m.timestamp && !m.createdAt) return false;
+        const d = new Date(m.timestamp || m.createdAt);
+        const dStr = getLocalDateString(d);
+        const h = d.getHours();
+        const isDora = m.senderRole === 'user' || m.senderRole === 'A';
+        return isDora && dStr === todayStr && h >= 5 && h < 12 && isMorningMsg(m.text || '');
+      });
+      habitEvals[todayStr].doraMorningEvaluated = true;
+      updated = true;
+      if (!hadMorning) {
+        handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (Today)`, false, 'user');
+      } else {
+        handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (Today)`, false, 'user');
+      }
+    }
+
+    if (currentHour >= 12 && !habitEvals[todayStr].darshMorningEvaluated) {
+      const hadMorning = messagesList.some(m => {
+        if (!m.timestamp && !m.createdAt) return false;
+        const d = new Date(m.timestamp || m.createdAt);
+        const dStr = getLocalDateString(d);
+        const h = d.getHours();
+        const isDarsh = m.senderRole === 'parent' || m.senderRole === 'admin' || m.senderRole === 'H';
+        return isDarsh && dStr === todayStr && h >= 5 && h < 12 && isMorningMsg(m.text || '');
+      });
+      habitEvals[todayStr].darshMorningEvaluated = true;
+      updated = true;
+      if (!hadMorning) {
+        handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (Today)`, false, 'admin');
+      } else {
+        handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (Today)`, false, 'admin');
+      }
+    }
+
+    if (updated) {
+      try {
+        localStorage.setItem('stealth_habit_evals', JSON.stringify(habitEvals));
+      } catch(e) {}
+    }
+  }, [handleLoveBalanceTransaction]);
+
 
   const handleOpenClearModal = useCallback((target = null) => {
     setClearModalTarget(target || activeLbTarget || 'user');
@@ -2102,7 +2272,7 @@ export default function App() {
     }
   }, []);
 
-  const compressImage = (file, maxWidth = 1280, quality = 0.8) => {
+  const compressImage = (file, maxWidth = 960, quality = 0.65) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -2142,7 +2312,7 @@ export default function App() {
 
   const handleDailyTaskSubmit = () => {
     if (roleRef.current === 'parent' || role === 'parent') {
-      alert("Task upload is only for Dora. Admin (Darsh) reviews and approves inside the Admin Dashboard.");
+      alert("Task upload is only for Dora. Admin (Darsh) reviews and approves.");
       return;
     }
     if (!dailySelectedSlotId) return;
@@ -2151,41 +2321,114 @@ export default function App() {
       return;
     }
     const selectedSlot = dailySlots.find(s => s.id === dailySelectedSlotId);
+    const submissionId = 'sub_' + dailySelectedDate + '_' + dailySelectedSlotId;
+    const submissionData = {
+      id: submissionId,
+      date: dailySelectedDate,
+      slotId: dailySelectedSlotId,
+      slotTitle: selectedSlot ? selectedSlot.title : 'Routine Task',
+      note: dailyNoteInput.trim(),
+      image: dailyImageProof || '',
+      userRole: roleRef.current || role || 'user',
+      status: 'PENDING',
+      pointsAwarded: 0,
+      submittedAt: new Date().toISOString(),
+      reviewedAt: null,
+      adminFeedback: ''
+    };
+
+    // 1. Instant optimistic local update
+    setDailySubmissions(prev => {
+      const filtered = prev.filter(s => s.id !== submissionId);
+      const updated = [...filtered, submissionData];
+      try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(updated)); } catch(e) {}
+      return updated;
+    });
+
+    // 2. Dual-channel socket emission for 100% reliable instant delivery
     if (socketRef.current) {
-      socketRef.current.emit('daily_task_submit', {
-        date: dailySelectedDate,
-        slotId: dailySelectedSlotId,
-        slotTitle: selectedSlot ? selectedSlot.title : 'Routine Task',
-        note: dailyNoteInput.trim(),
-        image: dailyImageProof,
-        userRole: roleRef.current || role || 'user'
+      socketRef.current.emit('daily_task_submit', submissionData);
+      socketRef.current.emit('love_balance_action', {
+        room: GLOBAL_ROOM,
+        action: 'DAILY_TASK_SUBMIT',
+        submission: submissionData,
+        senderRole: 'user',
+        timestamp: Date.now()
       });
     }
+
     setDailyNoteInput('');
     setDailyImageProof('');
     alert("✨ Task submitted! Status is now PENDING REVIEW by Darsh. Points will be awarded once approved!");
   };
 
   const handleApproveDailyTask = (sub) => {
-    if (!sub || !socketRef.current) return;
+    if (!sub) return;
     const slot = dailySlots.find(s => s.id === sub.slotId);
-    const pts = slot ? slot.rewardPoints : 2.0;
-    socketRef.current.emit('daily_task_approve', {
-      submissionId: sub.id,
-      points: pts,
-      feedback: 'Approved by Darsh',
-      slotTitle: slot ? slot.title : 'Routine Task'
+    const pts = slot ? Number(slot.rewardPoints || 2.0) : 2.0;
+    const slotTitle = slot ? slot.title : 'Routine Task';
+
+    // 1. Optimistic update
+    setDailySubmissions(prev => {
+      const updated = prev.map(s => s.id === sub.id ? { ...s, status: 'APPROVED', pointsAwarded: pts, reviewedAt: new Date().toISOString() } : s);
+      try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(updated)); } catch(e) {}
+      return updated;
     });
+
+    // 2. Award Love Balance to Dora
+    handleLoveBalanceTransaction(pts, 'credit', `Daily Routine: ${slotTitle}`, false, 'user');
+
+    // 3. Dual-channel emission
+    if (socketRef.current) {
+      socketRef.current.emit('daily_task_approve', {
+        submissionId: sub.id,
+        points: pts,
+        feedback: 'Approved by Darsh',
+        slotTitle
+      });
+      socketRef.current.emit('love_balance_action', {
+        room: GLOBAL_ROOM,
+        action: 'DAILY_TASK_APPROVED',
+        submissionId: sub.id,
+        points: pts,
+        slotTitle,
+        senderRole: 'admin',
+        timestamp: Date.now()
+      });
+    }
+
+    try {
+      confetti({ particleCount: 75, spread: 80, origin: { y: 0.4 } });
+    } catch(e) {}
   };
 
   const handleRejectDailyTask = (sub) => {
-    if (!sub || !socketRef.current) return;
+    if (!sub) return;
     const reason = window.prompt("Enter reason for requesting retake:", "Please retake with clear proof photo");
     if (reason === null) return;
-    socketRef.current.emit('daily_task_reject', {
-      submissionId: sub.id,
-      feedback: reason
+
+    // 1. Optimistic update
+    setDailySubmissions(prev => {
+      const updated = prev.map(s => s.id === sub.id ? { ...s, status: 'REJECTED', adminFeedback: reason, reviewedAt: new Date().toISOString() } : s);
+      try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(updated)); } catch(e) {}
+      return updated;
     });
+
+    // 2. Dual-channel emission
+    if (socketRef.current) {
+      socketRef.current.emit('daily_task_reject', {
+        submissionId: sub.id,
+        feedback: reason
+      });
+      socketRef.current.emit('love_balance_action', {
+        room: GLOBAL_ROOM,
+        action: 'DAILY_TASK_REJECTED',
+        submissionId: sub.id,
+        feedback: reason,
+        senderRole: 'admin',
+        timestamp: Date.now()
+      });
+    }
   };
 
   const handleSaveSlotForm = () => {
@@ -2570,6 +2813,7 @@ export default function App() {
       }));
       setStealthMessages(parsed);
       markMessagesAsSeen();
+      checkDailyHabitInfractions(parsed);
     });
 
     socketRef.current.on('peer_typing_status', (data) => {
@@ -3011,6 +3255,47 @@ export default function App() {
           }
           return item;
         }));
+      } else if (data.action === 'DAILY_TASK_SUBMIT' && data.submission) {
+        const sub = data.submission;
+        setDailySubmissions(prev => {
+          const idx = prev.findIndex(s => s.id === sub.id);
+          const next = idx >= 0 ? [...prev] : [...prev, sub];
+          if (idx >= 0) next[idx] = sub;
+          try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(next)); } catch(e) {}
+          return next;
+        });
+
+        if (myRole === 'parent' || myRole === 'admin') {
+          try { playReceiveSound(); } catch(e) {}
+          setDailyAdminToast({
+            slotId: sub.slotId,
+            slotTitle: sub.slotTitle || 'Routine Task',
+            date: sub.date,
+            note: sub.note,
+            hasImage: Boolean(sub.image),
+            timestamp: Date.now()
+          });
+          triggerMobileNotification("New Hourly Task Proof submitted by Dora!", "user");
+        }
+      } else if (data.action === 'DAILY_TASK_APPROVED' && data.submissionId) {
+        setDailySubmissions(prev => {
+          const updated = prev.map(s => s.id === data.submissionId ? { ...s, status: 'APPROVED', pointsAwarded: data.points } : s);
+          try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(updated)); } catch(e) {}
+          return updated;
+        });
+        if (myRole !== 'parent' && myRole !== 'admin') {
+          try { confetti({ particleCount: 80, spread: 90, origin: { y: 0.4 } }); } catch(e) {}
+          alert(`🎉 Task Approved by Darsh!\n\n+₹ ${data.points || 0} has been added to your Love Balance! 💖`);
+        }
+      } else if (data.action === 'DAILY_TASK_REJECTED' && data.submissionId) {
+        setDailySubmissions(prev => {
+          const updated = prev.map(s => s.id === data.submissionId ? { ...s, status: 'REJECTED', adminFeedback: data.feedback } : s);
+          try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(updated)); } catch(e) {}
+          return updated;
+        });
+        if (myRole !== 'parent' && myRole !== 'admin') {
+          alert(`Note: Darsh requested a retake on this task:\n"${data.feedback || 'Please retake with clear proof'}"`);
+        }
       } else if (data.action === 'WISH_REQUEST') {
         const req = data.wishRequest;
         if (req) {
@@ -3051,36 +3336,12 @@ export default function App() {
         }
       } else if (data.action === 'SYNC_STATE_RESPONSE') {
         if (typeof data.loveBalance === 'number') {
-          setLoveBalance(prev => {
-            const serverVal = data.loveBalance;
-            const finalVal = (serverVal > 0) ? serverVal : (prev > 0 ? prev : 0);
-            try { localStorage.setItem('stealth_love_balance', finalVal.toString()); } catch(e) {}
-            if (serverVal === 0 && prev > 0 && socketRef.current) {
-              socketRef.current.emit('love_balance_action', {
-                room: GLOBAL_ROOM,
-                action: 'OVERRIDE_BALANCE',
-                target: 'user',
-                newBalance: prev
-              });
-            }
-            return finalVal;
-          });
+          setLoveBalance(data.loveBalance);
+          try { localStorage.setItem('stealth_love_balance', data.loveBalance.toString()); } catch(e) {}
         }
         if (typeof data.adminLoveBalance === 'number') {
-          setAdminLoveBalance(prev => {
-            const serverVal = data.adminLoveBalance;
-            const finalVal = (serverVal > 0) ? serverVal : (prev > 0 ? prev : 0);
-            try { localStorage.setItem('stealth_admin_love_balance', finalVal.toString()); } catch(e) {}
-            if (serverVal === 0 && prev > 0 && socketRef.current) {
-              socketRef.current.emit('love_balance_action', {
-                room: GLOBAL_ROOM,
-                action: 'OVERRIDE_BALANCE',
-                target: 'admin',
-                newBalance: prev
-              });
-            }
-            return finalVal;
-          });
+          setAdminLoveBalance(data.adminLoveBalance);
+          try { localStorage.setItem('stealth_admin_love_balance', data.adminLoveBalance.toString()); } catch(e) {}
         }
         if (Array.isArray(data.loveLedger) && data.loveLedger.length > 0) {
           const sanitized = data.loveLedger.filter(item => {
@@ -4099,22 +4360,18 @@ export default function App() {
 
             <div 
               onClick={() => { 
-                if (role === 'parent') {
-                  setViewMode('admin_dashboard');
-                  setDailyAdminTab('review');
-                } else {
-                  setViewMode('daily_projects');
-                }
+                setViewMode('daily_projects');
+                setDailyAdminTab('review');
                 closeSidebarOnMobile(); 
               }}
               className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${
-                (role !== 'parent' && viewMode === 'daily_projects') || (role === 'parent' && viewMode === 'admin_dashboard' && dailyAdminTab === 'review')
+                viewMode === 'daily_projects'
                   ? 'bg-[#212121] text-white font-medium' 
                   : 'text-[#ececf1] hover:bg-[#1a1a1a]'
               }`}
             >
               <div className="flex items-center gap-2.5">
-                <FolderGit2 size={16} className={(role !== 'parent' && viewMode === 'daily_projects') || (role === 'parent' && viewMode === 'admin_dashboard' && dailyAdminTab === 'review') ? 'text-blue-400' : 'text-[#9b9b9b]'} />
+                <FolderGit2 size={16} className={viewMode === 'daily_projects' ? 'text-blue-400' : 'text-[#9b9b9b]'} />
                 <span>{role === 'parent' ? "Dora's Tasks (Admin)" : "Projects"}</span>
               </div>
               <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold ${
@@ -4284,25 +4541,25 @@ export default function App() {
                   className="flex items-center gap-1.5 bg-[#182229] hover:bg-[#2a3942] border border-pink-500/50 text-white px-2 sm:px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 shadow-sm"
                   title="Dora: 💕 Love Balance | Darsh: 👑 Love Balance"
                 >
-                  <span className="flex items-center gap-1 text-pink-300">
-                    <span>💕</span>
-                    <span>₹{Number(loveBalance || 0).toFixed(2)}</span>
+                  <span className={`flex items-center gap-1 ${Number(loveBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}>
+                    <span>{Number(loveBalance || 0) < 0 ? '💔' : '💕'}</span>
+                    <span>{Number(loveBalance || 0) < 0 ? `-₹${Math.abs(Number(loveBalance || 0)).toFixed(2)}` : `₹${Number(loveBalance || 0).toFixed(2)}`}</span>
                   </span>
                   <span className="text-[#374248]">|</span>
-                  <span className="flex items-center gap-1 text-blue-300">
-                    <span>👑</span>
-                    <span>₹{Number(adminLoveBalance || 0).toFixed(2)}</span>
+                  <span className={`flex items-center gap-1 ${Number(adminLoveBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}>
+                    <span>{Number(adminLoveBalance || 0) < 0 ? '💔' : '👑'}</span>
+                    <span>{Number(adminLoveBalance || 0) < 0 ? `-₹${Math.abs(Number(adminLoveBalance || 0)).toFixed(2)}` : `₹${Number(adminLoveBalance || 0).toFixed(2)}`}</span>
                   </span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                  className="flex items-center gap-1 bg-[#182229] hover:bg-[#2a3942] border border-pink-500/50 text-pink-300 hover:text-white px-2 sm:px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 shadow-sm"
+                  className={`flex items-center gap-1 bg-[#182229] hover:bg-[#2a3942] border ${Number(loveBalance || 0) < 0 ? 'border-rose-500/60 text-rose-300' : 'border-pink-500/50 text-pink-300'} hover:text-white px-2 sm:px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 shadow-sm`}
                   title="Your Love Balance Passbook & Wish Store"
                 >
-                  <span className="text-pink-400">💖</span>
-                  <span>₹ {Number(loveBalance || 0).toFixed(2)}</span>
+                  <span>{Number(loveBalance || 0) < 0 ? '💔' : '💖'}</span>
+                  <span>{Number(loveBalance || 0) < 0 ? `-₹ ${Math.abs(Number(loveBalance || 0)).toFixed(2)}` : `₹ ${Number(loveBalance || 0).toFixed(2)}`}</span>
                 </button>
               )}
 
@@ -4957,25 +5214,25 @@ export default function App() {
                 className="flex items-center gap-1.5 bg-emerald-950/50 hover:bg-emerald-900/70 border border-emerald-500/60 hover:border-emerald-400 text-white px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all shadow-[0_0_12px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
                 title="Dora: 💕 Love Balance | Darsh: 👑 Love Balance"
               >
-                <span className="flex items-center gap-1 text-pink-300">
-                  <span>💕</span>
-                  <span>₹{Number(loveBalance || 0).toFixed(2)}</span>
+                <span className={`flex items-center gap-1 ${Number(loveBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}>
+                  <span>{Number(loveBalance || 0) < 0 ? '💔' : '💕'}</span>
+                  <span>{Number(loveBalance || 0) < 0 ? `-₹${Math.abs(Number(loveBalance || 0)).toFixed(2)}` : `₹${Number(loveBalance || 0).toFixed(2)}`}</span>
                 </span>
                 <span className="text-emerald-700">|</span>
-                <span className="flex items-center gap-1 text-blue-300">
-                  <span>👑</span>
-                  <span>₹{Number(adminLoveBalance || 0).toFixed(2)}</span>
+                <span className={`flex items-center gap-1 ${Number(adminLoveBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}>
+                  <span>{Number(adminLoveBalance || 0) < 0 ? '💔' : '👑'}</span>
+                  <span>{Number(adminLoveBalance || 0) < 0 ? `-₹${Math.abs(Number(adminLoveBalance || 0)).toFixed(2)}` : `₹${Number(adminLoveBalance || 0).toFixed(2)}`}</span>
                 </span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                className="flex items-center gap-1 bg-emerald-950/50 hover:bg-emerald-900/70 border border-emerald-500/60 hover:border-emerald-400 text-emerald-300 hover:text-white px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all shadow-[0_0_12px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
+                className={`flex items-center gap-1 bg-emerald-950/50 hover:bg-emerald-900/70 border ${Number(loveBalance || 0) < 0 ? 'border-rose-500/70 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.3)]' : 'border-emerald-500/60 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)]'} hover:text-white px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0`}
                 title="Open Love Balance Passbook & Wish Store"
               >
-                <span className="text-pink-400 font-sans font-black text-sm">💖</span>
-                <span>₹ {Number(loveBalance || 0).toFixed(2)}</span>
+                <span className="text-sm font-sans">{Number(loveBalance || 0) < 0 ? '💔' : '💖'}</span>
+                <span>{Number(loveBalance || 0) < 0 ? `-₹ ${Math.abs(Number(loveBalance || 0)).toFixed(2)}` : `₹ ${Number(loveBalance || 0).toFixed(2)}`}</span>
               </button>
             )}
 
@@ -5880,13 +6137,17 @@ export default function App() {
 
                         {/* DUAL BALANCES DISPLAY */}
                         <div className="flex items-center gap-1.5 text-right">
-                          <div className="bg-[#181818] border border-pink-500/30 px-2 py-0.5 rounded-xl">
+                          <div className={`bg-[#181818] border ${Number(loveBalance || 0) < 0 ? 'border-rose-500/50' : 'border-pink-500/30'} px-2 py-0.5 rounded-xl`}>
                             <div className="text-[9px] text-gray-400">Dora</div>
-                            <div className="text-xs sm:text-sm font-black text-emerald-400 font-mono">₹ {Number(loveBalance || 0).toFixed(2)}</div>
+                            <div className={`text-xs sm:text-sm font-black font-mono ${Number(loveBalance || 0) < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                              {Number(loveBalance || 0) < 0 ? `-₹ ${Math.abs(Number(loveBalance || 0)).toFixed(2)}` : `₹ ${Number(loveBalance || 0).toFixed(2)}`}
+                            </div>
                           </div>
-                          <div className="bg-[#181818] border border-blue-500/30 px-2 py-0.5 rounded-xl">
+                          <div className={`bg-[#181818] border ${Number(adminLoveBalance || 0) < 0 ? 'border-rose-500/50' : 'border-blue-500/30'} px-2 py-0.5 rounded-xl`}>
                             <div className="text-[9px] text-gray-400">Darsh</div>
-                            <div className="text-xs sm:text-sm font-black text-blue-400 font-mono">₹ {Number(adminLoveBalance || 0).toFixed(2)}</div>
+                            <div className={`text-xs sm:text-sm font-black font-mono ${Number(adminLoveBalance || 0) < 0 ? 'text-rose-400' : 'text-blue-400'}`}>
+                              {Number(adminLoveBalance || 0) < 0 ? `-₹ ${Math.abs(Number(adminLoveBalance || 0)).toFixed(2)}` : `₹ ${Number(adminLoveBalance || 0).toFixed(2)}`}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -5903,7 +6164,9 @@ export default function App() {
                           }`}
                         >
                           <span>💕 Dora</span>
-                          <span className="text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono">₹ {Number(loveBalance || 0).toFixed(2)}</span>
+                          <span className={`text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono ${Number(loveBalance || 0) < 0 ? 'text-rose-400 font-bold' : ''}`}>
+                            {Number(loveBalance || 0) < 0 ? `-₹ ${Math.abs(Number(loveBalance || 0)).toFixed(2)}` : `₹ ${Number(loveBalance || 0).toFixed(2)}`}
+                          </span>
                         </button>
                         <button
                           type="button"
@@ -5915,7 +6178,9 @@ export default function App() {
                           }`}
                         >
                           <span>👑 Darsh</span>
-                          <span className="text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono">₹ {Number(adminLoveBalance || 0).toFixed(2)}</span>
+                          <span className={`text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono ${Number(adminLoveBalance || 0) < 0 ? 'text-rose-400 font-bold' : ''}`}>
+                            {Number(adminLoveBalance || 0) < 0 ? `-₹ ${Math.abs(Number(adminLoveBalance || 0)).toFixed(2)}` : `₹ ${Number(adminLoveBalance || 0).toFixed(2)}`}
+                          </span>
                         </button>
                       </div>
 
@@ -6704,9 +6969,525 @@ export default function App() {
               </section>
             )}
 
-            {/* DORA'S DAILY PROJECTS & HOURLY REPORT VIEW */}
-            {viewMode === 'daily_projects' && (
-              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-4 scrollbar-none font-sans">
+            {/* --- DARSH ADMIN DEDICATED APPROVAL REQUESTS & SLOTS CUSTOMIZATION SCREEN --- */}
+            {viewMode === 'daily_projects' && role === 'parent' && (
+              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-4 scrollbar-none font-sans animate-in fade-in duration-150">
+                {/* ADMIN APPROVAL HERO HEADER */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#222]">
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('real_gpt')}
+                      className="text-gray-400 hover:text-white p-1.5 rounded-xl cursor-pointer transition-colors bg-[#181818] border border-[#2a2a2a]"
+                      title="Return to Chat"
+                    >
+                      <ArrowLeft size={17} />
+                    </button>
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold text-lg">
+                      👑
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-sm sm:text-base font-bold text-white">Dora's Task Approvals (Admin)</h2>
+                        <span className="text-[9px] bg-amber-500 text-black px-1.5 py-0.2 rounded font-bold font-mono">
+                          DARSH
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-400">Review Dora's routine proofs, download photos, and approve Love Balance rewards</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <input
+                      type="date"
+                      value={dailySelectedDate}
+                      onChange={(e) => setDailySelectedDate(e.target.value)}
+                      className="bg-[#181818] border border-[#333] text-white text-xs px-2.5 py-1.5 rounded-xl outline-none focus:border-amber-500 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setDailySelectedDate(getLocalDateString())}
+                      className="bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 border border-amber-500/40 px-2.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all"
+                    >
+                      Today
+                    </button>
+                  </div>
+                </div>
+
+                {/* TAB SWITCHER: APPROVAL REQUESTS VS SLOTS CUSTOMIZATION */}
+                <div className="flex bg-[#141414] p-1 rounded-2xl border border-[#262626] text-xs font-bold gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setDailyAdminTab('review')}
+                    className={`flex-1 py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                      dailyAdminTab === 'review'
+                        ? 'bg-amber-500 text-black shadow-lg font-black'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    <Briefcase size={14} />
+                    <span>Task Approvals</span>
+                    {dailySubmissions.filter(s => s.status === 'PENDING').length > 0 && (
+                      <span className="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
+                        {dailySubmissions.filter(s => s.status === 'PENDING').length}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDailyAdminTab('slots')}
+                    className={`flex-1 py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                      dailyAdminTab === 'slots'
+                        ? 'bg-blue-600 text-white shadow-lg font-black'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    <SlidersHorizontal size={14} />
+                    <span>Slots Customization</span>
+                  </button>
+                </div>
+
+                {/* TAB 1: TASK APPROVALS INTERFACE */}
+                {dailyAdminTab === 'review' && (
+                  <div className="space-y-4">
+                    {/* STATS OVERVIEW */}
+                    <div className="grid grid-cols-3 gap-2.5 text-center text-xs">
+                      <div className="bg-[#141414] border border-[#262626] p-3 rounded-2xl">
+                        <div className="text-[10px] text-gray-400">Total Routine Slots</div>
+                        <div className="text-lg font-bold text-white font-mono">{dailySlots.filter(s => s.isActive).length}</div>
+                      </div>
+                      <div className="bg-[#141414] border border-amber-500/40 p-3 rounded-2xl">
+                        <div className="text-[10px] text-amber-300 font-bold">Awaiting Your Approval</div>
+                        <div className="text-lg font-black text-amber-400 font-mono">
+                          {dailySubmissions.filter(s => s.status === 'PENDING').length} ⏳
+                        </div>
+                      </div>
+                      <div className="bg-[#141414] border border-emerald-500/30 p-3 rounded-2xl">
+                        <div className="text-[10px] text-emerald-400 font-bold">Approved Today</div>
+                        <div className="text-lg font-black text-emerald-400 font-mono">
+                          {dailySubmissions.filter(s => s.status === 'APPROVED').length} ✓
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* HOURLY REPORT TIMELINE BAR (MATCHING SCREENSHOT) */}
+                    <div className="bg-[#0f172a] rounded-2xl sm:rounded-3xl p-3 sm:p-4 shadow-xl border border-blue-900/40 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs shadow">
+                            <Briefcase size={13} />
+                          </div>
+                          <span className="text-xs sm:text-sm font-black text-white tracking-wide">
+                            Hourly Report
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-blue-300 font-mono">Tap slot to inspect ➔</span>
+                      </div>
+
+                      {/* HORIZONTAL SCROLLING PILLS */}
+                      <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none pt-1">
+                        {dailySlots.filter(s => s.isActive).map((slot) => {
+                          const sub = dailySubmissions.find(s => s.slotId === slot.id);
+                          const isSelected = dailySelectedSlotId === slot.id;
+                          const isApproved = sub && sub.status === 'APPROVED';
+                          const isPending = sub && sub.status === 'PENDING';
+                          const isRejected = sub && sub.status === 'REJECTED';
+
+                          const timeParts = slot.timeRange.split('-').map(t => t.trim());
+                          const topTime = timeParts[0] || slot.timeRange;
+                          const botTime = timeParts[1] || '';
+
+                          return (
+                            <div
+                              key={slot.id}
+                              onClick={() => setDailySelectedSlotId(slot.id)}
+                              className={`min-w-[90px] sm:min-w-[105px] max-w-[115px] p-2 sm:p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col items-center justify-between text-center select-none shrink-0 ${
+                                isSelected 
+                                  ? 'bg-amber-950/80 border-amber-500 ring-2 ring-amber-400 shadow-lg scale-105' 
+                                  : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-800 shadow-sm'
+                              }`}
+                            >
+                              <div className="space-y-0.5">
+                                <div className={`text-xs sm:text-sm font-black ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                                  {topTime}
+                                </div>
+                                {botTime && (
+                                  <div className={`text-[10px] font-medium ${isSelected ? 'text-amber-300' : 'text-gray-500'}`}>
+                                    {botTime}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="my-1.5 w-full">
+                                {isApproved ? (
+                                  <div className="bg-emerald-600 text-white text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
+                                    <span>✓</span>
+                                    <span>Done</span>
+                                  </div>
+                                ) : isPending ? (
+                                  <div className="bg-amber-500 text-black text-[9px] font-black py-0.5 px-1.5 rounded-full flex items-center justify-center gap-0.5 shadow-sm animate-pulse">
+                                    <span>⏳</span>
+                                    <span>Review</span>
+                                  </div>
+                                ) : isRejected ? (
+                                  <div className="bg-rose-600 text-white text-[9px] font-bold py-0.5 px-1.5 rounded-full flex items-center justify-center shadow-sm">
+                                    <span>Retake</span>
+                                  </div>
+                                ) : slot.tag === 'Lunch' ? (
+                                  <div className="bg-amber-600 text-white text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
+                                    <span>🍴</span>
+                                    <span>Lunch</span>
+                                  </div>
+                                ) : slot.tag === 'Tea' ? (
+                                  <div className="bg-blue-600 text-white text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
+                                    <span>☕</span>
+                                    <span>Tea</span>
+                                  </div>
+                                ) : (
+                                  <div className={`text-[9px] py-0.5 px-1.5 rounded-full font-medium ${isSelected ? 'bg-amber-900/50 text-amber-200' : 'bg-gray-100 text-gray-600'}`}>
+                                    {slot.tag || 'Pending'}
+                                  </div>
+                                )}
+                              </div>
+
+                              {sub && sub.image ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDailyPreviewModalImg(sub.image);
+                                  }}
+                                  className="w-6 h-6 rounded-full border border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-sm active:scale-95 mt-0.5"
+                                  title="View Proof Photo"
+                                >
+                                  <Eye size={12} />
+                                </button>
+                              ) : (
+                                <div className="w-6 h-6 rounded-full border border-gray-300 text-gray-300 flex items-center justify-center mt-0.5">
+                                  <Eye size={12} />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* FOCUSED SELECTED SLOT REVIEW CARD */}
+                    {(() => {
+                      const activeSlot = dailySlots.find(s => s.id === dailySelectedSlotId) || dailySlots[0];
+                      if (!activeSlot) return null;
+                      const activeSub = dailySubmissions.find(s => s.slotId === activeSlot.id);
+                      const isApproved = activeSub && activeSub.status === 'APPROVED';
+                      const isPending = activeSub && activeSub.status === 'PENDING';
+                      const isRejected = activeSub && activeSub.status === 'REJECTED';
+
+                      return (
+                        <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-2xl space-y-4">
+                          <div className="flex items-start justify-between gap-2 border-b border-[#222] pb-3">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-mono font-bold">
+                                  {activeSlot.timeRange}
+                                </span>
+                                <span className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full font-semibold">
+                                  {activeSlot.tag}
+                                </span>
+                              </div>
+                              <h3 className="text-sm sm:text-base font-bold text-white mt-1">
+                                {activeSlot.title}
+                              </h3>
+                            </div>
+
+                            <div className="bg-emerald-950/40 border border-emerald-500/30 px-3 py-1 rounded-xl text-right shrink-0">
+                              <div className="text-[9px] text-gray-400">Award</div>
+                              <div className="text-xs font-mono font-bold text-emerald-400">
+                                +₹ {Number(activeSlot.rewardPoints || 0).toFixed(2)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* SUBMISSION PROOF CONTENT */}
+                          {activeSub ? (
+                            <div className="space-y-3">
+                              {activeSub.note && (
+                                <div className="bg-[#181818] p-3 rounded-xl border border-[#282828] text-xs text-gray-200">
+                                  <span className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Dora's Note:</span>
+                                  "{activeSub.note}"
+                                </div>
+                              )}
+
+                              {activeSub.image && (
+                                <div className="bg-[#181818] p-3 rounded-xl border border-[#282828] space-y-2">
+                                  <span className="text-[10px] text-gray-400 font-bold uppercase block">Photo Proof:</span>
+                                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                                    <img
+                                      src={activeSub.image}
+                                      alt="Proof"
+                                      className="w-36 h-36 sm:w-44 sm:h-44 object-cover rounded-xl border border-[#333] cursor-pointer hover:scale-102 transition-transform shadow-md"
+                                      onClick={() => setDailyPreviewModalImg(activeSub.image)}
+                                    />
+                                    <div className="space-y-2 text-xs">
+                                      <button
+                                        type="button"
+                                        onClick={() => setDailyPreviewModalImg(activeSub.image)}
+                                        className="bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 cursor-pointer"
+                                      >
+                                        <Eye size={14} />
+                                        <span>View High-Res Photo</span>
+                                      </button>
+                                      <a
+                                        href={activeSub.image}
+                                        download={`dora_task_${activeSlot.id}.jpg`}
+                                        className="bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 cursor-pointer inline-flex"
+                                      >
+                                        <Download size={14} />
+                                        <span>Download Proof</span>
+                                      </a>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* APPROVAL ACTION CONTROLS */}
+                              <div className="pt-2">
+                                {isApproved ? (
+                                  <div className="bg-emerald-950/40 border border-emerald-500/40 p-3 rounded-2xl flex items-center justify-between text-xs text-emerald-300">
+                                    <div className="flex items-center gap-2">
+                                      <span>✓</span>
+                                      <div>
+                                        <span className="font-bold">Approved by You</span>
+                                        <div className="text-[11px] text-emerald-400">
+                                          +₹ {activeSub.pointsAwarded || activeSlot.rewardPoints} Love Balance credited to Dora
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <span className="bg-emerald-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-xl">
+                                      Done
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col sm:flex-row items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleApproveDailyTask(activeSub)}
+                                      className="w-full sm:flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-2.5 px-4 rounded-xl cursor-pointer shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5 text-xs"
+                                    >
+                                      <CheckCircle size={15} />
+                                      <span>Approve & Award +₹{Number(activeSlot.rewardPoints || 2.0).toFixed(2)}</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRejectDailyTask(activeSub)}
+                                      className="w-full sm:w-auto bg-rose-950/60 hover:bg-rose-900 border border-rose-800 text-rose-300 font-bold py-2.5 px-4 rounded-xl cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-1.5 text-xs"
+                                    >
+                                      <RotateCcw size={14} />
+                                      <span>Request Retake</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="bg-[#181818] border border-[#2a2a2a] p-4 rounded-2xl text-center space-y-1 text-xs text-gray-400">
+                              <p className="text-gray-300 font-medium">No submission uploaded yet by Dora for this slot.</p>
+                              <p className="text-[11px] text-gray-500">When Dora snaps a photo and submits, it will pop up here in real time for your review.</p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* ALL PENDING APPROVALS QUEUE */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between text-xs font-bold text-gray-300 px-1">
+                        <span className="flex items-center gap-1.5">
+                          <span>⚡ Submissions Requiring Your Approval:</span>
+                          <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.2 rounded-full font-mono text-[10px]">
+                            {dailySubmissions.filter(s => s.status === 'PENDING').length}
+                          </span>
+                        </span>
+                      </div>
+
+                      {dailySubmissions.filter(s => s.status === 'PENDING').length === 0 ? (
+                        <div className="bg-[#141414] border border-[#262626] p-5 rounded-2xl text-center text-xs text-gray-400 space-y-1">
+                          <p className="text-white font-bold">🎉 All caught up!</p>
+                          <p className="text-[11px] text-gray-500">There are no pending submissions awaiting review for this date.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {dailySubmissions.filter(s => s.status === 'PENDING').map(sub => {
+                            const slot = dailySlots.find(s => s.id === sub.slotId);
+                            const reward = slot ? slot.rewardPoints : 2.0;
+
+                            return (
+                              <div key={sub.id} className="bg-[#141414] border border-amber-500/40 rounded-2xl p-4 shadow-xl space-y-3">
+                                <div className="flex items-start justify-between gap-2 border-b border-[#222] pb-2.5">
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs bg-amber-500/20 text-amber-300 font-mono font-bold px-2 py-0.5 rounded-full">
+                                        {slot ? slot.timeRange : 'Routine'}
+                                      </span>
+                                      <span className="text-xs font-bold text-white">
+                                        {slot ? slot.title : 'Routine Task'}
+                                      </span>
+                                    </div>
+                                    <div className="text-[11px] text-gray-400 mt-1">
+                                      Submitted: {new Date(sub.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </div>
+                                  </div>
+                                  <div className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2 py-1 rounded-xl">
+                                    +₹ {Number(reward).toFixed(2)}
+                                  </div>
+                                </div>
+
+                                {sub.note && (
+                                  <p className="text-xs text-gray-200 italic bg-[#181818] p-2 rounded-xl border border-[#262626]">
+                                    "{sub.note}"
+                                  </p>
+                                )}
+
+                                {sub.image && (
+                                  <div className="flex items-center gap-3">
+                                    <img
+                                      src={sub.image}
+                                      alt="Proof"
+                                      className="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border border-[#333] cursor-pointer hover:scale-105 transition-transform"
+                                      onClick={() => setDailyPreviewModalImg(sub.image)}
+                                    />
+                                    <div className="space-y-1.5 text-xs">
+                                      <button
+                                        type="button"
+                                        onClick={() => setDailyPreviewModalImg(sub.image)}
+                                        className="text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <Eye size={13} />
+                                        <span>View High-Res Photo</span>
+                                      </button>
+                                      <a
+                                        href={sub.image}
+                                        download={`dora_task_${sub.id}.jpg`}
+                                        className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 cursor-pointer inline-flex"
+                                      >
+                                        <Download size={13} />
+                                        <span>Download Proof</span>
+                                      </a>
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="flex items-center gap-2 pt-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApproveDailyTask(sub)}
+                                    className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-2 rounded-xl cursor-pointer active:scale-95 transition-all text-xs flex items-center justify-center gap-1.5 shadow"
+                                  >
+                                    <CheckCircle size={14} />
+                                    <span>Approve & Award +₹{Number(reward).toFixed(2)}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRejectDailyTask(sub)}
+                                    className="bg-rose-950/60 hover:bg-rose-900 border border-rose-800 text-rose-300 font-bold py-2 px-3 rounded-xl cursor-pointer active:scale-95 transition-all text-xs flex items-center gap-1"
+                                  >
+                                    <RotateCcw size={13} />
+                                    <span>Retake</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2: SLOTS CUSTOMIZATION (DYNAMIC ADMIN ADD / EDIT / DELETE) */}
+                {dailyAdminTab === 'slots' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between bg-[#141414] p-3 rounded-2xl border border-[#262626]">
+                      <div>
+                        <h3 className="text-sm font-bold text-white">Custom Routine Slots</h3>
+                        <p className="text-[11px] text-gray-400">Configure hourly routine times, tags, and reward points</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingSlotId(null);
+                          setSlotFormTitle('');
+                          setSlotFormTimeRange('');
+                          setSlotFormTag('Workout');
+                          setSlotFormPoints('2.0');
+                          setShowAddSlotModal(true);
+                        }}
+                        className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer flex items-center gap-1.5 shadow transition-all active:scale-95"
+                      >
+                        <Plus size={14} />
+                        <span>Add Slot</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {dailySlots.map((slot) => (
+                        <div
+                          key={slot.id}
+                          className="bg-[#141414] border border-[#262626] p-3 rounded-2xl flex items-center justify-between gap-3"
+                        >
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs bg-blue-500/20 text-blue-300 font-mono font-bold px-2 py-0.5 rounded-full">
+                                {slot.timeRange}
+                              </span>
+                              <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full font-medium">
+                                {slot.tag}
+                              </span>
+                              <span className="text-xs font-mono font-bold text-emerald-400">
+                                +₹ {Number(slot.rewardPoints).toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="text-sm font-bold text-white mt-1">
+                              {slot.title}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingSlotId(slot.id);
+                                setSlotFormTitle(slot.title);
+                                setSlotFormTimeRange(slot.timeRange);
+                                setSlotFormTag(slot.tag);
+                                setSlotFormPoints(String(slot.rewardPoints));
+                                setShowAddSlotModal(true);
+                              }}
+                              className="text-gray-400 hover:text-white p-2 rounded-xl bg-[#222] cursor-pointer"
+                              title="Edit Slot"
+                            >
+                              <Edit3 size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSlot(slot.id)}
+                              className="text-gray-400 hover:text-rose-400 p-2 rounded-xl bg-[#222] cursor-pointer"
+                              title="Delete Slot"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* --- DORA'S ROUTINE SUBMISSION SCREEN (DORA ONLY) --- */}
+            {viewMode === 'daily_projects' && role !== 'parent' && (
+              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-4 scrollbar-none font-sans animate-in fade-in duration-150">
                 {/* TOP HEADER & DATE BAR */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2 border-b border-[#222]">
                   <div className="flex items-center gap-2.5">
@@ -6741,7 +7522,7 @@ export default function App() {
                     />
                     <button
                       type="button"
-                      onClick={() => setDailySelectedDate(new Date().toISOString().split('T')[0])}
+                      onClick={() => setDailySelectedDate(getLocalDateString())}
                       className="bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 px-2 py-1 rounded-xl text-xs font-bold cursor-pointer transition-all"
                     >
                       Today
@@ -7000,14 +7781,14 @@ export default function App() {
                         </div>
                       )}
 
-                      {/* SUBMISSION FORM (EXCLUSIVELY FOR DORA - HIDDEN FROM DARSH) */}
-                      {role !== 'parent' && (!activeSub || activeSub.status === 'REJECTED') && (
+                      {/* SUBMISSION FORM (DORA ONLY) */}
+                      {(!activeSub || activeSub.status === 'REJECTED') && (
                         <div className="space-y-3 pt-1">
                           <div className="text-xs font-bold text-gray-300 flex items-center gap-1.5">
                             <span>Upload Proof for {activeSlot.title}:</span>
                           </div>
 
-                          {/* SINGLE TEXT LINE INPUT + CAMERA PLUS BUTTON (EXACTLY AS ASKED) */}
+                          {/* SINGLE TEXT LINE INPUT + CAMERA PLUS BUTTON */}
                           <div className="flex items-center gap-2 bg-[#101010] border border-[#333] focus-within:border-blue-500 rounded-2xl px-3 py-2 transition-all shadow-inner">
                             <input
                               type="text"
@@ -7075,30 +7856,6 @@ export default function App() {
                           >
                             <Camera size={15} />
                             <span>Submit Task Proof for Darsh's Review</span>
-                          </button>
-                        </div>
-                      )}
-
-                      {/* DARSH ADMIN CALLOUT IF ACCESSED AS PARENT */}
-                      {role === 'parent' && (
-                        <div className="bg-gradient-to-r from-amber-950/40 via-[#1c1813] to-amber-950/40 border border-amber-500/40 p-4 rounded-2xl text-center space-y-2 animate-in fade-in">
-                          <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center justify-center mx-auto text-base">
-                            👑
-                          </div>
-                          <h4 className="text-sm font-bold text-white">Admin Checking Mode (Darsh)</h4>
-                          <p className="text-xs text-gray-300 max-w-md mx-auto leading-relaxed">
-                            Routine tasks are for Dora to upload. Check proofs, view full-resolution photos, and approve awards inside the Admin Dashboard.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setViewMode('admin_dashboard');
-                              setDailyAdminTab('review');
-                            }}
-                            className="bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold px-4 py-2 rounded-xl cursor-pointer shadow transition-all active:scale-95 inline-flex items-center gap-1.5"
-                          >
-                            <Check size={14} />
-                            <span>Open Admin Dashboard Review</span>
                           </button>
                         </div>
                       )}
