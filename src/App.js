@@ -306,6 +306,46 @@ export default function App() {
     }
   });
 
+  // Pure Mathematical Ledger Balance Calculation (Strict Single Source of Truth)
+  const getNetLedgerBalance = useCallback((ledger, target = 'user') => {
+    if (!Array.isArray(ledger)) return 0;
+    const entries = ledger.filter(e => {
+      if (!e) return false;
+      if (target === 'admin') {
+        return e.target === 'admin' || (e.description && e.description.includes('[Darsh]'));
+      }
+      return e.target !== 'admin' && !(e.description && e.description.includes('[Darsh]'));
+    });
+
+    const credits = entries
+      .filter(e => e.type === 'credit')
+      .reduce((sum, e) => sum + Math.abs(Number(e.points) || 0), 0);
+
+    const debits = entries
+      .filter(e => e.type === 'debit' && e.status !== 'Redeemed')
+      .reduce((sum, e) => sum + Math.abs(Number(e.points) || 0), 0);
+
+    const redeems = entries
+      .filter(e => e.type === 'redeem' || e.status === 'Redeemed')
+      .reduce((sum, e) => sum + Math.abs(Number(e.points) || 0), 0);
+
+    return parseFloat((credits - debits - redeems).toFixed(2));
+  }, []);
+
+  const doraNetBalance = useMemo(() => getNetLedgerBalance(loveLedger, 'user'), [loveLedger, getNetLedgerBalance]);
+  const adminNetBalance = useMemo(() => getNetLedgerBalance(loveLedger, 'admin'), [loveLedger, getNetLedgerBalance]);
+
+  // Synchronize loveBalance and adminLoveBalance state with pure mathematical ledger totals
+  useEffect(() => {
+    setLoveBalance(doraNetBalance);
+    try { localStorage.setItem('stealth_love_balance', doraNetBalance.toString()); } catch(e) {}
+  }, [doraNetBalance]);
+
+  useEffect(() => {
+    setAdminLoveBalance(adminNetBalance);
+    try { localStorage.setItem('stealth_admin_love_balance', adminNetBalance.toString()); } catch(e) {}
+  }, [adminNetBalance]);
+
   const [showLoveBalanceModal, setShowLoveBalanceModal] = useState(false);
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [clearModalTarget, setClearModalTarget] = useState('user'); // 'user' | 'admin' | 'both'
@@ -342,26 +382,41 @@ export default function App() {
   const [activeLbTarget, setActiveLbTarget] = useState('user'); // 'user' (Partner A) or 'admin' (Admin H)
   const [adminOverrideVal, setAdminOverrideVal] = useState('');
 
+  // Persistent Deleted Slot IDs (Tombstones so deleted slots NEVER reappear after refresh or app close)
+  const [deletedSlotIds, setDeletedSlotIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('stealth_deleted_slot_ids');
+      return saved ? JSON.parse(saved) : [];
+    } catch(e) {
+      return [];
+    }
+  });
+
   // --- DAILY PROJECTS & HOURLY ROUTINE STATE ---
   const [dailySlots, setDailySlots] = useState(() => {
     try {
+      const savedDeleted = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
       const saved = localStorage.getItem('stealth_daily_slots');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter(s => s && !savedDeleted.includes(s.id));
+        }
       }
-    } catch(e) {}
-    return [
-      { id: 'slot_1', title: 'Morning Workout (10 Squats / Stretch)', timeRange: '08:00 - 09:00', tag: 'Workout', rewardPoints: 2.0, order: 1, isActive: true },
-      { id: 'slot_2', title: 'Healthy Detox Juice / Morning Drink', timeRange: '09:00 - 10:00', tag: 'Juice', rewardPoints: 1.5, order: 2, isActive: true },
-      { id: 'slot_3', title: 'Heavy Breakfast (High-Calorie Meal Plate)', timeRange: '10:00 - 11:00', tag: 'Breakfast', rewardPoints: 2.5, order: 3, isActive: true },
-      { id: 'slot_4', title: 'Lunch Check-in & Care Update', timeRange: '01:00 - 02:00', tag: 'Lunch', rewardPoints: 2.0, order: 4, isActive: true },
-      { id: 'slot_5', title: 'Hydration Milestone (Water Intake)', timeRange: '03:30 - 04:30', tag: 'Water', rewardPoints: 1.0, order: 5, isActive: true },
-      { id: 'slot_6', title: 'Evening Tea & Healthy Snack', timeRange: '05:00 - 05:30', tag: 'Tea', rewardPoints: 1.0, order: 6, isActive: true },
-      { id: 'slot_7', title: 'High-Protein Dinner Plate', timeRange: '08:30 - 09:30', tag: 'Dinner', rewardPoints: 2.0, order: 7, isActive: true },
-      { id: 'slot_8', title: 'Google Fit 8,000 Steps Screenshot', timeRange: '10:00 - 10:30', tag: 'Steps', rewardPoints: 3.0, order: 8, isActive: true },
-      { id: 'slot_9', title: 'Night Skin Care Routine & Glow Check', timeRange: '10:30 - 11:00', tag: 'Skincare', rewardPoints: 2.0, order: 9, isActive: true }
-    ];
+      return [
+        { id: 'slot_1', title: 'Morning Workout (10 Squats / Stretch)', timeRange: '08:00 - 09:00', tag: 'Workout', rewardPoints: 2.0, order: 1, isActive: true },
+        { id: 'slot_2', title: 'Healthy Detox Juice / Morning Drink', timeRange: '09:00 - 10:00', tag: 'Juice', rewardPoints: 1.5, order: 2, isActive: true },
+        { id: 'slot_3', title: 'Heavy Breakfast (High-Calorie Meal Plate)', timeRange: '10:00 - 11:00', tag: 'Breakfast', rewardPoints: 2.5, order: 3, isActive: true },
+        { id: 'slot_4', title: 'Lunch Check-in & Care Update', timeRange: '01:00 - 02:00', tag: 'Lunch', rewardPoints: 2.0, order: 4, isActive: true },
+        { id: 'slot_5', title: 'Hydration Milestone (Water Intake)', timeRange: '03:30 - 04:30', tag: 'Water', rewardPoints: 1.0, order: 5, isActive: true },
+        { id: 'slot_6', title: 'Evening Tea & Healthy Snack', timeRange: '05:00 - 05:30', tag: 'Tea', rewardPoints: 1.0, order: 6, isActive: true },
+        { id: 'slot_7', title: 'High-Protein Dinner Plate', timeRange: '08:30 - 09:30', tag: 'Dinner', rewardPoints: 2.0, order: 7, isActive: true },
+        { id: 'slot_8', title: 'Google Fit 8,000 Steps Screenshot', timeRange: '10:00 - 10:30', tag: 'Steps', rewardPoints: 3.0, order: 8, isActive: true },
+        { id: 'slot_9', title: 'Night Skin Care Routine & Glow Check', timeRange: '10:30 - 11:00', tag: 'Skincare', rewardPoints: 2.0, order: 9, isActive: true }
+      ].filter(s => !savedDeleted.includes(s.id));
+    } catch(e) {
+      return [];
+    }
   });
   const [dailySubmissions, setDailySubmissions] = useState(() => {
     try {
@@ -2112,14 +2167,27 @@ export default function App() {
              lower.includes('gnight') || lower.includes('night') || lower.includes('shubhratri');
     };
 
+    const inMemoryLedger = Array.isArray(loveLedger) ? [...loveLedger] : [];
+    try {
+      const savedLedger = JSON.parse(localStorage.getItem('stealth_love_ledger') || '[]');
+      if (Array.isArray(savedLedger)) {
+        for (const s of savedLedger) {
+          if (s && !inMemoryLedger.some(m => m.id === s.id)) inMemoryLedger.push(s);
+        }
+      }
+    } catch(e) {}
+
     // Helper to check if a specific deduction or credit already exists in the loveLedger
     const hasLedgerMatch = (keyword) => {
-      try {
-        const savedLedger = JSON.parse(localStorage.getItem('stealth_love_ledger') || '[]');
-        return Array.isArray(savedLedger) && savedLedger.some(e => e && e.description && e.description.includes(keyword));
-      } catch(e) {
-        return false;
-      }
+      return inMemoryLedger.some(e => e && e.description && e.description.includes(keyword));
+    };
+
+    const recordLocalHabitTransaction = (amount, type, reason, target) => {
+      inMemoryLedger.push({
+        id: 'habit_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        description: `[${target === 'user' ? 'Dora' : 'Darsh'}] ${reason}`
+      });
+      handleLoveBalanceTransaction(amount, type, reason, false, target);
     };
 
     let updated = false;
@@ -2143,11 +2211,11 @@ export default function App() {
       updated = true;
       if (!hadMorning) {
         if (!hasLedgerMatch(doraMorningKey)) {
-          handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (${yesterdayStr})`, false, 'user');
+          recordLocalHabitTransaction(2.00, 'debit', `Missed Morning Greeting (${yesterdayStr})`, 'user');
         }
       } else {
         if (!hasLedgerMatch(doraMorningCreditKey)) {
-          handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (${yesterdayStr})`, false, 'user');
+          recordLocalHabitTransaction(2.00, 'credit', `Daily Morning Sweet Text (${yesterdayStr})`, 'user');
         }
       }
     }
@@ -2167,11 +2235,11 @@ export default function App() {
       updated = true;
       if (!hadMorning) {
         if (!hasLedgerMatch(darshMorningKey)) {
-          handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (${yesterdayStr})`, false, 'admin');
+          recordLocalHabitTransaction(2.00, 'debit', `Missed Morning Greeting (${yesterdayStr})`, 'admin');
         }
       } else {
         if (!hasLedgerMatch(darshMorningCreditKey)) {
-          handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (${yesterdayStr})`, false, 'admin');
+          recordLocalHabitTransaction(2.00, 'credit', `Daily Morning Sweet Text (${yesterdayStr})`, 'admin');
         }
       }
     }
@@ -2194,11 +2262,11 @@ export default function App() {
       updated = true;
       if (!hadNight) {
         if (!hasLedgerMatch(doraNightKey)) {
-          handleLoveBalanceTransaction(3.00, 'debit', `Sleeping Without "Good Night" (${yesterdayStr})`, false, 'user');
+          recordLocalHabitTransaction(3.00, 'debit', `Sleeping Without "Good Night" (${yesterdayStr})`, 'user');
         }
       } else {
         if (!hasLedgerMatch(doraNightCreditKey)) {
-          handleLoveBalanceTransaction(2.00, 'credit', `Sweet Good Night Wish (${yesterdayStr})`, false, 'user');
+          recordLocalHabitTransaction(2.00, 'credit', `Sweet Good Night Wish (${yesterdayStr})`, 'user');
         }
       }
     }
@@ -2220,11 +2288,11 @@ export default function App() {
       updated = true;
       if (!hadNight) {
         if (!hasLedgerMatch(darshNightKey)) {
-          handleLoveBalanceTransaction(3.00, 'debit', `Sleeping Without "Good Night" (${yesterdayStr})`, false, 'admin');
+          recordLocalHabitTransaction(3.00, 'debit', `Sleeping Without "Good Night" (${yesterdayStr})`, 'admin');
         }
       } else {
         if (!hasLedgerMatch(darshNightCreditKey)) {
-          handleLoveBalanceTransaction(2.00, 'credit', `Sweet Good Night Wish (${yesterdayStr})`, false, 'admin');
+          recordLocalHabitTransaction(2.00, 'credit', `Sweet Good Night Wish (${yesterdayStr})`, 'admin');
         }
       }
     }
@@ -2248,11 +2316,11 @@ export default function App() {
       updated = true;
       if (!hadMorning) {
         if (!hasLedgerMatch(doraTodayKey)) {
-          handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (Today)`, false, 'user');
+          recordLocalHabitTransaction(2.00, 'debit', `Missed Morning Greeting (Today)`, 'user');
         }
       } else {
         if (!hasLedgerMatch(doraTodayCreditKey)) {
-          handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (Today)`, false, 'user');
+          recordLocalHabitTransaction(2.00, 'credit', `Daily Morning Sweet Text (Today)`, 'user');
         }
       }
     }
@@ -2272,11 +2340,11 @@ export default function App() {
       updated = true;
       if (!hadMorning) {
         if (!hasLedgerMatch(darshTodayKey)) {
-          handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (Today)`, false, 'admin');
+          recordLocalHabitTransaction(2.00, 'debit', `Missed Morning Greeting (Today)`, 'admin');
         }
       } else {
         if (!hasLedgerMatch(darshTodayCreditKey)) {
-          handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (Today)`, false, 'admin');
+          recordLocalHabitTransaction(2.00, 'credit', `Daily Morning Sweet Text (Today)`, 'admin');
         }
       }
     }
@@ -2347,16 +2415,16 @@ export default function App() {
 
   const handleAdminOverrideBalance = useCallback((target, newBal) => {
     const val = parseFloat(newBal);
-    if (isNaN(val) || val < 0) {
-      alert("Please enter a valid balance amount (>= 0).");
+    if (isNaN(val)) {
+      alert("Please enter a valid balance amount.");
       return;
     }
-    if (target === 'user') {
-      setLoveBalance(val);
-      try { localStorage.setItem('stealth_love_balance', val.toString()); } catch(e) {}
-    } else {
-      setAdminLoveBalance(val);
-      try { localStorage.setItem('stealth_admin_love_balance', val.toString()); } catch(e) {}
+    const current = target === 'admin' ? adminNetBalance : doraNetBalance;
+    const diff = parseFloat((val - current).toFixed(2));
+    if (diff !== 0) {
+      const type = diff > 0 ? 'credit' : 'debit';
+      const numAmount = Math.abs(diff);
+      handleLoveBalanceTransaction(numAmount, type, `Admin Balance Adjustment (${diff > 0 ? '+' : ''}${diff.toFixed(2)})`, false, target);
     }
     if (socketRef.current) {
       socketRef.current.emit('love_balance_action', {
@@ -2368,8 +2436,9 @@ export default function App() {
         timestamp: Date.now()
       });
     }
-    alert('Success: ' + (target === 'user' ? 'Dora' : 'Darsh') + ' Love Balance set to ₹ ' + val.toFixed(2) + '.');
-  }, []);
+    setAdminOverrideVal('');
+    alert(`Success: ${target === 'user' ? "Dora's" : "Darsh's"} Love Balance set to ₹ ${val.toFixed(2)}!`);
+  }, [adminNetBalance, doraNetBalance, handleLoveBalanceTransaction]);
 
   const handleSendLoveNudge = useCallback((target) => {
     if (socketRef.current) {
@@ -2510,8 +2579,11 @@ export default function App() {
       return updated;
     });
 
-    // 2. Award Love Balance to Dora
-    handleLoveBalanceTransaction(pts, 'credit', `Daily Routine: ${slotTitle}`, false, 'user');
+    // 2. Award Love Balance to Dora (deduplicated by submission ID)
+    const approvalId = 'lb_appr_' + (sub.id || `${sub.date}_${sub.slotId}`);
+    if (!loveLedger.some(e => e.id === approvalId)) {
+      handleLoveBalanceTransaction(pts, 'credit', `Approved Task: ${slotTitle}`, false, 'user', { approvalId });
+    }
 
     // 3. Dual-channel emission
     if (socketRef.current) {
@@ -2643,17 +2715,23 @@ export default function App() {
 
   const handleDeleteSlot = (slotId) => {
     if (!slotId) return;
+    const curDeleted = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+    const nextDeleted = Array.from(new Set([...curDeleted, slotId]));
+    try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(nextDeleted)); } catch(e) {}
+    setDeletedSlotIds(nextDeleted);
+
     setDailySlots(prev => {
       const updated = prev.filter(s => s.id !== slotId);
       try { localStorage.setItem('stealth_daily_slots', JSON.stringify(updated)); } catch(e) {}
       return updated;
     });
     if (socketRef.current) {
-      socketRef.current.emit('daily_slot_delete', { slotId });
+      socketRef.current.emit('daily_slot_delete', { slotId, deletedSlotIds: nextDeleted });
       socketRef.current.emit('love_balance_action', {
         room: GLOBAL_ROOM,
         action: 'DAILY_SLOT_DELETE',
         slotId,
+        deletedSlotIds: nextDeleted,
         senderRole: roleRef.current || role || 'admin',
         timestamp: Date.now()
       });
@@ -2850,6 +2928,7 @@ export default function App() {
     socketRef.current.on('connect', () => {
       setIsConnected(true);
       if (socketRef.current) {
+        const curDeleted = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
         socketRef.current.emit('love_balance_action', {
           room: GLOBAL_ROOM,
           action: 'REQUEST_SYNC',
@@ -2858,7 +2937,8 @@ export default function App() {
           clientLoveLedger: loveLedger,
           clientWishRequests: wishRequests,
           clientSubmissions: dailySubmissions,
-          clientSlots: dailySlots,
+          clientSlots: dailySlots.filter(s => s && !curDeleted.includes(s.id)),
+          deletedSlotIds: curDeleted,
           senderRole: roleRef.current || 'user',
           timestamp: Date.now()
         });
@@ -3625,13 +3705,25 @@ export default function App() {
             return merged;
           });
         }
-        if (Array.isArray(data.dailySlots) && data.dailySlots.length > 0) {
-          setDailySlots(data.dailySlots);
-          try { localStorage.setItem('stealth_daily_slots', JSON.stringify(data.dailySlots)); } catch(e) {}
+        if (Array.isArray(data.deletedSlotIds) && data.deletedSlotIds.length > 0) {
+          const localDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+          const mergedDel = Array.from(new Set([...localDel, ...data.deletedSlotIds]));
+          try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(mergedDel)); } catch(e) {}
+          setDeletedSlotIds(mergedDel);
+        }
+        const activeDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+        if (Array.isArray(data.dailySlots)) {
+          const cleanSlots = data.dailySlots.filter(s => s && !activeDel.includes(s.id));
+          setDailySlots(cleanSlots);
+          try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
         }
       } else if (data.action === 'DAILY_SLOT_DELETE' && data.slotId) {
+        const localDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+        const mergedDel = Array.from(new Set([...localDel, data.slotId, ...(Array.isArray(data.deletedSlotIds) ? data.deletedSlotIds : [])]));
+        try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(mergedDel)); } catch(e) {}
+        setDeletedSlotIds(mergedDel);
         setDailySlots(prev => {
-          const updated = prev.filter(s => s.id !== data.slotId);
+          const updated = prev.filter(s => s && !mergedDel.includes(s.id));
           try { localStorage.setItem('stealth_daily_slots', JSON.stringify(updated)); } catch(e) {}
           return updated;
         });
@@ -3642,6 +3734,11 @@ export default function App() {
           return updated;
         });
       } else if (data.action === 'DAILY_SLOT_CREATE' && data.slot) {
+        if (data.slot && data.slot.id) {
+          const localDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]').filter(id => id !== data.slot.id);
+          try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(localDel)); } catch(e) {}
+          setDeletedSlotIds(localDel);
+        }
         setDailySlots(prev => {
           if (prev.some(s => s.id === data.slot.id)) return prev;
           const updated = [...prev, data.slot];
@@ -3668,10 +3765,18 @@ export default function App() {
       }
     });
 
-    socketRef.current.on('daily_task_sync_response', ({ date, slots, submissions }) => {
-      if (Array.isArray(slots) && slots.length > 0) {
-        setDailySlots(slots);
-        try { localStorage.setItem('stealth_daily_slots', JSON.stringify(slots)); } catch(e) {}
+    socketRef.current.on('daily_task_sync_response', ({ date, slots, submissions, deletedSlotIds: incomingDeleted }) => {
+      if (Array.isArray(incomingDeleted) && incomingDeleted.length > 0) {
+        const localDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+        const mergedDel = Array.from(new Set([...localDel, ...incomingDeleted]));
+        try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(mergedDel)); } catch(e) {}
+        setDeletedSlotIds(mergedDel);
+      }
+      const activeDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+      if (Array.isArray(slots)) {
+        const cleanSlots = slots.filter(s => s && !activeDel.includes(s.id));
+        setDailySlots(cleanSlots);
+        try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
       }
       if (Array.isArray(submissions) && submissions.length > 0) {
         setDailySubmissions(prev => {
@@ -3747,10 +3852,18 @@ export default function App() {
       }
     });
 
-    socketRef.current.on('daily_slots_updated', ({ slots }) => {
-      if (Array.isArray(slots) && slots.length > 0) {
-        setDailySlots(slots);
-        try { localStorage.setItem('stealth_daily_slots', JSON.stringify(slots)); } catch(e) {}
+    socketRef.current.on('daily_slots_updated', ({ slots, deletedSlotIds: incomingDeleted }) => {
+      if (Array.isArray(incomingDeleted) && incomingDeleted.length > 0) {
+        const localDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+        const mergedDel = Array.from(new Set([...localDel, ...incomingDeleted]));
+        try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(mergedDel)); } catch(e) {}
+        setDeletedSlotIds(mergedDel);
+      }
+      const activeDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+      if (Array.isArray(slots)) {
+        const cleanSlots = slots.filter(s => s && !activeDel.includes(s.id));
+        setDailySlots(cleanSlots);
+        try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
       }
     });
 
@@ -4372,8 +4485,8 @@ export default function App() {
   const isParentAdmin = role === 'parent';
   const lbViewerTarget = isParentAdmin ? activeLbTarget : 'user';
   const displayedLoveBalance = isParentAdmin
-    ? (lbViewerTarget === 'admin' ? Number(adminLoveBalance || 0) : Number(loveBalance || 0))
-    : Number(loveBalance || 0);
+    ? (lbViewerTarget === 'admin' ? Number(adminNetBalance || 0) : Number(doraNetBalance || 0))
+    : Number(doraNetBalance || 0);
 
   // Dora can NEVER see Darsh's transactions or points
   const visibleLoveLedger = isParentAdmin
@@ -4870,30 +4983,30 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                    className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(loveBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
+                    className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
                   >
-                    <span>{Number(loveBalance || 0) < 0 ? '💔' : '💕'}</span>
-                    <span>{formatLoveBalance(loveBalance)}</span>
+                    <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💕'}</span>
+                    <span>{formatLoveBalance(doraNetBalance)}</span>
                   </button>
                   <span className="text-[#374248]">|</span>
                   <button
                     type="button"
                     onClick={() => { setActiveLbTarget('admin'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                    className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(adminLoveBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}
+                    className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(adminNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}
                   >
-                    <span>{Number(adminLoveBalance || 0) < 0 ? '💔' : '👑'}</span>
-                    <span>{formatLoveBalance(adminLoveBalance)}</span>
+                    <span>{Number(adminNetBalance || 0) < 0 ? '💔' : '👑'}</span>
+                    <span>{formatLoveBalance(adminNetBalance)}</span>
                   </button>
                 </div>
               ) : (
                 <button
                   type="button"
                   onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                  className={`flex items-center gap-1 bg-[#182229] hover:bg-[#2a3942] border ${Number(loveBalance || 0) < 0 ? 'border-rose-500/60 text-rose-300' : 'border-pink-500/50 text-pink-300'} hover:text-white px-2 sm:px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 shadow-sm`}
+                  className={`flex items-center gap-1 bg-[#182229] hover:bg-[#2a3942] border ${Number(doraNetBalance || 0) < 0 ? 'border-rose-500/60 text-rose-300' : 'border-pink-500/50 text-pink-300'} hover:text-white px-2 sm:px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 shadow-sm`}
                   title="Your Love Balance Passbook & Wish Store"
                 >
-                  <span>{Number(loveBalance || 0) < 0 ? '💔' : '💖'}</span>
-                  <span>{formatLoveBalance(loveBalance)}</span>
+                  <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💖'}</span>
+                  <span>{formatLoveBalance(doraNetBalance)}</span>
                 </button>
               )}
 
@@ -5549,30 +5662,30 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                  className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(loveBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
+                  className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
                 >
-                  <span>{Number(loveBalance || 0) < 0 ? '💔' : '💕'}</span>
-                  <span>{formatLoveBalance(loveBalance)}</span>
+                  <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💕'}</span>
+                  <span>{formatLoveBalance(doraNetBalance)}</span>
                 </button>
                 <span className="text-emerald-700">|</span>
                 <button
                   type="button"
                   onClick={() => { setActiveLbTarget('admin'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                  className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(adminLoveBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}
+                  className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(adminNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}
                 >
-                  <span>{Number(adminLoveBalance || 0) < 0 ? '💔' : '👑'}</span>
-                  <span>{formatLoveBalance(adminLoveBalance)}</span>
+                  <span>{Number(adminNetBalance || 0) < 0 ? '💔' : '👑'}</span>
+                  <span>{formatLoveBalance(adminNetBalance)}</span>
                 </button>
               </div>
             ) : (
               <button
                 type="button"
                 onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                className={`flex items-center gap-1 bg-emerald-950/50 hover:bg-emerald-900/70 border ${Number(loveBalance || 0) < 0 ? 'border-rose-500/70 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.3)]' : 'border-emerald-500/60 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)]'} hover:text-white px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0`}
+                className={`flex items-center gap-1 bg-emerald-950/50 hover:bg-emerald-900/70 border ${Number(doraNetBalance || 0) < 0 ? 'border-rose-500/70 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.3)]' : 'border-emerald-500/60 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)]'} hover:text-white px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0`}
                 title="Open Love Balance Passbook & Wish Store"
               >
-                <span className="text-sm font-sans">{Number(loveBalance || 0) < 0 ? '💔' : '💖'}</span>
-                <span>{formatLoveBalance(loveBalance)}</span>
+                <span className="text-sm font-sans">{Number(doraNetBalance || 0) < 0 ? '💔' : '💖'}</span>
+                <span>{formatLoveBalance(doraNetBalance)}</span>
               </button>
             )}
 
@@ -8968,7 +9081,7 @@ export default function App() {
                               : 'bg-[#222] text-gray-400 border-[#333] hover:text-white'
                           }`}
                         >
-                          💕 Dora ({formatLoveBalance(loveBalance)})
+                          💕 Dora ({formatLoveBalance(doraNetBalance)})
                         </button>
                         <button
                           type="button"
@@ -8979,7 +9092,7 @@ export default function App() {
                               : 'bg-[#222] text-gray-400 border-[#333] hover:text-white'
                           }`}
                         >
-                          👑 Darsh ({formatLoveBalance(adminLoveBalance)})
+                          👑 Darsh ({formatLoveBalance(adminNetBalance)})
                         </button>
                       </div>
                     ) : (
@@ -9093,7 +9206,7 @@ export default function App() {
                           )}
                         >
                           <span>💕 Dora</span>
-                          <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono">{formatLoveBalance(loveBalance)}</span>
+                          <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono">{formatLoveBalance(doraNetBalance)}</span>
                         </button>
                         <button
                           type="button"
@@ -9105,7 +9218,7 @@ export default function App() {
                           )}
                         >
                           <span>👑 Darsh</span>
-                          <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono">{formatLoveBalance(adminLoveBalance)}</span>
+                          <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono">{formatLoveBalance(adminNetBalance)}</span>
                         </button>
                       </div>
                     )}
