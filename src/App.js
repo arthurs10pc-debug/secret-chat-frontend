@@ -3,6 +3,7 @@ import io from 'socket.io-client';
 import CryptoJS from 'crypto-js';
 import jsPDF from 'jspdf';
 import confetti from 'canvas-confetti';
+import ErrorBoundary from './ErrorBoundary';
 import { 
   SquarePen, Image as ImageIcon, BookOpen, Clock, ToyBrick, FolderGit2, MoreHorizontal,
   Search, PanelLeft, ArrowUp, Plus, RefreshCw, Sparkles, Share,
@@ -488,6 +489,11 @@ export default function App() {
   const [trackDuration, setTrackDuration] = useState(100);
 
   const [codexEngine, setCodexEngine] = useState('gofile');
+  const codexEngineRef = useRef(codexEngine);
+  useEffect(() => {
+    codexEngineRef.current = codexEngine;
+  }, [codexEngine]);
+
   const [movieInputUrl, setMovieInputUrl] = useState('');
   const [activeMovieSrc, setActiveMovieSrc] = useState('');
   const [activeMovieYTId, setActiveMovieYTId] = useState('');
@@ -502,8 +508,23 @@ export default function App() {
   const [movieError, setMovieError] = useState('');
   
   const html5VideoRef = useRef(null);
+  const html5LocalVideoRef = useRef(null);
   const localVideoInputRef = useRef(null);
   const isMovieRemoteTriggerRef = useRef(false);
+
+  const handleSwitchCodexEngine = (engine) => {
+    setCodexEngine(engine);
+    setMovieError('');
+    if (engine !== 'youtube' && codexYTPlayerRef.current && typeof codexYTPlayerRef.current.pauseVideo === 'function') {
+      try { codexYTPlayerRef.current.pauseVideo(); } catch (e) {}
+    }
+    if (engine !== 'gofile' && html5VideoRef.current && typeof html5VideoRef.current.pause === 'function') {
+      try { html5VideoRef.current.pause(); } catch (e) {}
+    }
+    if (engine !== 'local' && html5LocalVideoRef.current && typeof html5LocalVideoRef.current.pause === 'function') {
+      try { html5LocalVideoRef.current.pause(); } catch (e) {}
+    }
+  };
 
   const playerRef = useRef(null);
   const isRemoteTriggerRef = useRef(false);
@@ -567,9 +588,12 @@ export default function App() {
       let ytTimer = null;
       const initCodexYT = () => {
         if (!window.YT || !window.YT.Player) return;
+        const targetEl = document.getElementById('codex-cinema-yt-player');
+        if (!targetEl) return;
         try {
-          if (codexYTPlayerRef.current && typeof codexYTPlayerRef.current.destroy === 'function') {
-            codexYTPlayerRef.current.destroy();
+          if (codexYTPlayerRef.current && typeof codexYTPlayerRef.current.loadVideoById === 'function') {
+            codexYTPlayerRef.current.loadVideoById(activeMovieYTId);
+            return;
           }
           codexYTPlayerRef.current = new window.YT.Player('codex-cinema-yt-player', {
             videoId: activeMovieYTId,
@@ -629,9 +653,8 @@ export default function App() {
 
       return () => {
         if (ytTimer) clearInterval(ytTimer);
-        if (codexYTPlayerRef.current && typeof codexYTPlayerRef.current.destroy === 'function') {
-          try { codexYTPlayerRef.current.destroy(); } catch (e) {}
-          codexYTPlayerRef.current = null;
+        if (codexYTPlayerRef.current && typeof codexYTPlayerRef.current.pauseVideo === 'function') {
+          try { codexYTPlayerRef.current.pauseVideo(); } catch (e) {}
         }
       };
     }
@@ -1396,38 +1419,41 @@ export default function App() {
   };
 
   const handleHtml5Play = () => {
-    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
+    const videoEl = html5LocalVideoRef.current || html5VideoRef.current;
+    if (isMovieRemoteTriggerRef.current || !videoEl) return;
     setIsMoviePlaying(true);
     if (socketRef.current) {
       socketRef.current.emit('codex_movie_sync', {
         room: GLOBAL_ROOM,
         state: 'PLAY',
-        currentTime: html5VideoRef.current.currentTime,
+        currentTime: videoEl.currentTime || 0,
         timestamp: Date.now()
       });
     }
   };
 
   const handleHtml5Pause = () => {
-    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
+    const videoEl = html5LocalVideoRef.current || html5VideoRef.current;
+    if (isMovieRemoteTriggerRef.current || !videoEl) return;
     setIsMoviePlaying(false);
     if (socketRef.current) {
       socketRef.current.emit('codex_movie_sync', {
         room: GLOBAL_ROOM,
         state: 'PAUSE',
-        currentTime: html5VideoRef.current.currentTime,
+        currentTime: videoEl.currentTime || 0,
         timestamp: Date.now()
       });
     }
   };
 
   const handleHtml5Seeked = () => {
-    if (isMovieRemoteTriggerRef.current || !html5VideoRef.current) return;
+    const videoEl = html5LocalVideoRef.current || html5VideoRef.current;
+    if (isMovieRemoteTriggerRef.current || !videoEl) return;
     if (socketRef.current) {
       socketRef.current.emit('codex_movie_sync', {
         room: GLOBAL_ROOM,
-        state: html5VideoRef.current.paused ? 'PAUSE' : 'PLAY',
-        currentTime: html5VideoRef.current.currentTime,
+        state: videoEl.paused ? 'PAUSE' : 'PLAY',
+        currentTime: videoEl.currentTime || 0,
         timestamp: Date.now()
       });
     }
@@ -1500,12 +1526,15 @@ export default function App() {
     if (codexEngine === 'youtube') {
       if (codexYTPlayerRef.current && typeof codexYTPlayerRef.current.getCurrentTime === 'function') {
         currTime = codexYTPlayerRef.current.getCurrentTime() || 0;
-        const s = codexYTPlayerRef.current.getPlayerState();
+        const s = typeof codexYTPlayerRef.current.getPlayerState === 'function' ? codexYTPlayerRef.current.getPlayerState() : 2;
         currState = s === 1 ? 'PLAY' : 'PAUSE';
       }
-    } else if (html5VideoRef.current) {
-      currTime = html5VideoRef.current.currentTime || 0;
-      currState = html5VideoRef.current.paused ? 'PAUSE' : 'PLAY';
+    } else {
+      const videoEl = html5LocalVideoRef.current || html5VideoRef.current;
+      if (videoEl) {
+        currTime = videoEl.currentTime || 0;
+        currState = videoEl.paused ? 'PAUSE' : 'PLAY';
+      }
     }
 
     setSyncDelayGapText('⚡ Realigned (0.0s gap)');
@@ -2054,6 +2083,7 @@ export default function App() {
   // --- REAL-TIME PRACTICAL DAILY HABIT & INFRACTIONS EVALUATOR ---
   const checkDailyHabitInfractions = useCallback((messagesList) => {
     const list = Array.isArray(messagesList) ? messagesList : (stealthMessages || []);
+    if (!list || list.length === 0) return;
 
     let habitEvals = {};
     try {
@@ -2098,7 +2128,9 @@ export default function App() {
     if (!habitEvals[yesterdayStr]) habitEvals[yesterdayStr] = {};
 
     // A. Yesterday Morning Check (5:00 AM - 12:00 PM)
-    if (!habitEvals[yesterdayStr].doraMorningEvaluated || !hasLedgerMatch(yesterdayStr)) {
+    const doraMorningKey = `[Dora] Missed Morning Greeting (${yesterdayStr})`;
+    const doraMorningCreditKey = `[Dora] Daily Morning Sweet Text (${yesterdayStr})`;
+    if (!habitEvals[yesterdayStr].doraMorningEvaluated || (!hasLedgerMatch(doraMorningKey) && !hasLedgerMatch(doraMorningCreditKey))) {
       const hadMorning = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
@@ -2110,17 +2142,19 @@ export default function App() {
       habitEvals[yesterdayStr].doraMorningEvaluated = true;
       updated = true;
       if (!hadMorning) {
-        if (!hasLedgerMatch(`Missed Morning Greeting (${yesterdayStr})`)) {
+        if (!hasLedgerMatch(doraMorningKey)) {
           handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (${yesterdayStr})`, false, 'user');
         }
       } else {
-        if (!hasLedgerMatch(`Daily Morning Sweet Text (${yesterdayStr})`)) {
+        if (!hasLedgerMatch(doraMorningCreditKey)) {
           handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (${yesterdayStr})`, false, 'user');
         }
       }
     }
 
-    if (!habitEvals[yesterdayStr].darshMorningEvaluated || !hasLedgerMatch(yesterdayStr)) {
+    const darshMorningKey = `[Darsh] Missed Morning Greeting (${yesterdayStr})`;
+    const darshMorningCreditKey = `[Darsh] Daily Morning Sweet Text (${yesterdayStr})`;
+    if (!habitEvals[yesterdayStr].darshMorningEvaluated || (!hasLedgerMatch(darshMorningKey) && !hasLedgerMatch(darshMorningCreditKey))) {
       const hadMorning = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
@@ -2132,18 +2166,20 @@ export default function App() {
       habitEvals[yesterdayStr].darshMorningEvaluated = true;
       updated = true;
       if (!hadMorning) {
-        if (!hasLedgerMatch(`Missed Morning Greeting (${yesterdayStr})`)) {
+        if (!hasLedgerMatch(darshMorningKey)) {
           handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (${yesterdayStr})`, false, 'admin');
         }
       } else {
-        if (!hasLedgerMatch(`Daily Morning Sweet Text (${yesterdayStr})`)) {
+        if (!hasLedgerMatch(darshMorningCreditKey)) {
           handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (${yesterdayStr})`, false, 'admin');
         }
       }
     }
 
     // B. Yesterday Night Check (Sleeping Without "Good Night" - 8:00 PM to 4:30 AM)
-    if (!habitEvals[yesterdayStr].doraNightEvaluated || !hasLedgerMatch(yesterdayStr)) {
+    const doraNightKey = `[Dora] Sleeping Without "Good Night" (${yesterdayStr})`;
+    const doraNightCreditKey = `[Dora] Sweet Good Night Wish (${yesterdayStr})`;
+    if (!habitEvals[yesterdayStr].doraNightEvaluated || (!hasLedgerMatch(doraNightKey) && !hasLedgerMatch(doraNightCreditKey))) {
       const hadNight = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
@@ -2157,17 +2193,19 @@ export default function App() {
       habitEvals[yesterdayStr].doraNightEvaluated = true;
       updated = true;
       if (!hadNight) {
-        if (!hasLedgerMatch(`Sleeping Without "Good Night" (${yesterdayStr})`)) {
+        if (!hasLedgerMatch(doraNightKey)) {
           handleLoveBalanceTransaction(3.00, 'debit', `Sleeping Without "Good Night" (${yesterdayStr})`, false, 'user');
         }
       } else {
-        if (!hasLedgerMatch(`Sweet Good Night Wish (${yesterdayStr})`)) {
+        if (!hasLedgerMatch(doraNightCreditKey)) {
           handleLoveBalanceTransaction(2.00, 'credit', `Sweet Good Night Wish (${yesterdayStr})`, false, 'user');
         }
       }
     }
 
-    if (!habitEvals[yesterdayStr].darshNightEvaluated || !hasLedgerMatch(yesterdayStr)) {
+    const darshNightKey = `[Darsh] Sleeping Without "Good Night" (${yesterdayStr})`;
+    const darshNightCreditKey = `[Darsh] Sweet Good Night Wish (${yesterdayStr})`;
+    if (!habitEvals[yesterdayStr].darshNightEvaluated || (!hasLedgerMatch(darshNightKey) && !hasLedgerMatch(darshNightCreditKey))) {
       const hadNight = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
@@ -2181,11 +2219,11 @@ export default function App() {
       habitEvals[yesterdayStr].darshNightEvaluated = true;
       updated = true;
       if (!hadNight) {
-        if (!hasLedgerMatch(`Sleeping Without "Good Night" (${yesterdayStr})`)) {
+        if (!hasLedgerMatch(darshNightKey)) {
           handleLoveBalanceTransaction(3.00, 'debit', `Sleeping Without "Good Night" (${yesterdayStr})`, false, 'admin');
         }
       } else {
-        if (!hasLedgerMatch(`Sweet Good Night Wish (${yesterdayStr})`)) {
+        if (!hasLedgerMatch(darshNightCreditKey)) {
           handleLoveBalanceTransaction(2.00, 'credit', `Sweet Good Night Wish (${yesterdayStr})`, false, 'admin');
         }
       }
@@ -2195,7 +2233,9 @@ export default function App() {
     if (!habitEvals[todayStr]) habitEvals[todayStr] = {};
     const currentHour = now.getHours();
 
-    if (currentHour >= 12 && (!habitEvals[todayStr].doraMorningEvaluated || !hasLedgerMatch('Missed Morning Greeting (Today)'))) {
+    const doraTodayKey = `[Dora] Missed Morning Greeting (Today)`;
+    const doraTodayCreditKey = `[Dora] Daily Morning Sweet Text (Today)`;
+    if (currentHour >= 12 && (!habitEvals[todayStr].doraMorningEvaluated || (!hasLedgerMatch(doraTodayKey) && !hasLedgerMatch(doraTodayCreditKey)))) {
       const hadMorning = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
@@ -2207,17 +2247,19 @@ export default function App() {
       habitEvals[todayStr].doraMorningEvaluated = true;
       updated = true;
       if (!hadMorning) {
-        if (!hasLedgerMatch('Missed Morning Greeting (Today)')) {
+        if (!hasLedgerMatch(doraTodayKey)) {
           handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (Today)`, false, 'user');
         }
       } else {
-        if (!hasLedgerMatch('Daily Morning Sweet Text (Today)')) {
+        if (!hasLedgerMatch(doraTodayCreditKey)) {
           handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (Today)`, false, 'user');
         }
       }
     }
 
-    if (currentHour >= 12 && (!habitEvals[todayStr].darshMorningEvaluated || !hasLedgerMatch('Missed Morning Greeting (Today)'))) {
+    const darshTodayKey = `[Darsh] Missed Morning Greeting (Today)`;
+    const darshTodayCreditKey = `[Darsh] Daily Morning Sweet Text (Today)`;
+    if (currentHour >= 12 && (!habitEvals[todayStr].darshMorningEvaluated || (!hasLedgerMatch(darshTodayKey) && !hasLedgerMatch(darshTodayCreditKey)))) {
       const hadMorning = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
@@ -2229,11 +2271,11 @@ export default function App() {
       habitEvals[todayStr].darshMorningEvaluated = true;
       updated = true;
       if (!hadMorning) {
-        if (!hasLedgerMatch('Missed Morning Greeting (Today)')) {
+        if (!hasLedgerMatch(darshTodayKey)) {
           handleLoveBalanceTransaction(2.00, 'debit', `Missed Morning Greeting (Today)`, false, 'admin');
         }
       } else {
-        if (!hasLedgerMatch('Daily Morning Sweet Text (Today)')) {
+        if (!hasLedgerMatch(darshTodayCreditKey)) {
           handleLoveBalanceTransaction(2.00, 'credit', `Daily Morning Sweet Text (Today)`, false, 'admin');
         }
       }
@@ -3022,24 +3064,25 @@ export default function App() {
       const latency = Math.max(0, (Date.now() - (data.timestamp || Date.now())) / 1000);
       const target = (data.currentTime || 0) + (data.state === 'PLAY' ? latency : 0);
 
-      const currentVTime = html5VideoRef.current ? html5VideoRef.current.currentTime : (codexYTPlayerRef.current?.getCurrentTime() || 0);
+      const videoEl = html5LocalVideoRef.current || html5VideoRef.current;
+      const currentVTime = videoEl ? videoEl.currentTime : (codexYTPlayerRef.current?.getCurrentTime() || 0);
       const gap = Math.abs(currentVTime - target);
       setSyncDelayGapText(`⚡ Realigned (-${gap.toFixed(1)}s gap fixed)`);
       if (delayGapTimeoutRef.current) clearTimeout(delayGapTimeoutRef.current);
       delayGapTimeoutRef.current = setTimeout(() => setSyncDelayGapText(''), 3500);
 
-      if (codexEngine === 'youtube' && codexYTPlayerRef.current && typeof codexYTPlayerRef.current.seekTo === 'function') {
+      if (codexEngineRef.current === 'youtube' && codexYTPlayerRef.current && typeof codexYTPlayerRef.current.seekTo === 'function') {
         codexYTPlayerRef.current.seekTo(target, true);
         if (data.state === 'PLAY') codexYTPlayerRef.current.playVideo();
         else codexYTPlayerRef.current.pauseVideo();
-      } else if (html5VideoRef.current) {
+      } else if (videoEl) {
         isMovieRemoteTriggerRef.current = true;
-        html5VideoRef.current.currentTime = target;
+        videoEl.currentTime = target;
         if (data.state === 'PLAY') {
-          html5VideoRef.current.play().catch(() => {});
+          videoEl.play().catch(() => {});
           setIsMoviePlaying(true);
         } else {
-          html5VideoRef.current.pause();
+          videoEl.pause();
           setIsMoviePlaying(false);
         }
         setTimeout(() => { isMovieRemoteTriggerRef.current = false; }, 600);
@@ -3223,8 +3266,9 @@ export default function App() {
     socketRef.current.on('codex_movie_sync_broadcast', ({ state, currentTime, timestamp }) => {
       const latency = Math.max(0, (Date.now() - (timestamp || Date.now())) / 1000);
       const target = (currentTime || 0) + (state === 'PLAY' ? latency : 0);
+      const videoEl = html5LocalVideoRef.current || html5VideoRef.current;
 
-      if (codexEngine === 'youtube' && codexYTPlayerRef.current && typeof codexYTPlayerRef.current.seekTo === 'function') {
+      if (codexEngineRef.current === 'youtube' && codexYTPlayerRef.current && typeof codexYTPlayerRef.current.seekTo === 'function') {
         isMovieRemoteTriggerRef.current = true;
         const currentYT = codexYTPlayerRef.current.getCurrentTime() || 0;
         if (Math.abs(currentYT - target) > 0.4) {
@@ -3238,17 +3282,17 @@ export default function App() {
           setIsMoviePlaying(false);
         }
         setTimeout(() => { isMovieRemoteTriggerRef.current = false; }, 600);
-      } else if ((codexEngine === 'gofile' || codexEngine === 'local') && html5VideoRef.current) {
+      } else if ((codexEngineRef.current === 'gofile' || codexEngineRef.current === 'local') && videoEl) {
         isMovieRemoteTriggerRef.current = true;
-        if (Math.abs(html5VideoRef.current.currentTime - target) > 0.4) {
-          html5VideoRef.current.currentTime = target;
+        if (Math.abs(videoEl.currentTime - target) > 0.4) {
+          videoEl.currentTime = target;
         }
 
         if (state === 'PLAY') {
-          html5VideoRef.current.play().catch(() => {});
+          videoEl.play().catch(() => {});
           setIsMoviePlaying(true);
         } else {
-          html5VideoRef.current.pause();
+          videoEl.pause();
           setIsMoviePlaying(false);
         }
 
@@ -3713,7 +3757,7 @@ export default function App() {
     return () => {
       if (socketRef.current) socketRef.current.disconnect();
     };
-  }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerMobileNotification, handleLoveBalanceTransaction, codexEngine]);
+  }, [playReceiveSound, playBubblePopSound, markMessagesAsSeen, triggerMobileNotification, handleLoveBalanceTransaction]);
 
   const handleAdminSendRequest = () => {
     if (socketRef.current) {
@@ -4012,11 +4056,11 @@ export default function App() {
   };
 
   const handleLoadMovie = (e) => {
-    e.preventDefault();
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
     setMovieError('');
 
     if (codexEngine === 'youtube') {
-      const vid = extractYouTubeId(movieInputUrl.trim());
+      const vid = extractYouTubeId((movieInputUrl || '').trim());
       if (!vid) {
         alert("Please paste a valid YouTube watch link.");
         return;
@@ -4034,7 +4078,7 @@ export default function App() {
         });
       }
     } else if (codexEngine === 'embed') {
-      const input = movieInputUrl.trim();
+      const input = (movieInputUrl || '').trim();
       let imdbId = input;
       let finalEmbed = input;
 
@@ -4069,7 +4113,7 @@ export default function App() {
         });
       }
     } else {
-      const trimmed = movieInputUrl.trim();
+      const trimmed = (movieInputUrl || '').trim();
       if (trimmed.toLowerCase().includes('.mkv')) {
         setMovieError("Note: .MKV container is not supported by web browsers. Video may lack audio. Please use .MP4 format!");
       }
@@ -8274,7 +8318,15 @@ export default function App() {
             )}
 
             {viewMode === 'codex' && (
-              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-3 sm:space-y-4 scrollbar-none font-sans">
+              <ErrorBoundary fallback={
+                <section className="flex-1 p-6 text-center text-white flex flex-col items-center justify-center font-sans space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-300 flex items-center justify-center text-xl">🎬</div>
+                  <h3 className="text-sm font-bold">Codex Cinema Recovered</h3>
+                  <p className="text-xs text-gray-400 max-w-sm">An engine display issue occurred. Click below to reload the player.</p>
+                  <button onClick={() => setCodexEngine('gofile')} className="bg-emerald-600 px-4 py-2 rounded-xl text-xs font-bold text-white cursor-pointer shadow">Reset to Stream</button>
+                </section>
+              }>
+                <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-3 sm:space-y-4 scrollbar-none font-sans">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#222] pb-2.5 gap-2">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
@@ -8290,7 +8342,7 @@ export default function App() {
                     <div className="flex overflow-x-auto scrollbar-none bg-[#181818] p-1 rounded-xl border border-[#2c2c2c] gap-1 text-xs shrink-0 max-w-full">
                       <button
                         type="button"
-                        onClick={() => { setCodexEngine('gofile'); setMovieError(''); }}
+                        onClick={() => handleSwitchCodexEngine('gofile')}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer shrink-0 ${
                           codexEngine === 'gofile' ? 'bg-[#252525] text-emerald-400 shadow' : 'text-gray-400 hover:text-white'
                         }`}
@@ -8300,7 +8352,7 @@ export default function App() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => { setCodexEngine('youtube'); setMovieError(''); }}
+                        onClick={() => handleSwitchCodexEngine('youtube')}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer shrink-0 ${
                           codexEngine === 'youtube' ? 'bg-[#252525] text-blue-400 shadow' : 'text-gray-400 hover:text-white'
                         }`}
@@ -8310,7 +8362,7 @@ export default function App() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => { setCodexEngine('embed'); setMovieError(''); }}
+                        onClick={() => handleSwitchCodexEngine('embed')}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer shrink-0 ${
                           codexEngine === 'embed' ? 'bg-[#252525] text-purple-400 shadow' : 'text-gray-400 hover:text-white'
                         }`}
@@ -8320,7 +8372,7 @@ export default function App() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => { setCodexEngine('local'); setMovieError(''); }}
+                        onClick={() => handleSwitchCodexEngine('local')}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium cursor-pointer shrink-0 ${
                           codexEngine === 'local' ? 'bg-[#252525] text-amber-400 shadow' : 'text-gray-400 hover:text-white'
                         }`}
@@ -8365,7 +8417,7 @@ export default function App() {
                         <div className="flex gap-2 shrink-0">
                           <button
                             type="button"
-                            onClick={() => localVideoInputRef.current && localVideoInputRef.current.click()}
+                            onClick={() => localVideoInputRef?.current?.click()}
                             className="bg-[#242424] text-white px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer border border-[#333]"
                           >
                             {localFileName ? `Change: ${localFileName.substring(0, 12)}...` : "📁 Pick Movie"}
@@ -8462,33 +8514,39 @@ export default function App() {
                     )}
                   </div>
 
-                  {codexEngine === 'gofile' ? (
-                    activeMovieSrc ? (
-                      <video 
-                        ref={html5VideoRef}
-                        src={activeMovieSrc}
-                        controls
-                        playsInline
-                        referrerPolicy="no-referrer"
-                        crossOrigin="anonymous"
-                        onPlay={handleHtml5Play}
-                        onPause={handleHtml5Pause}
-                        onSeeked={handleHtml5Seeked}
-                        onError={() => {
-                          setMovieError("Cannot decode video. Web browsers (Chrome/Safari) do NOT support .MKV files. Please use standard .MP4 (H.264/AAC) format.");
-                        }}
-                        className="w-full max-h-[55vh] sm:max-h-[72vh] object-contain rounded-2xl bg-black"
-                      />
-                    ) : (
-                      <div className="text-center p-6 space-y-2 text-gray-500">
-                        <Tv size={36} className="mx-auto opacity-30 text-emerald-400" />
-                        <p className="text-xs">
-                          {role === 'parent' ? "Paste direct MP4 link above and click Broadcast" : "Waiting for Admin to broadcast stream..."}
-                        </p>
-                      </div>
-                    )
-                  ) : codexEngine === 'youtube' ? (
-                    activeMovieYTId ? (
+                  {/* 1. GOFILE / DIRECT STREAM CONTAINER */}
+                  {codexEngine === 'gofile' && (
+                    <div className="w-full flex items-center justify-center">
+                      {activeMovieSrc ? (
+                        <video 
+                          ref={html5VideoRef}
+                          src={activeMovieSrc}
+                          controls
+                          playsInline
+                          referrerPolicy="no-referrer"
+                          crossOrigin="anonymous"
+                          onPlay={handleHtml5Play}
+                          onPause={handleHtml5Pause}
+                          onSeeked={handleHtml5Seeked}
+                          onError={() => {
+                            setMovieError("Cannot decode video. Web browsers (Chrome/Safari) do NOT support .MKV files. Please use standard .MP4 (H.264/AAC) format.");
+                          }}
+                          className="w-full max-h-[55vh] sm:max-h-[72vh] object-contain rounded-2xl bg-black"
+                        />
+                      ) : (
+                        <div className="text-center p-6 space-y-2 text-gray-500">
+                          <Tv size={36} className="mx-auto opacity-30 text-emerald-400" />
+                          <p className="text-xs">
+                            {role === 'parent' ? "Paste direct MP4 link above and click Broadcast" : "Waiting for Admin to broadcast stream..."}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 2. YOUTUBE CONTAINER - CONTINUOUSLY MOUNTED IN DOM TO PREVENT REACT REMOVECHILD CRASH */}
+                  <div className={`w-full flex items-center justify-center ${codexEngine === 'youtube' ? 'block' : 'hidden'}`}>
+                    {activeMovieYTId ? (
                       <div className="w-full h-[45vh] sm:h-[65vh] rounded-2xl overflow-hidden bg-black flex items-center justify-center">
                         <div id="codex-cinema-yt-player" className="w-full h-full" />
                       </div>
@@ -8499,65 +8557,75 @@ export default function App() {
                           {role === 'parent' ? "Paste YouTube watch link above to stream." : "Waiting for Admin to broadcast video..."}
                         </p>
                       </div>
-                    )
-                  ) : codexEngine === 'embed' ? (
-                    activeEmbedUrl ? (
-                      <iframe 
-                        key={activeEmbedUrl}
-                        src={activeEmbedUrl}
-                        title="Codex Embed API"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        allowFullScreen
-                        referrerPolicy="origin"
-                        className="w-full h-[50vh] sm:h-[68vh] rounded-2xl border-none bg-black"
-                      />
-                    ) : (
-                      <div className="text-center p-6 space-y-2 text-gray-500">
-                        <Globe size={36} className="mx-auto opacity-30 text-purple-400" />
-                        <p className="text-xs">
-                          {role === 'parent' ? "Enter IMDb ID (e.g. tt0499549) to stream movies." : "Waiting for Admin to load Embed API..."}
-                        </p>
-                      </div>
-                    )
-                  ) : (
-                    localVideoSrc ? (
-                      <div className="w-full relative flex flex-col items-center">
-                        <video 
-                          ref={html5VideoRef}
-                          src={localVideoSrc}
-                          controls
-                          playsInline
-                          onPlay={handleHtml5Play}
-                          onPause={handleHtml5Pause}
-                          onSeeked={handleHtml5Seeked}
-                          className="w-full max-h-[50vh] sm:max-h-[70vh] object-contain rounded-2xl bg-black"
+                    )}
+                  </div>
+
+                  {/* 3. EMBED API CONTAINER */}
+                  {codexEngine === 'embed' && (
+                    <div className="w-full flex items-center justify-center">
+                      {activeEmbedUrl ? (
+                        <iframe 
+                          key={activeEmbedUrl}
+                          src={activeEmbedUrl}
+                          title="Codex Embed API"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                          referrerPolicy="origin"
+                          className="w-full h-[50vh] sm:h-[68vh] rounded-2xl border-none bg-black"
                         />
-                        <div className="w-full bg-[#111] p-2 flex items-center justify-between text-[11px] text-gray-400 px-3 font-mono">
-                          <span className="truncate max-w-[200px]">📁 {localFileName}</span>
-                          <button 
-                            onClick={() => localVideoInputRef.current && localVideoInputRef.current.click()}
-                            className="text-amber-400 underline cursor-pointer"
+                      ) : (
+                        <div className="text-center p-6 space-y-2 text-gray-500">
+                          <Globe size={36} className="mx-auto opacity-30 text-purple-400" />
+                          <p className="text-xs">
+                            {role === 'parent' ? "Enter IMDb ID (e.g. tt0499549) to stream movies." : "Waiting for Admin to load Embed API..."}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 4. LOCAL FILE CONTAINER */}
+                  {codexEngine === 'local' && (
+                    <div className="w-full flex items-center justify-center">
+                      {localVideoSrc ? (
+                        <div className="w-full relative flex flex-col items-center">
+                          <video 
+                            ref={html5LocalVideoRef}
+                            src={localVideoSrc}
+                            controls
+                            playsInline
+                            onPlay={handleHtml5Play}
+                            onPause={handleHtml5Pause}
+                            onSeeked={handleHtml5Seeked}
+                            className="w-full max-h-[50vh] sm:max-h-[70vh] object-contain rounded-2xl bg-black"
+                          />
+                          <div className="w-full bg-[#111] p-2 flex items-center justify-between text-[11px] text-gray-400 px-3 font-mono">
+                            <span className="truncate max-w-[200px]">📁 {localFileName}</span>
+                            <button 
+                              onClick={() => localVideoInputRef?.current?.click()}
+                              className="text-amber-400 underline cursor-pointer"
+                            >
+                              Change
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center p-6 space-y-2.5 text-gray-400">
+                          <HardDrive size={36} className="mx-auto opacity-40 text-amber-400" />
+                          <p className="text-xs font-semibold text-white">Local File Sync (Offline)</p>
+                          <p className="text-[11px] text-gray-400 max-w-xs mx-auto">
+                            Select downloaded movie from your device. Both sides will be millisecond frame synced!
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => localVideoInputRef?.current?.click()}
+                            className="bg-[#242424] text-white px-4 py-2.5 rounded-xl text-xs font-semibold cursor-pointer border border-[#333]"
                           >
-                            Change
+                            Select Movie File
                           </button>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="text-center p-6 space-y-2.5 text-gray-400">
-                        <HardDrive size={36} className="mx-auto opacity-40 text-amber-400" />
-                        <p className="text-xs font-semibold text-white">Local File Sync (Offline)</p>
-                        <p className="text-[11px] text-gray-400 max-w-xs mx-auto">
-                          Select downloaded movie from your device. Both sides will be millisecond frame synced!
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => localVideoInputRef.current && localVideoInputRef.current.click()}
-                          className="bg-[#242424] text-white px-4 py-2.5 rounded-xl text-xs font-semibold cursor-pointer border border-[#333]"
-                        >
-                          Select Movie File
-                        </button>
-                      </div>
-                    )
+                      )}
+                    </div>
                   )}
 
                   {/* --- IN-CINEMA LIVE NOTIFICATION BANNER (VISIBLE WHEN TOGEPI MENU CLOSED) --- */}
@@ -8656,7 +8724,8 @@ export default function App() {
                   </div>
                 </div>
               </section>
-            )}
+            </ErrorBoundary>
+          )}
 
             {viewMode !== 'admin_dashboard' && viewMode !== 'daily_projects' && (
               <div className="px-3 sm:px-6 lg:px-8 pb-3 sm:pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
