@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import io from 'socket.io-client';
 import CryptoJS from 'crypto-js';
 import jsPDF from 'jspdf';
@@ -6531,18 +6531,17 @@ export default function App() {
                         type="button"
                         onClick={() => {
                           setDailyAdminTab('review');
-                          const el = document.getElementById('admin-part-5-daily-tasks');
-                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                          setViewMode('daily_projects');
                         }}
                         className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 active:scale-95 shadow ${
                           dailySubmissions.filter(s => s.status === 'PENDING').length > 0
                             ? 'bg-amber-500 text-black border border-amber-300 animate-pulse'
                             : 'bg-[#242424] hover:bg-[#333] border border-[#3a3a3a] text-emerald-300'
                         }`}
-                        title="Review Dora's Hourly Tasks Proofs & Submissions"
+                        title="Review Dora's Project Submissions & Hourly Tasks Proofs"
                       >
                         <Briefcase size={13} />
-                        <span>Dora Tasks {dailySubmissions.filter(s => s.status === 'PENDING').length > 0 ? `(${dailySubmissions.filter(s => s.status === 'PENDING').length} PENDING)` : ''}</span>
+                        <span>Project Submissions {dailySubmissions.filter(s => s.status === 'PENDING').length > 0 ? `(${dailySubmissions.filter(s => s.status === 'PENDING').length} PENDING)` : ''}</span>
                       </button>
                       <button
                         type="button"
