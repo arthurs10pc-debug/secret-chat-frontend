@@ -162,6 +162,12 @@ const ChatGPTLogo = ({ className = "w-4 h-4", fill = "currentColor" }) => (
   </svg>
 );
 
+const formatLoveBalance = (bal) => {
+  const n = Number(bal || 0);
+  if (n < 0) return `-₹ ${Math.abs(n).toFixed(2)}`;
+  return `₹ ${n.toFixed(2)}`;
+};
+
 export default function App() {
   const [role, setRole] = useState(() => localStorage.getItem('stealth_role') || 'user');
   const [currentRoom, setCurrentRoom] = useState("GMB Review Reply");
@@ -381,6 +387,18 @@ export default function App() {
   const [dailyAITip, setDailyAITip] = useState('');
   const [dailyAILoading, setDailyAILoading] = useState(false);
   const dailyFileInputRef = useRef(null);
+
+  // Helper to accurately lookup a submission for a slot on the given date (prioritizes APPROVED, then PENDING)
+  const getSlotSubmission = useCallback((slotId, date) => {
+    if (!slotId) return null;
+    const matches = dailySubmissions.filter(s => s && s.slotId === slotId && (!date || !s.date || s.date === date));
+    if (matches.length === 0) return null;
+    const approved = matches.find(s => s.status === 'APPROVED');
+    if (approved) return approved;
+    const pending = matches.find(s => s.status === 'PENDING');
+    if (pending) return pending;
+    return matches[matches.length - 1];
+  }, [dailySubmissions]);
 
   // Mobile Notification Permission State
   // Touch Swipe Gesture State for Mobile Sidebar (Left-to-Right Opens)
@@ -2421,9 +2439,31 @@ export default function App() {
     const pts = slot ? Number(slot.rewardPoints || 2.0) : 2.0;
     const slotTitle = slot ? slot.title : 'Routine Task';
 
-    // 1. Optimistic update
+    // 1. Optimistic update (matches by id OR by slotId + date so retakes immediately turn green ✓ Done)
     setDailySubmissions(prev => {
-      const updated = prev.map(s => s.id === sub.id ? { ...s, status: 'APPROVED', pointsAwarded: pts, reviewedAt: new Date().toISOString() } : s);
+      let matched = false;
+      const updated = prev.map(s => {
+        if (s.id === sub.id || (s.slotId === sub.slotId && (!sub.date || s.date === sub.date))) {
+          matched = true;
+          return {
+            ...s,
+            status: 'APPROVED',
+            pointsAwarded: pts,
+            reviewedAt: new Date().toISOString(),
+            adminFeedback: 'Approved by Darsh'
+          };
+        }
+        return s;
+      });
+      if (!matched) {
+        updated.push({
+          ...sub,
+          status: 'APPROVED',
+          pointsAwarded: pts,
+          reviewedAt: new Date().toISOString(),
+          adminFeedback: 'Approved by Darsh'
+        });
+      }
       try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(updated)); } catch(e) {}
       return updated;
     });
@@ -2435,6 +2475,8 @@ export default function App() {
     if (socketRef.current) {
       socketRef.current.emit('daily_task_approve', {
         submissionId: sub.id,
+        slotId: sub.slotId,
+        date: sub.date,
         points: pts,
         feedback: 'Approved by Darsh',
         slotTitle
@@ -2443,6 +2485,8 @@ export default function App() {
         room: GLOBAL_ROOM,
         action: 'DAILY_TASK_APPROVED',
         submissionId: sub.id,
+        slotId: sub.slotId,
+        date: sub.date,
         points: pts,
         slotTitle,
         senderRole: 'admin',
@@ -3300,13 +3344,15 @@ export default function App() {
         ((myRole === 'parent' || myRole === 'admin') && (data.senderRole === 'parent' || data.senderRole === 'admin'));
 
       // Authoritative real-time sync from server
-      if (typeof data.currentLoveBalance === 'number') {
-        setLoveBalance(data.currentLoveBalance);
-        try { localStorage.setItem('stealth_love_balance', data.currentLoveBalance.toString()); } catch(e) {}
+      const serverLoveBal = typeof data.currentLoveBalance === 'number' ? data.currentLoveBalance : (typeof data.loveBalance === 'number' ? data.loveBalance : null);
+      if (serverLoveBal !== null) {
+        setLoveBalance(serverLoveBal);
+        try { localStorage.setItem('stealth_love_balance', serverLoveBal.toString()); } catch(e) {}
       }
-      if (typeof data.currentAdminLoveBalance === 'number') {
-        setAdminLoveBalance(data.currentAdminLoveBalance);
-        try { localStorage.setItem('stealth_admin_love_balance', data.currentAdminLoveBalance.toString()); } catch(e) {}
+      const serverAdminLoveBal = typeof data.currentAdminLoveBalance === 'number' ? data.currentAdminLoveBalance : (typeof data.adminLoveBalance === 'number' ? data.adminLoveBalance : null);
+      if (serverAdminLoveBal !== null) {
+        setAdminLoveBalance(serverAdminLoveBal);
+        try { localStorage.setItem('stealth_admin_love_balance', serverAdminLoveBal.toString()); } catch(e) {}
       }
 
       if (isMyOwnAction) return;
@@ -3430,6 +3476,28 @@ export default function App() {
           setWishRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'DECLINED' } : r));
           alert('Note: Wish request for "' + req.wishTitle + '" was declined.');
         }
+      } else if (data.action === 'DAILY_TASK_APPROVED') {
+        const subId = data.submissionId;
+        const targetSlotId = data.slotId;
+        const targetDate = data.date;
+        const pts = parseFloat(data.points) || 2.0;
+        setDailySubmissions(prev => {
+          let found = false;
+          const next = prev.map(s => {
+            if ((subId && s.id === subId) || (targetSlotId && s.slotId === targetSlotId && (!targetDate || s.date === targetDate))) {
+              found = true;
+              return {
+                ...s,
+                status: 'APPROVED',
+                pointsAwarded: pts,
+                reviewedAt: new Date().toISOString()
+              };
+            }
+            return s;
+          });
+          try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(next)); } catch(e) {}
+          return next;
+        });
       } else if (data.action === 'REQUEST_SYNC') {
         if (socketRef.current) {
           socketRef.current.emit('love_balance_action', {
@@ -3573,19 +3641,35 @@ export default function App() {
       }
     });
 
-    socketRef.current.on('daily_task_submission_updated', ({ submission, approved, rejected, isNew, pointsAwarded }) => {
-      if (submission) {
+    socketRef.current.on('daily_task_submission_updated', ({ submission, submissionId, approved, rejected, isNew, pointsAwarded }) => {
+      const targetId = (submission && submission.id) || submissionId;
+      const targetSlotId = submission && submission.slotId;
+      const targetDate = submission && submission.date;
+
+      if (targetId || targetSlotId) {
         setDailySubmissions(prev => {
-          const map = new Map();
-          prev.forEach(s => map.set(s.id, s));
-          map.set(submission.id, submission);
-          const merged = Array.from(map.values());
-          try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(merged)); } catch(e) {}
-          return merged;
+          let found = false;
+          const next = prev.map(s => {
+            if ((targetId && s.id === targetId) || (targetSlotId && s.slotId === targetSlotId && (!targetDate || s.date === targetDate))) {
+              found = true;
+              return {
+                ...s,
+                ...(submission || {}),
+                status: approved ? 'APPROVED' : (rejected ? 'REJECTED' : (submission?.status || s.status)),
+                pointsAwarded: approved ? (pointsAwarded || submission?.pointsAwarded || s.pointsAwarded || 2.0) : s.pointsAwarded
+              };
+            }
+            return s;
+          });
+          if (!found && submission && submission.id) {
+            next.push(submission);
+          }
+          try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(next)); } catch(e) {}
+          return next;
         });
 
         const activeRole = roleRef.current || role || localStorage.getItem('stealth_role');
-        if (isNew && (activeRole === 'parent' || activeRole === 'admin')) {
+        if (isNew && (activeRole === 'parent' || activeRole === 'admin') && submission) {
           try { playReceiveSound(); } catch (e) {}
           setDailyAdminToast({
             slotId: submission.slotId,
@@ -3601,12 +3685,11 @@ export default function App() {
             confetti({ particleCount: 80, spread: 90, origin: { y: 0.4 } });
           } catch (e) {}
           if (activeRole !== 'parent' && activeRole !== 'admin') {
-            alert(`🎉 Task Approved by Darsh!\n\n+₹ ${pointsAwarded || submission.pointsAwarded || 0} has been added to your Love Balance! 💖`);
+            alert(`🎉 Task Approved by Darsh!\n\n+₹ ${pointsAwarded || (submission && submission.pointsAwarded) || 2.0} has been added to your Love Balance! 💖`);
           }
         } else if (rejected) {
-          const activeRole = roleRef.current || role || localStorage.getItem('stealth_role');
           if (activeRole !== 'parent' && activeRole !== 'admin') {
-            alert(`Note: Darsh requested a retake on this task:\n"${submission.adminFeedback || 'Please retake with clear proof'}"`);
+            alert(`Note: Darsh requested a retake on this task:\n"${(submission && submission.adminFeedback) || 'Please retake with clear proof'}"`);
           }
         }
       }
@@ -4573,7 +4656,7 @@ export default function App() {
             >
               <div className="flex items-center gap-2.5">
                 <FolderGit2 size={16} className={viewMode === 'daily_projects' ? 'text-blue-400' : 'text-[#9b9b9b]'} />
-                <span>{role === 'parent' ? "Dora's Tasks (Admin)" : "Projects"}</span>
+                <span>{role === 'parent' ? "Project Submission" : "Projects"}</span>
               </div>
               <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold ${
                 role === 'parent'
@@ -4736,22 +4819,28 @@ export default function App() {
               </button>
 
               {role === 'parent' ? (
-                <button
-                  type="button"
-                  onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                  className="flex items-center gap-1.5 bg-[#182229] hover:bg-[#2a3942] border border-pink-500/50 text-white px-2 sm:px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 shadow-sm"
-                  title="Dora: 💕 Love Balance | Darsh: 👑 Love Balance"
+                <div
+                  className="flex items-center gap-1.5 bg-[#182229] border border-pink-500/50 text-white px-2 sm:px-2.5 py-1 rounded-xl text-xs font-mono font-bold shrink-0 shadow-sm"
+                  title="Dora: 💕 Love Balance | Darsh: 👑 Love Balance (Click either to view passbook)"
                 >
-                  <span className={`flex items-center gap-1 ${Number(loveBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                    className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(loveBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
+                  >
                     <span>{Number(loveBalance || 0) < 0 ? '💔' : '💕'}</span>
-                    <span>{Number(loveBalance || 0) < 0 ? `-₹${Math.abs(Number(loveBalance || 0)).toFixed(2)}` : `₹${Number(loveBalance || 0).toFixed(2)}`}</span>
-                  </span>
+                    <span>{formatLoveBalance(loveBalance)}</span>
+                  </button>
                   <span className="text-[#374248]">|</span>
-                  <span className={`flex items-center gap-1 ${Number(adminLoveBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveLbTarget('admin'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                    className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(adminLoveBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}
+                  >
                     <span>{Number(adminLoveBalance || 0) < 0 ? '💔' : '👑'}</span>
-                    <span>{Number(adminLoveBalance || 0) < 0 ? `-₹${Math.abs(Number(adminLoveBalance || 0)).toFixed(2)}` : `₹${Number(adminLoveBalance || 0).toFixed(2)}`}</span>
-                  </span>
-                </button>
+                    <span>{formatLoveBalance(adminLoveBalance)}</span>
+                  </button>
+                </div>
               ) : (
                 <button
                   type="button"
@@ -4760,7 +4849,7 @@ export default function App() {
                   title="Your Love Balance Passbook & Wish Store"
                 >
                   <span>{Number(loveBalance || 0) < 0 ? '💔' : '💖'}</span>
-                  <span>{Number(loveBalance || 0) < 0 ? `-₹ ${Math.abs(Number(loveBalance || 0)).toFixed(2)}` : `₹ ${Number(loveBalance || 0).toFixed(2)}`}</span>
+                  <span>{formatLoveBalance(loveBalance)}</span>
                 </button>
               )}
 
@@ -5409,22 +5498,28 @@ export default function App() {
 
             {/* LOVE BALANCE BUTTON PILL (SHOW BOTH FOR DARSH, DORA ONLY SEES DORA) */}
             {role === 'parent' ? (
-              <button
-                type="button"
-                onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                className="flex items-center gap-1.5 bg-emerald-950/50 hover:bg-emerald-900/70 border border-emerald-500/60 hover:border-emerald-400 text-white px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all shadow-[0_0_12px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
-                title="Dora: 💕 Love Balance | Darsh: 👑 Love Balance"
+              <div
+                className="flex items-center gap-1.5 bg-emerald-950/50 border border-emerald-500/60 text-white px-2.5 py-1 rounded-xl text-xs font-mono font-bold shadow-[0_0_12px_rgba(16,185,129,0.2)] shrink-0"
+                title="Dora: 💕 Love Balance | Darsh: 👑 Love Balance (Click either to view passbook)"
               >
-                <span className={`flex items-center gap-1 ${Number(loveBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}>
+                <button
+                  type="button"
+                  onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                  className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(loveBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
+                >
                   <span>{Number(loveBalance || 0) < 0 ? '💔' : '💕'}</span>
-                  <span>{Number(loveBalance || 0) < 0 ? `-₹${Math.abs(Number(loveBalance || 0)).toFixed(2)}` : `₹${Number(loveBalance || 0).toFixed(2)}`}</span>
-                </span>
+                  <span>{formatLoveBalance(loveBalance)}</span>
+                </button>
                 <span className="text-emerald-700">|</span>
-                <span className={`flex items-center gap-1 ${Number(adminLoveBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}>
+                <button
+                  type="button"
+                  onClick={() => { setActiveLbTarget('admin'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                  className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(adminLoveBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}
+                >
                   <span>{Number(adminLoveBalance || 0) < 0 ? '💔' : '👑'}</span>
-                  <span>{Number(adminLoveBalance || 0) < 0 ? `-₹${Math.abs(Number(adminLoveBalance || 0)).toFixed(2)}` : `₹${Number(adminLoveBalance || 0).toFixed(2)}`}</span>
-                </span>
-              </button>
+                  <span>{formatLoveBalance(adminLoveBalance)}</span>
+                </button>
+              </div>
             ) : (
               <button
                 type="button"
@@ -5433,7 +5528,7 @@ export default function App() {
                 title="Open Love Balance Passbook & Wish Store"
               >
                 <span className="text-sm font-sans">{Number(loveBalance || 0) < 0 ? '💔' : '💖'}</span>
-                <span>{Number(loveBalance || 0) < 0 ? `-₹ ${Math.abs(Number(loveBalance || 0)).toFixed(2)}` : `₹ ${Number(loveBalance || 0).toFixed(2)}`}</span>
+                <span>{formatLoveBalance(loveBalance)}</span>
               </button>
             )}
 
@@ -6978,7 +7073,7 @@ export default function App() {
                         {/* SUBMISSIONS LIST */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                           {dailySlots.filter(s => s.isActive).map((slot) => {
-                            const sub = dailySubmissions.find(s => s.slotId === slot.id);
+                            const sub = getSlotSubmission(slot.id, dailySelectedDate);
                             const isApproved = sub && sub.status === 'APPROVED';
                             const isPending = sub && sub.status === 'PENDING';
                             const isRejected = sub && sub.status === 'REJECTED';
@@ -7170,7 +7265,7 @@ export default function App() {
               </section>
             )}
 
-            {/* --- DARSH ADMIN DEDICATED APPROVAL REQUESTS & SLOTS CUSTOMIZATION SCREEN --- */}
+            {/* --- DARSH ADMIN DEDICATED PROJECT SUBMISSION & HOURLY REPORT SCREEN --- */}
             {viewMode === 'daily_projects' && role === 'parent' && (
               <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-4 scrollbar-none font-sans animate-in fade-in duration-150">
                 {/* ADMIN APPROVAL HERO HEADER */}
@@ -7189,12 +7284,12 @@ export default function App() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h2 className="text-sm sm:text-base font-bold text-white">Dora's Task Approvals (Admin)</h2>
+                        <h2 className="text-sm sm:text-base font-bold text-white">Project Submission (Admin)</h2>
                         <span className="text-[9px] bg-amber-500 text-black px-1.5 py-0.2 rounded font-bold font-mono">
                           DARSH
                         </span>
                       </div>
-                      <p className="text-[11px] text-gray-400">Review Dora's routine proofs, download photos, and approve Love Balance rewards</p>
+                      <p className="text-[11px] text-gray-400">Review Dora's Hourly Report submissions in real time</p>
                     </div>
                   </div>
 
@@ -7215,43 +7310,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* TAB SWITCHER: APPROVAL REQUESTS VS SLOTS CUSTOMIZATION */}
-                <div className="flex bg-[#141414] p-1 rounded-2xl border border-[#262626] text-xs font-bold gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setDailyAdminTab('review')}
-                    className={`flex-1 py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                      dailyAdminTab === 'review'
-                        ? 'bg-amber-500 text-black shadow-lg font-black'
-                        : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    <Briefcase size={14} />
-                    <span>Task Approvals</span>
-                    {dailySubmissions.filter(s => s.status === 'PENDING').length > 0 && (
-                      <span className="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
-                        {dailySubmissions.filter(s => s.status === 'PENDING').length}
-                      </span>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setDailyAdminTab('slots')}
-                    className={`flex-1 py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                      dailyAdminTab === 'slots'
-                        ? 'bg-blue-600 text-white shadow-lg font-black'
-                        : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    <SlidersHorizontal size={14} />
-                    <span>Slots Customization</span>
-                  </button>
-                </div>
-
-                {/* TAB 1: TASK APPROVALS INTERFACE */}
-                {dailyAdminTab === 'review' && (
-                  <div className="space-y-4">
+                <div className="space-y-4">
                     {/* STATS OVERVIEW */}
                     <div className="grid grid-cols-3 gap-2.5 text-center text-xs">
                       <div className="bg-[#141414] border border-[#262626] p-3 rounded-2xl">
@@ -7289,7 +7348,7 @@ export default function App() {
                       {/* HORIZONTAL SCROLLING PILLS */}
                       <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none pt-1">
                         {dailySlots.filter(s => s.isActive).map((slot) => {
-                          const sub = dailySubmissions.find(s => s.slotId === slot.id);
+                          const sub = getSlotSubmission(slot.id, dailySelectedDate);
                           const isSelected = dailySelectedSlotId === slot.id;
                           const isApproved = sub && sub.status === 'APPROVED';
                           const isPending = sub && sub.status === 'PENDING';
@@ -7379,7 +7438,7 @@ export default function App() {
                     {(() => {
                       const activeSlot = dailySlots.find(s => s.id === dailySelectedSlotId) || dailySlots[0];
                       if (!activeSlot) return null;
-                      const activeSub = dailySubmissions.find(s => s.slotId === activeSlot.id);
+                      const activeSub = getSlotSubmission(activeSlot.id, dailySelectedDate);
                       const isApproved = activeSub && activeSub.status === 'APPROVED';
                       const isPending = activeSub && activeSub.status === 'PENDING';
                       const isRejected = activeSub && activeSub.status === 'REJECTED';
@@ -7602,87 +7661,27 @@ export default function App() {
                         </div>
                       )}
                     </div>
-                  </div>
-                )}
 
-                {/* TAB 2: SLOTS CUSTOMIZATION (DYNAMIC ADMIN ADD / EDIT / DELETE) */}
-                {dailyAdminTab === 'slots' && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between bg-[#141414] p-3 rounded-2xl border border-[#262626]">
-                      <div>
-                        <h3 className="text-sm font-bold text-white">Custom Routine Slots</h3>
-                        <p className="text-[11px] text-gray-400">Configure hourly routine times, tags, and reward points</p>
+                    {/* DIRECT SHORTCUT TO ADMIN DASHBOARD (PART 5) FOR SLOTS CONFIGURATION & HISTORY */}
+                    <div className="bg-[#121212] border border-[#262626] rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs mt-3">
+                      <div className="space-y-0.5">
+                        <div className="font-bold text-white flex items-center gap-1.5">
+                          <span>🛠️ Routine Slots Configuration & History</span>
+                        </div>
+                        <p className="text-[11px] text-gray-400">
+                          To add, edit or delete routine time slots and view report history, visit Admin Dashboard Part 5.
+                        </p>
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          setEditingSlotId(null);
-                          setSlotFormTitle('');
-                          setSlotFormTimeRange('');
-                          setSlotFormTag('Workout');
-                          setSlotFormPoints('2.0');
-                          setShowAddSlotModal(true);
-                        }}
-                        className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer flex items-center gap-1.5 shadow transition-all active:scale-95"
+                        onClick={() => setViewMode('admin_dash')}
+                        className="bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shrink-0 active:scale-95 shadow"
                       >
-                        <Plus size={14} />
-                        <span>Add Slot</span>
+                        <Briefcase size={14} />
+                        <span>Open Admin Dashboard (Part 5) →</span>
                       </button>
                     </div>
-
-                    <div className="space-y-2">
-                      {dailySlots.map((slot) => (
-                        <div
-                          key={slot.id}
-                          className="bg-[#141414] border border-[#262626] p-3 rounded-2xl flex items-center justify-between gap-3"
-                        >
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs bg-blue-500/20 text-blue-300 font-mono font-bold px-2 py-0.5 rounded-full">
-                                {slot.timeRange}
-                              </span>
-                              <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full font-medium">
-                                {slot.tag}
-                              </span>
-                              <span className="text-xs font-mono font-bold text-emerald-400">
-                                +₹ {Number(slot.rewardPoints).toFixed(2)}
-                              </span>
-                            </div>
-                            <div className="text-sm font-bold text-white mt-1">
-                              {slot.title}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingSlotId(slot.id);
-                                setSlotFormTitle(slot.title);
-                                setSlotFormTimeRange(slot.timeRange);
-                                setSlotFormTag(slot.tag);
-                                setSlotFormPoints(String(slot.rewardPoints));
-                                setShowAddSlotModal(true);
-                              }}
-                              className="text-gray-400 hover:text-white p-2 rounded-xl bg-[#222] cursor-pointer"
-                              title="Edit Slot"
-                            >
-                              <Edit3 size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteSlot(slot.id)}
-                              className="text-gray-400 hover:text-rose-400 p-2 rounded-xl bg-[#222] cursor-pointer"
-                              title="Delete Slot"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
                   </div>
-                )}
               </section>
             )}
 
@@ -7771,7 +7770,7 @@ export default function App() {
                   {/* HORIZONTAL SCROLLING SLOT PILLS ROW */}
                   <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none pt-1">
                     {dailySlots.filter(s => s.isActive).map((slot) => {
-                      const sub = dailySubmissions.find(s => s.slotId === slot.id);
+                      const sub = getSlotSubmission(slot.id, dailySelectedDate);
                       const isSelected = dailySelectedSlotId === slot.id;
                       const isApproved = sub && sub.status === 'APPROVED';
                       const isPending = sub && sub.status === 'PENDING';
@@ -7864,7 +7863,7 @@ export default function App() {
                 {(() => {
                   const activeSlot = dailySlots.find(s => s.id === dailySelectedSlotId) || dailySlots[0];
                   if (!activeSlot) return null;
-                  const activeSub = dailySubmissions.find(s => s.slotId === activeSlot.id);
+                  const activeSub = getSlotSubmission(activeSlot.id, dailySelectedDate);
                   const isApproved = activeSub && activeSub.status === 'APPROVED';
                   const isPending = activeSub && activeSub.status === 'PENDING';
                   const isRejected = activeSub && activeSub.status === 'REJECTED';
@@ -8072,61 +8071,6 @@ export default function App() {
                           )}
                         </div>
                       )}
-
-                      {/* CHATGPT DAILY HABIT COACH WIDGET */}
-                      <div className="bg-[#101010] border border-[#222] rounded-2xl p-3 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5">
-                            <Sparkles size={13} />
-                            <span>ChatGPT Daily Routine Assistant</span>
-                          </span>
-                          {dailyAILoading && <Loader2 size={12} className="animate-spin text-amber-400" />}
-                        </div>
-
-                        <div className="flex flex-wrap gap-1.5 pt-0.5">
-                          <button
-                            type="button"
-                            onClick={() => handleAskAICoach('10 Squats & Workout Routine')}
-                            className="text-[10px] bg-[#1c1c1c] hover:bg-[#282828] text-gray-300 px-2 py-1 rounded-lg border border-[#333] cursor-pointer"
-                          >
-                            💪 Squats Form
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleAskAICoach('Healthy Morning Detox Juice')}
-                            className="text-[10px] bg-[#1c1c1c] hover:bg-[#282828] text-gray-300 px-2 py-1 rounded-lg border border-[#333] cursor-pointer"
-                          >
-                            🥤 Detox Juice
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleAskAICoach('Heavy Breakfast for Weight Gain')}
-                            className="text-[10px] bg-[#1c1c1c] hover:bg-[#282828] text-gray-300 px-2 py-1 rounded-lg border border-[#333] cursor-pointer"
-                          >
-                            🍳 Weight Gain Meal
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleAskAICoach('8,000 Steps Daily Motivation')}
-                            className="text-[10px] bg-[#1c1c1c] hover:bg-[#282828] text-gray-300 px-2 py-1 rounded-lg border border-[#333] cursor-pointer"
-                          >
-                            🚶 8K Steps
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleAskAICoach('Night Glowing Skin Care')}
-                            className="text-[10px] bg-[#1c1c1c] hover:bg-[#282828] text-gray-300 px-2 py-1 rounded-lg border border-[#333] cursor-pointer"
-                          >
-                            ✨ Skincare Tip
-                          </button>
-                        </div>
-
-                        {dailyAITip && (
-                          <div className="bg-[#181818] border border-amber-500/30 p-2.5 rounded-xl text-xs text-amber-200 italic animate-in fade-in">
-                            "{dailyAITip}"
-                          </div>
-                        )}
-                      </div>
                     </div>
                   );
                 })()}
@@ -8936,20 +8880,42 @@ export default function App() {
                   <div>
                     <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
                       <span>Love Balance</span>
-                      <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-2 py-0.5 rounded-full">
-                        ₹ {displayedLoveBalance.toFixed(2)}
+                      <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full border ${
+                        displayedLoveBalance < 0 
+                          ? 'bg-rose-950/60 text-rose-300 border-rose-800' 
+                          : 'bg-emerald-950/60 text-emerald-400 border-emerald-800/80'
+                      }`}>
+                        {formatLoveBalance(displayedLoveBalance)}
                       </span>
-                      {isParentAdmin && (
-                        <span className={'text-[10px] font-bold px-2 py-0.5 rounded-full ' + (
-                          lbViewerTarget === 'admin' 
-                            ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40' 
-                            : 'bg-pink-500/20 text-pink-300 border border-pink-500/40'
-                        )}>
-                          {lbViewerTarget === 'admin' ? "Darsh's Ledger" : "Dora's Ledger"}
-                        </span>
-                      )}
                     </h2>
-                    
+                    {isParentAdmin ? (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <button
+                          type="button"
+                          onClick={() => setActiveLbTarget('user')}
+                          className={`text-[11px] font-bold px-2.5 py-0.5 rounded-lg border transition-all cursor-pointer ${
+                            activeLbTarget === 'user'
+                              ? 'bg-pink-600 text-white border-pink-400 shadow'
+                              : 'bg-[#222] text-gray-400 border-[#333] hover:text-white'
+                          }`}
+                        >
+                          💕 Dora ({formatLoveBalance(loveBalance)})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveLbTarget('admin')}
+                          className={`text-[11px] font-bold px-2.5 py-0.5 rounded-lg border transition-all cursor-pointer ${
+                            activeLbTarget === 'admin'
+                              ? 'bg-blue-600 text-white border-blue-400 shadow'
+                              : 'bg-[#222] text-gray-400 border-[#333] hover:text-white'
+                          }`}
+                        >
+                          👑 Darsh ({formatLoveBalance(adminLoveBalance)})
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-pink-300 mt-0.5">Dora's Romantic Passbook & Wish Store</p>
+                    )}
                   </div>
                 </div>
 
@@ -9058,7 +9024,7 @@ export default function App() {
                           )}
                         >
                           <span>💕 Dora</span>
-                          <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono">₹ {Number(loveBalance || 0).toFixed(2)}</span>
+                          <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono">{formatLoveBalance(loveBalance)}</span>
                         </button>
                         <button
                           type="button"
@@ -9070,7 +9036,7 @@ export default function App() {
                           )}
                         >
                           <span>👑 Darsh</span>
-                          <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono">₹ {Number(adminLoveBalance || 0).toFixed(2)}</span>
+                          <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono">{formatLoveBalance(adminLoveBalance)}</span>
                         </button>
                       </div>
                     )}
@@ -9081,11 +9047,13 @@ export default function App() {
                       {/* CARD 1: AVAILABLE BALANCE (BLUE) */}
                       <div className="bg-blue-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-1.5 relative overflow-hidden">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">Available Balance</span>
+                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">
+                            {isParentAdmin ? (activeLbTarget === 'admin' ? "Darsh's Available" : "Dora's Available") : "Available Balance"}
+                          </span>
                           <span className="text-sm">🤝</span>
                         </div>
                         <div className="text-xl sm:text-2xl font-black font-mono">
-                          ₹ {displayedLoveBalance.toFixed(2)}
+                          {formatLoveBalance(displayedLoveBalance)}
                         </div>
                       </div>
 
@@ -9294,7 +9262,7 @@ export default function App() {
                       </div>
                       <div className="text-right">
                         <div className="text-[11px] text-gray-400">Your Wallet</div>
-                        <div className="text-lg sm:text-xl font-black text-emerald-400 font-mono">₹ {displayedLoveBalance.toFixed(2)}</div>
+                        <div className="text-lg sm:text-xl font-black text-emerald-400 font-mono">{formatLoveBalance(displayedLoveBalance)}</div>
                       </div>
                     </div>
 
