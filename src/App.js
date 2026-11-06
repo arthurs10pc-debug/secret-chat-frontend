@@ -2411,19 +2411,16 @@ export default function App() {
     return () => clearInterval(interval);
   }, [checkDailyHabitInfractions, stealthMessages]);
 
-  // High-Frequency (4s) Authoritative Synchronization Heartbeat across all devices
+  // Request authoritative initial sync from backend upon connection
   useEffect(() => {
-    const syncInterval = setInterval(() => {
-      if (socketRef.current && isConnected) {
-        socketRef.current.emit('love_balance_action', {
-          room: GLOBAL_ROOM,
-          action: 'REQUEST_SYNC',
-          deletedSlotIds: JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]'),
-          timestamp: Date.now()
-        });
-      }
-    }, 4000);
-    return () => clearInterval(syncInterval);
+    if (socketRef.current && isConnected) {
+      socketRef.current.emit('love_balance_action', {
+        room: GLOBAL_ROOM,
+        action: 'REQUEST_SYNC',
+        deletedSlotIds: JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]'),
+        timestamp: Date.now()
+      });
+    }
   }, [isConnected]);
 
 
@@ -3525,6 +3522,15 @@ export default function App() {
     // High-Frequency Authoritative Sync Heartbeat from Backend (Every 4 seconds)
     socketRef.current.on('love_balance_heartbeat_sync', (data) => {
       if (!data) return;
+      if (Array.isArray(data.loveLedger)) {
+        setLoveLedger(prev => {
+          if (Array.isArray(prev) && prev.length === data.loveLedger.length && prev[0]?.id === data.loveLedger[0]?.id) {
+            return prev;
+          }
+          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(data.loveLedger)); } catch(e) {}
+          return data.loveLedger;
+        });
+      }
       if (typeof data.loveBalance === 'number') {
         setLoveBalance(data.loveBalance);
         try { localStorage.setItem('stealth_love_balance', data.loveBalance.toString()); } catch(e) {}
@@ -3532,10 +3538,6 @@ export default function App() {
       if (typeof data.adminLoveBalance === 'number') {
         setAdminLoveBalance(data.adminLoveBalance);
         try { localStorage.setItem('stealth_admin_love_balance', data.adminLoveBalance.toString()); } catch(e) {}
-      }
-      if (Array.isArray(data.loveLedger)) {
-        setLoveLedger(data.loveLedger);
-        try { localStorage.setItem('stealth_love_ledger', JSON.stringify(data.loveLedger)); } catch(e) {}
       }
       if (Array.isArray(data.wishRequests)) {
         setWishRequests(data.wishRequests);
@@ -3735,21 +3737,6 @@ export default function App() {
           try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(next)); } catch(e) {}
           return next;
         });
-      } else if (data.action === 'REQUEST_SYNC') {
-        if (socketRef.current) {
-          socketRef.current.emit('love_balance_action', {
-            room: GLOBAL_ROOM,
-            action: 'SYNC_STATE_RESPONSE',
-            loveBalance: loveBalance,
-            adminLoveBalance: adminLoveBalance,
-            loveLedger: loveLedger,
-            wishRequests: wishRequests,
-            dailySubmissions: dailySubmissions,
-            dailySlots: dailySlots,
-            senderRole: roleRef.current || role || 'user',
-            timestamp: Date.now()
-          });
-        }
       } else if (data.action === 'SYNC_STATE_RESPONSE') {
         if (typeof data.loveBalance === 'number') {
           setLoveBalance(data.loveBalance);
@@ -6661,16 +6648,16 @@ export default function App() {
 
                         {/* DUAL BALANCES DISPLAY */}
                         <div className="flex items-center gap-1.5 text-right">
-                          <div className={`bg-[#181818] border ${Number(loveBalance || 0) < 0 ? 'border-rose-500/50' : 'border-pink-500/30'} px-2 py-0.5 rounded-xl`}>
+                          <div className={`bg-[#181818] border ${Number(doraNetBalance || 0) < 0 ? 'border-rose-500/50' : 'border-pink-500/30'} px-2 py-0.5 rounded-xl`}>
                             <div className="text-[9px] text-gray-400">Dora</div>
-                            <div className={`text-xs sm:text-sm font-black font-mono ${Number(loveBalance || 0) < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                              {Number(loveBalance || 0) < 0 ? `-₹ ${Math.abs(Number(loveBalance || 0)).toFixed(2)}` : `₹ ${Number(loveBalance || 0).toFixed(2)}`}
+                            <div className={`text-xs sm:text-sm font-black font-mono ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                              {formatLoveBalance(doraNetBalance)}
                             </div>
                           </div>
-                          <div className={`bg-[#181818] border ${Number(adminLoveBalance || 0) < 0 ? 'border-rose-500/50' : 'border-blue-500/30'} px-2 py-0.5 rounded-xl`}>
+                          <div className={`bg-[#181818] border ${Number(adminNetBalance || 0) < 0 ? 'border-rose-500/50' : 'border-blue-500/30'} px-2 py-0.5 rounded-xl`}>
                             <div className="text-[9px] text-gray-400">Darsh</div>
-                            <div className={`text-xs sm:text-sm font-black font-mono ${Number(adminLoveBalance || 0) < 0 ? 'text-rose-400' : 'text-blue-400'}`}>
-                              {Number(adminLoveBalance || 0) < 0 ? `-₹ ${Math.abs(Number(adminLoveBalance || 0)).toFixed(2)}` : `₹ ${Number(adminLoveBalance || 0).toFixed(2)}`}
+                            <div className={`text-xs sm:text-sm font-black font-mono ${Number(adminNetBalance || 0) < 0 ? 'text-rose-400' : 'text-blue-400'}`}>
+                              {formatLoveBalance(adminNetBalance)}
                             </div>
                           </div>
                         </div>
@@ -6688,8 +6675,8 @@ export default function App() {
                           }`}
                         >
                           <span>💕 Dora</span>
-                          <span className={`text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono ${Number(loveBalance || 0) < 0 ? 'text-rose-400 font-bold' : ''}`}>
-                            {Number(loveBalance || 0) < 0 ? `-₹ ${Math.abs(Number(loveBalance || 0)).toFixed(2)}` : `₹ ${Number(loveBalance || 0).toFixed(2)}`}
+                          <span className={`text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : ''}`}>
+                            {formatLoveBalance(doraNetBalance)}
                           </span>
                         </button>
                         <button
@@ -6702,8 +6689,8 @@ export default function App() {
                           }`}
                         >
                           <span>👑 Darsh</span>
-                          <span className={`text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono ${Number(adminLoveBalance || 0) < 0 ? 'text-rose-400 font-bold' : ''}`}>
-                            {Number(adminLoveBalance || 0) < 0 ? `-₹ ${Math.abs(Number(adminLoveBalance || 0)).toFixed(2)}` : `₹ ${Number(adminLoveBalance || 0).toFixed(2)}`}
+                          <span className={`text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono ${Number(adminNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : ''}`}>
+                            {formatLoveBalance(adminNetBalance)}
                           </span>
                         </button>
                       </div>
