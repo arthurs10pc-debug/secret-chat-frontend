@@ -2199,7 +2199,7 @@ export default function App() {
     // A. Yesterday Morning Check (5:00 AM - 12:00 PM)
     const doraMorningKey = `[Dora] Missed Morning Greeting (${yesterdayStr})`;
     const doraMorningCreditKey = `[Dora] Daily Morning Sweet Text (${yesterdayStr})`;
-    if (!habitEvals[yesterdayStr].doraMorningEvaluated || (!hasLedgerMatch(doraMorningKey) && !hasLedgerMatch(doraMorningCreditKey))) {
+    if (!habitEvals[yesterdayStr].doraMorningEvaluated) {
       const hadMorning = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
@@ -2223,7 +2223,7 @@ export default function App() {
 
     const darshMorningKey = `[Darsh] Missed Morning Greeting (${yesterdayStr})`;
     const darshMorningCreditKey = `[Darsh] Daily Morning Sweet Text (${yesterdayStr})`;
-    if (!habitEvals[yesterdayStr].darshMorningEvaluated || (!hasLedgerMatch(darshMorningKey) && !hasLedgerMatch(darshMorningCreditKey))) {
+    if (!habitEvals[yesterdayStr].darshMorningEvaluated) {
       const hadMorning = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
@@ -2248,7 +2248,7 @@ export default function App() {
     // B. Yesterday Night Check (Sleeping Without "Good Night" - 8:00 PM to 4:30 AM)
     const doraNightKey = `[Dora] Sleeping Without "Good Night" (${yesterdayStr})`;
     const doraNightCreditKey = `[Dora] Sweet Good Night Wish (${yesterdayStr})`;
-    if (!habitEvals[yesterdayStr].doraNightEvaluated || (!hasLedgerMatch(doraNightKey) && !hasLedgerMatch(doraNightCreditKey))) {
+    if (!habitEvals[yesterdayStr].doraNightEvaluated) {
       const hadNight = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
@@ -2274,7 +2274,7 @@ export default function App() {
 
     const darshNightKey = `[Darsh] Sleeping Without "Good Night" (${yesterdayStr})`;
     const darshNightCreditKey = `[Darsh] Sweet Good Night Wish (${yesterdayStr})`;
-    if (!habitEvals[yesterdayStr].darshNightEvaluated || (!hasLedgerMatch(darshNightKey) && !hasLedgerMatch(darshNightCreditKey))) {
+    if (!habitEvals[yesterdayStr].darshNightEvaluated) {
       const hadNight = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
@@ -2304,7 +2304,7 @@ export default function App() {
 
     const doraTodayKey = `[Dora] Missed Morning Greeting (Today)`;
     const doraTodayCreditKey = `[Dora] Daily Morning Sweet Text (Today)`;
-    if (currentHour >= 9 && (!habitEvals[todayStr].doraMorningEvaluated || (!hasLedgerMatch(doraTodayKey) && !hasLedgerMatch(doraTodayCreditKey)))) {
+    if (currentHour >= 9 && !habitEvals[todayStr].doraMorningEvaluated) {
       const hadMorning = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
@@ -2328,7 +2328,7 @@ export default function App() {
 
     const darshTodayKey = `[Darsh] Missed Morning Greeting (Today)`;
     const darshTodayCreditKey = `[Darsh] Daily Morning Sweet Text (Today)`;
-    if (currentHour >= 9 && (!habitEvals[todayStr].darshMorningEvaluated || (!hasLedgerMatch(darshTodayKey) && !hasLedgerMatch(darshTodayCreditKey)))) {
+    if (currentHour >= 9 && !habitEvals[todayStr].darshMorningEvaluated) {
       const hadMorning = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
@@ -2368,32 +2368,32 @@ export default function App() {
       return h * 60 + m;
     };
 
-    // Today's Routine Task Slots (cut points if slot deadline passed without proof)
+    // Today's Routine Task Slots (evaluated exactly once per slot; never resurrected if cleared)
+    if (!habitEvals[todayStr].slotsEvaluated) habitEvals[todayStr].slotsEvaluated = {};
     activeDailySlots.forEach(slot => {
       const endMinutes = parseSlotEndMinutes(slot.timeRange);
       if (endMinutes !== null && currentMinutes >= endMinutes) {
+        if (habitEvals[todayStr].slotsEvaluated[slot.id]) return; // Already processed!
+        habitEvals[todayStr].slotsEvaluated[slot.id] = true;
+        updated = true;
         const sub = (dailySubmissions || []).find(s => s && s.slotId === slot.id && (!s.date || s.date === todayStr));
         const hasValidSubmission = sub && (sub.status === 'APPROVED' || sub.status === 'PENDING') && Boolean(sub.image || sub.note);
         const missedKey = `[Dora] Missed Routine Task: ${slot.title} (${todayStr})`;
         if (!hasValidSubmission && !hasLedgerMatch(missedKey)) {
           const cutPts = Number(slot.rewardPoints || 2.0);
           recordLocalHabitTransaction(cutPts, 'debit', `Missed Routine Task: ${slot.title} (${todayStr})`, 'user');
-          updated = true;
         }
       }
     });
 
-    // Yesterday's Routine Task Slots (catch-up deduction for unsubmitted tasks)
-    activeDailySlots.forEach(slot => {
-      const sub = (dailySubmissions || []).find(s => s && s.slotId === slot.id && s.date === yesterdayStr);
-      const hasValidSubmission = sub && (sub.status === 'APPROVED' || sub.status === 'PENDING') && Boolean(sub.image || sub.note);
-      const missedYesterdayKey = `[Dora] Missed Routine Task: ${slot.title} (${yesterdayStr})`;
-      if (!hasValidSubmission && !hasLedgerMatch(missedYesterdayKey)) {
-        const cutPts = Number(slot.rewardPoints || 2.0);
-        recordLocalHabitTransaction(cutPts, 'debit', `Missed Routine Task: ${slot.title} (${yesterdayStr})`, 'user');
-        updated = true;
-      }
-    });
+    // Yesterday's Routine Task Slots (marked as processed so it never runs repeatedly on refresh)
+    if (!habitEvals[yesterdayStr].slotsEvaluated) {
+      habitEvals[yesterdayStr].slotsEvaluated = {};
+      activeDailySlots.forEach(slot => {
+        habitEvals[yesterdayStr].slotsEvaluated[slot.id] = true;
+      });
+      updated = true;
+    }
 
     if (updated) {
       try {
@@ -2457,6 +2457,32 @@ export default function App() {
       localStorage.setItem('stealth_love_ledger', '[]');
     }
 
+    try {
+      const now = new Date();
+      const todayStr = getLocalDateString(now);
+      const yesterday = new Date(now.getTime() - 86400000);
+      const yesterdayStr = getLocalDateString(yesterday);
+      const evals = JSON.parse(localStorage.getItem('stealth_habit_evals') || '{}');
+      if (!evals[todayStr]) evals[todayStr] = {};
+      evals[todayStr].doraMorningEvaluated = true;
+      evals[todayStr].darshMorningEvaluated = true;
+      evals[todayStr].doraNightEvaluated = true;
+      evals[todayStr].darshNightEvaluated = true;
+      if (!evals[todayStr].slotsEvaluated) evals[todayStr].slotsEvaluated = {};
+      (dailySlots || []).forEach(s => { evals[todayStr].slotsEvaluated[s.id] = true; });
+
+      if (!evals[yesterdayStr]) evals[yesterdayStr] = {};
+      evals[yesterdayStr].doraMorningEvaluated = true;
+      evals[yesterdayStr].darshMorningEvaluated = true;
+      evals[yesterdayStr].doraNightEvaluated = true;
+      evals[yesterdayStr].darshNightEvaluated = true;
+      if (!evals[yesterdayStr].slotsEvaluated) evals[yesterdayStr].slotsEvaluated = {};
+      (dailySlots || []).forEach(s => { evals[yesterdayStr].slotsEvaluated[s.id] = true; });
+
+      localStorage.setItem('stealth_habit_evals', JSON.stringify(evals));
+      localStorage.setItem('stealth_last_cleared_at', Date.now().toString());
+    } catch(e) {}
+
     if (socketRef.current) {
       socketRef.current.emit('love_balance_action', {
         room: GLOBAL_ROOM,
@@ -2469,7 +2495,31 @@ export default function App() {
     }
 
     setShowClearConfirmModal(false);
-  }, [clearModalTarget, role]);
+  }, [clearModalTarget, role, dailySlots]);
+
+  const handleDeleteTransaction = useCallback((txId) => {
+    if (!txId) return;
+    setLoveLedger(prev => {
+      const next = prev.filter(e => e.id !== txId);
+      try { localStorage.setItem('stealth_love_ledger', JSON.stringify(next)); } catch(e) {}
+      return next;
+    });
+    try {
+      const delTxs = JSON.parse(localStorage.getItem('stealth_deleted_tx_ids') || '[]');
+      delTxs.push(txId);
+      localStorage.setItem('stealth_deleted_tx_ids', JSON.stringify(delTxs));
+    } catch(e) {}
+
+    if (socketRef.current) {
+      socketRef.current.emit('love_balance_action', {
+        room: GLOBAL_ROOM,
+        action: 'DELETE_TRANSACTION',
+        transactionId: txId,
+        senderRole: roleRef.current || role || 'user',
+        timestamp: Date.now()
+      });
+    }
+  }, [role]);
 
   const handleAdminOverrideBalance = useCallback((target, newBal) => {
     const val = parseFloat(newBal);
@@ -3522,13 +3572,27 @@ export default function App() {
     // High-Frequency Authoritative Sync Heartbeat from Backend (Every 4 seconds)
     socketRef.current.on('love_balance_heartbeat_sync', (data) => {
       if (!data) return;
+      if (Array.isArray(data.deletedTransactionIds) && data.deletedTransactionIds.length > 0) {
+        try {
+          const curDelTxs = JSON.parse(localStorage.getItem('stealth_deleted_tx_ids') || '[]');
+          const mergedDelTxs = Array.from(new Set([...curDelTxs, ...data.deletedTransactionIds]));
+          localStorage.setItem('stealth_deleted_tx_ids', JSON.stringify(mergedDelTxs));
+        } catch(e) {}
+      }
+      if (typeof data.lastClearedAt === 'number' && data.lastClearedAt > 0) {
+        try { localStorage.setItem('stealth_last_cleared_at', data.lastClearedAt.toString()); } catch(e) {}
+      }
       if (Array.isArray(data.loveLedger)) {
+        const activeDelTxs = Array.isArray(data.deletedTransactionIds) 
+          ? data.deletedTransactionIds 
+          : JSON.parse(localStorage.getItem('stealth_deleted_tx_ids') || '[]');
+        const cleanLedger = data.loveLedger.filter(e => e && !activeDelTxs.includes(e.id));
         setLoveLedger(prev => {
-          if (Array.isArray(prev) && prev.length === data.loveLedger.length && prev[0]?.id === data.loveLedger[0]?.id) {
+          if (Array.isArray(prev) && prev.length === cleanLedger.length && prev[0]?.id === cleanLedger[0]?.id) {
             return prev;
           }
-          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(data.loveLedger)); } catch(e) {}
-          return data.loveLedger;
+          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(cleanLedger)); } catch(e) {}
+          return cleanLedger;
         });
       }
       if (typeof data.loveBalance === 'number') {
@@ -3583,6 +3647,15 @@ export default function App() {
       if (serverAdminLoveBal !== null) {
         setAdminLoveBalance(serverAdminLoveBal);
         try { localStorage.setItem('stealth_admin_love_balance', serverAdminLoveBal.toString()); } catch(e) {}
+      }
+
+      if (data.action === 'DELETE_TRANSACTION' && data.transactionId) {
+        setLoveLedger(prev => {
+          const next = prev.filter(e => e.id !== data.transactionId);
+          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(next)); } catch(e) {}
+          return next;
+        });
+        return;
       }
 
       if (data.action === 'CLEAR_LEDGER') {
@@ -5043,7 +5116,9 @@ export default function App() {
                     type="button"
                     onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
                     className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
+                    title="Dora's Available Balance"
                   >
+                    <span className="text-[10px] text-pink-400/80 font-sans font-semibold">Dora:</span>
                     <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💕'}</span>
                     <span>{formatLoveBalance(doraNetBalance)}</span>
                   </button>
@@ -5052,7 +5127,9 @@ export default function App() {
                     type="button"
                     onClick={() => { setActiveLbTarget('admin'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
                     className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(adminNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}
+                    title="Darsh's Available Balance"
                   >
+                    <span className="text-[10px] text-blue-400/80 font-sans font-semibold">Darsh:</span>
                     <span>{Number(adminNetBalance || 0) < 0 ? '💔' : '👑'}</span>
                     <span>{formatLoveBalance(adminNetBalance)}</span>
                   </button>
@@ -5722,7 +5799,9 @@ export default function App() {
                   type="button"
                   onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
                   className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
+                  title="Dora's Available Balance"
                 >
+                  <span className="text-[10px] text-pink-400/80 font-sans font-semibold">Dora:</span>
                   <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💕'}</span>
                   <span>{formatLoveBalance(doraNetBalance)}</span>
                 </button>
@@ -5731,7 +5810,9 @@ export default function App() {
                   type="button"
                   onClick={() => { setActiveLbTarget('admin'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
                   className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(adminNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}
+                  title="Darsh's Available Balance"
                 >
+                  <span className="text-[10px] text-blue-400/80 font-sans font-semibold">Darsh:</span>
                   <span>{Number(adminNetBalance || 0) < 0 ? '💔' : '👑'}</span>
                   <span>{formatLoveBalance(adminNetBalance)}</span>
                 </button>
@@ -9457,6 +9538,7 @@ export default function App() {
                               <th className="py-2.5 px-3">Points</th>
                               <th className="py-2.5 px-3">Remarks</th>
                               <th className="py-2.5 px-3 text-right">Status</th>
+                              {isParentAdmin && <th className="py-2.5 px-3 text-center w-10">Action</th>}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#242424] text-gray-300">
@@ -9497,6 +9579,18 @@ export default function App() {
                                       {row.status}
                                     </span>
                                   </td>
+                                  {isParentAdmin && (
+                                    <td className="py-2.5 px-3 text-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteTransaction(row.id)}
+                                        className="p-1 text-gray-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg cursor-pointer transition-all"
+                                        title="Delete this transaction permanently"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </td>
+                                  )}
                                 </tr>
                               ))}
                           </tbody>
