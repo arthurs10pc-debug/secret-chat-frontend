@@ -292,6 +292,12 @@ export default function App() {
                 item.description.includes('Announcement Read') ||
                 item.description.includes('Monthly Punctuality Reward')
               )) return false;
+              // Purge any phantom auto-debits so earned points stay permanent and steady
+              if (item.type === 'debit' && item.description && (
+                item.description.includes('Missed Morning Greeting') ||
+                item.description.includes('Sleeping Without "Good Night"') ||
+                item.description.includes('Missed Routine Task')
+              )) return false;
               return true;
             })
             .map(item => ({
@@ -2305,11 +2311,7 @@ export default function App() {
       });
       habitEvals[yesterdayStr].doraMorningEvaluated = true;
       updated = true;
-      if (!hadMorning) {
-        if (!hasLedgerMatch(doraMorningKey)) {
-          recordLocalHabitTransaction(2.00, 'debit', `Missed Morning Greeting (${yesterdayStr})`, 'user');
-        }
-      } else {
+      if (hadMorning) {
         if (!hasLedgerMatch(doraMorningCreditKey)) {
           recordLocalHabitTransaction(2.00, 'credit', `Daily Morning Sweet Text (${yesterdayStr})`, 'user');
         }
@@ -2329,11 +2331,7 @@ export default function App() {
       });
       habitEvals[yesterdayStr].darshMorningEvaluated = true;
       updated = true;
-      if (!hadMorning) {
-        if (!hasLedgerMatch(darshMorningKey)) {
-          recordLocalHabitTransaction(2.00, 'debit', `Missed Morning Greeting (${yesterdayStr})`, 'admin');
-        }
-      } else {
+      if (hadMorning) {
         if (!hasLedgerMatch(darshMorningCreditKey)) {
           recordLocalHabitTransaction(2.00, 'credit', `Daily Morning Sweet Text (${yesterdayStr})`, 'admin');
         }
@@ -2356,11 +2354,7 @@ export default function App() {
       });
       habitEvals[yesterdayStr].doraNightEvaluated = true;
       updated = true;
-      if (!hadNight) {
-        if (!hasLedgerMatch(doraNightKey)) {
-          recordLocalHabitTransaction(3.00, 'debit', `Sleeping Without "Good Night" (${yesterdayStr})`, 'user');
-        }
-      } else {
+      if (hadNight) {
         if (!hasLedgerMatch(doraNightCreditKey)) {
           recordLocalHabitTransaction(2.00, 'credit', `Sweet Good Night Wish (${yesterdayStr})`, 'user');
         }
@@ -2382,11 +2376,7 @@ export default function App() {
       });
       habitEvals[yesterdayStr].darshNightEvaluated = true;
       updated = true;
-      if (!hadNight) {
-        if (!hasLedgerMatch(darshNightKey)) {
-          recordLocalHabitTransaction(3.00, 'debit', `Sleeping Without "Good Night" (${yesterdayStr})`, 'admin');
-        }
-      } else {
+      if (hadNight) {
         if (!hasLedgerMatch(darshNightCreditKey)) {
           recordLocalHabitTransaction(2.00, 'credit', `Sweet Good Night Wish (${yesterdayStr})`, 'admin');
         }
@@ -2410,11 +2400,7 @@ export default function App() {
       });
       habitEvals[todayStr].doraMorningEvaluated = true;
       updated = true;
-      if (!hadMorning) {
-        if (!hasLedgerMatch(doraTodayKey)) {
-          recordLocalHabitTransaction(2.00, 'debit', `Missed Morning Greeting (Today)`, 'user');
-        }
-      } else {
+      if (hadMorning) {
         if (!hasLedgerMatch(doraTodayCreditKey)) {
           recordLocalHabitTransaction(2.00, 'credit', `Daily Morning Sweet Text (Today)`, 'user');
         }
@@ -2434,11 +2420,7 @@ export default function App() {
       });
       habitEvals[todayStr].darshMorningEvaluated = true;
       updated = true;
-      if (!hadMorning) {
-        if (!hasLedgerMatch(darshTodayKey)) {
-          recordLocalHabitTransaction(2.00, 'debit', `Missed Morning Greeting (Today)`, 'admin');
-        }
-      } else {
+      if (hadMorning) {
         if (!hasLedgerMatch(darshTodayCreditKey)) {
           recordLocalHabitTransaction(2.00, 'credit', `Daily Morning Sweet Text (Today)`, 'admin');
         }
@@ -3733,26 +3715,21 @@ export default function App() {
 
       if (data.action === 'CLEAR_LEDGER') {
         const clearTarget = data.target || 'user';
-        if (Array.isArray(data.loveLedger)) {
-          setLoveLedger(data.loveLedger);
-          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(data.loveLedger)); } catch(e) {}
+        if (clearTarget === 'user') {
+          setLoveLedger(prev => {
+            const next = prev.filter(e => e.target === 'admin' || (e.description && e.description.includes('[Darsh]')));
+            try { localStorage.setItem('stealth_love_ledger', JSON.stringify(next)); } catch(e) {}
+            return next;
+          });
+        } else if (clearTarget === 'admin') {
+          setLoveLedger(prev => {
+            const next = prev.filter(e => e.target !== 'admin' && !(e.description && e.description.includes('[Darsh]')));
+            try { localStorage.setItem('stealth_love_ledger', JSON.stringify(next)); } catch(e) {}
+            return next;
+          });
         } else {
-          if (clearTarget === 'user') {
-            setLoveLedger(prev => {
-              const next = prev.filter(e => e.target === 'admin' || (e.description && e.description.includes('[Darsh]')));
-              try { localStorage.setItem('stealth_love_ledger', JSON.stringify(next)); } catch(e) {}
-              return next;
-            });
-          } else if (clearTarget === 'admin') {
-            setLoveLedger(prev => {
-              const next = prev.filter(e => e.target !== 'admin' && !(e.description && e.description.includes('[Darsh]')));
-              try { localStorage.setItem('stealth_love_ledger', JSON.stringify(next)); } catch(e) {}
-              return next;
-            });
-          } else {
-            setLoveLedger([]);
-            try { localStorage.setItem('stealth_love_ledger', '[]'); } catch(e) {}
-          }
+          setLoveLedger([]);
+          try { localStorage.setItem('stealth_love_ledger', '[]'); } catch(e) {}
         }
 
         if (clearTarget === 'user' || clearTarget === 'both') {
@@ -3974,8 +3951,23 @@ export default function App() {
           try { localStorage.setItem('stealth_admin_love_balance', data.adminLoveBalance.toString()); } catch(e) {}
         }
         if (Array.isArray(data.loveLedger)) {
-          setLoveLedger(data.loveLedger);
-          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(data.loveLedger)); } catch(e) {}
+          const activeDelTxs = Array.isArray(data.deletedTransactionIds) 
+            ? data.deletedTransactionIds 
+            : JSON.parse(localStorage.getItem('stealth_deleted_tx_ids') || '[]');
+          setLoveLedger(prev => {
+            const map = new Map();
+            data.loveLedger.forEach(e => {
+              if (e && e.id && !activeDelTxs.includes(e.id)) map.set(e.id, e);
+            });
+            (prev || []).forEach(e => {
+              if (e && e.id && !activeDelTxs.includes(e.id) && !map.has(e.id)) {
+                map.set(e.id, e);
+              }
+            });
+            const merged = Array.from(map.values());
+            try { localStorage.setItem('stealth_love_ledger', JSON.stringify(merged)); } catch(e) {}
+            return merged;
+          });
         }
         if (Array.isArray(data.wishRequests) && data.wishRequests.length > 0) {
           setWishRequests(data.wishRequests);
