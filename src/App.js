@@ -2465,9 +2465,11 @@ export default function App() {
   // Request authoritative initial sync from backend upon connection
   useEffect(() => {
     if (socketRef.current && isConnected) {
+      const myCredits = (loveLedger || []).filter(e => e && e.type === 'credit');
       socketRef.current.emit('love_balance_action', {
         room: GLOBAL_ROOM,
         action: 'REQUEST_SYNC',
+        clientCredits: myCredits,
         deletedSlotIds: JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]'),
         timestamp: Date.now()
       });
@@ -3777,7 +3779,18 @@ export default function App() {
         return;
       }
 
-      if (data.action === 'OVERRIDE_BALANCE') {
+      if (data.action === 'TRANSACTION' && data.newEntry) {
+        const entry = data.newEntry;
+        if (myRole !== 'parent' && myRole !== 'admin' && entry.target === 'admin') {
+          return;
+        }
+        setLoveLedger(prev => {
+          if (prev.some(e => e.id === entry.id)) return prev;
+          const next = [entry, ...prev.map((e, idx) => ({ ...e, sl: idx + 2 }))];
+          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(next)); } catch(e) {}
+          return next;
+        });
+      } else if (data.action === 'OVERRIDE_BALANCE') {
         if (data.target === 'user') {
           setLoveBalance(data.newBalance);
           try { localStorage.setItem('stealth_love_balance', data.newBalance.toString()); } catch(e) {}
@@ -3870,6 +3883,9 @@ export default function App() {
         const targetSlotId = data.slotId;
         const targetDate = data.date;
         const pts = parseFloat(data.points) || 2.0;
+        const slotTitle = data.slotTitle || 'Routine Task';
+        const approvalId = 'lb_appr_' + (subId || `${targetDate}_${targetSlotId}`);
+
         setDailySubmissions(prev => {
           let found = false;
           const next = prev.map(s => {
@@ -3887,6 +3903,33 @@ export default function App() {
           try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(next)); } catch(e) {}
           return next;
         });
+
+        // Award Love Balance credit in Dora's passbook
+        setLoveLedger(prev => {
+          if (prev.some(e => e.id === approvalId)) return prev;
+          const nowStr = new Date().toLocaleString('en-GB');
+          const expDate = new Date();
+          expDate.setMonth(expDate.getMonth() + 1);
+          const creditEntry = {
+            id: approvalId,
+            sl: 1,
+            target: 'user',
+            description: `[Dora] Approved Task: ${slotTitle}`,
+            earnedAt: nowStr,
+            expireDate: expDate.toLocaleDateString('en-GB'),
+            points: pts,
+            type: 'credit',
+            remarks: `Approved Task: ${slotTitle}`,
+            status: 'Confirmed'
+          };
+          const next = [creditEntry, ...prev.map((e, idx) => ({ ...e, sl: idx + 2 }))];
+          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(next)); } catch(e) {}
+          return next;
+        });
+
+        if (myRole !== 'parent' && myRole !== 'admin') {
+          try { confetti({ particleCount: 80, spread: 80, origin: { y: 0.4 } }); } catch(e) {}
+        }
       } else if (data.action === 'SYNC_STATE_RESPONSE') {
         if (typeof data.loveBalance === 'number') {
           setLoveBalance(data.loveBalance);
@@ -4039,11 +4082,34 @@ export default function App() {
           });
           triggerMobileNotification("New Hourly Task Proof submitted by Dora!", "user");
         } else if (approved) {
+          const pts = pointsAwarded || (submission && submission.pointsAwarded) || 2.0;
+          const approvalId = 'lb_appr_' + (targetId || `${targetDate}_${targetSlotId}`);
+          setLoveLedger(prev => {
+            if (prev.some(e => e.id === approvalId)) return prev;
+            const nowStr = new Date().toLocaleString('en-GB');
+            const expDate = new Date();
+            expDate.setMonth(expDate.getMonth() + 1);
+            const creditEntry = {
+              id: approvalId,
+              sl: 1,
+              target: 'user',
+              description: `[Dora] Approved Task: ${(submission && submission.slotTitle) || 'Routine Task'}`,
+              earnedAt: nowStr,
+              expireDate: expDate.toLocaleDateString('en-GB'),
+              points: pts,
+              type: 'credit',
+              remarks: `Approved Task: ${(submission && submission.slotTitle) || 'Routine Task'}`,
+              status: 'Confirmed'
+            };
+            const next = [creditEntry, ...prev.map((e, idx) => ({ ...e, sl: idx + 2 }))];
+            try { localStorage.setItem('stealth_love_ledger', JSON.stringify(next)); } catch(e) {}
+            return next;
+          });
           try {
             confetti({ particleCount: 80, spread: 90, origin: { y: 0.4 } });
           } catch (e) {}
           if (activeRole !== 'parent' && activeRole !== 'admin') {
-            alert(`🎉 Task Approved by Darsh!\n\n+₹ ${pointsAwarded || (submission && submission.pointsAwarded) || 2.0} has been added to your Love Balance! 💖`);
+            alert(`🎉 Task Approved by Darsh!\n\n+₹ ${pts.toFixed(2)} has been added to your Love Balance! 💖`);
           }
         } else if (rejected) {
           if (activeRole !== 'parent' && activeRole !== 'admin') {
