@@ -2411,6 +2411,21 @@ export default function App() {
     return () => clearInterval(interval);
   }, [checkDailyHabitInfractions, stealthMessages]);
 
+  // High-Frequency (4s) Authoritative Synchronization Heartbeat across all devices
+  useEffect(() => {
+    const syncInterval = setInterval(() => {
+      if (socketRef.current && isConnected) {
+        socketRef.current.emit('love_balance_action', {
+          room: GLOBAL_ROOM,
+          action: 'REQUEST_SYNC',
+          deletedSlotIds: JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]'),
+          timestamp: Date.now()
+        });
+      }
+    }, 4000);
+    return () => clearInterval(syncInterval);
+  }, [isConnected]);
+
 
   const handleOpenClearModal = useCallback((target = null) => {
     setClearModalTarget(target || activeLbTarget || 'user');
@@ -3507,11 +3522,54 @@ export default function App() {
       setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, flaggedPending } : m));
     });
 
+    // High-Frequency Authoritative Sync Heartbeat from Backend (Every 4 seconds)
+    socketRef.current.on('love_balance_heartbeat_sync', (data) => {
+      if (!data) return;
+      if (typeof data.loveBalance === 'number') {
+        setLoveBalance(data.loveBalance);
+        try { localStorage.setItem('stealth_love_balance', data.loveBalance.toString()); } catch(e) {}
+      }
+      if (typeof data.adminLoveBalance === 'number') {
+        setAdminLoveBalance(data.adminLoveBalance);
+        try { localStorage.setItem('stealth_admin_love_balance', data.adminLoveBalance.toString()); } catch(e) {}
+      }
+      if (Array.isArray(data.loveLedger)) {
+        setLoveLedger(data.loveLedger);
+        try { localStorage.setItem('stealth_love_ledger', JSON.stringify(data.loveLedger)); } catch(e) {}
+      }
+      if (Array.isArray(data.wishRequests)) {
+        setWishRequests(data.wishRequests);
+        try { localStorage.setItem('stealth_wish_requests', JSON.stringify(data.wishRequests)); } catch(e) {}
+      }
+      if (Array.isArray(data.dailySubmissions)) {
+        setDailySubmissions(prev => {
+          const map = new Map();
+          prev.forEach(s => map.set(s.id, s));
+          data.dailySubmissions.forEach(s => map.set(s.id, s));
+          const merged = Array.from(map.values());
+          try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(merged)); } catch(e) {}
+          return merged;
+        });
+      }
+      if (Array.isArray(data.deletedSlotIds) && data.deletedSlotIds.length > 0) {
+        const localDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+        const mergedDel = Array.from(new Set([...localDel, ...data.deletedSlotIds]));
+        try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(mergedDel)); } catch(e) {}
+        setDeletedSlotIds(mergedDel);
+      }
+      const activeDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+      if (Array.isArray(data.dailySlots)) {
+        const cleanSlots = data.dailySlots.filter(s => s && !activeDel.includes(s.id));
+        setDailySlots(cleanSlots);
+        try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
+      }
+    });
+
     socketRef.current.on('love_balance_broadcast', (data) => {
       if (!data) return;
       const myRole = roleRef.current || role || localStorage.getItem('stealth_role');
-      const isMyOwnAction = (data.senderRole && data.senderRole === myRole) || 
-        ((myRole === 'parent' || myRole === 'admin') && (data.senderRole === 'parent' || data.senderRole === 'admin'));
+      // Socket-based check ensures cross-device updates for same role (e.g. Darsh's laptop vs phone) sync in real time
+      const isMyOwnAction = Boolean(data.originSocketId && socketRef.current && data.originSocketId === socketRef.current.id);
 
       // Authoritative real-time sync from server
       const serverLoveBal = typeof data.currentLoveBalance === 'number' ? data.currentLoveBalance : (typeof data.loveBalance === 'number' ? data.loveBalance : null);
@@ -3525,6 +3583,41 @@ export default function App() {
         try { localStorage.setItem('stealth_admin_love_balance', serverAdminLoveBal.toString()); } catch(e) {}
       }
 
+      if (data.action === 'CLEAR_LEDGER') {
+        const clearTarget = data.target || 'user';
+        if (Array.isArray(data.loveLedger)) {
+          setLoveLedger(data.loveLedger);
+          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(data.loveLedger)); } catch(e) {}
+        } else {
+          if (clearTarget === 'user') {
+            setLoveLedger(prev => {
+              const next = prev.filter(e => e.target === 'admin' || (e.description && e.description.includes('[Darsh]')));
+              try { localStorage.setItem('stealth_love_ledger', JSON.stringify(next)); } catch(e) {}
+              return next;
+            });
+          } else if (clearTarget === 'admin') {
+            setLoveLedger(prev => {
+              const next = prev.filter(e => e.target !== 'admin' && !(e.description && e.description.includes('[Darsh]')));
+              try { localStorage.setItem('stealth_love_ledger', JSON.stringify(next)); } catch(e) {}
+              return next;
+            });
+          } else {
+            setLoveLedger([]);
+            try { localStorage.setItem('stealth_love_ledger', '[]'); } catch(e) {}
+          }
+        }
+
+        if (clearTarget === 'user' || clearTarget === 'both') {
+          setLoveBalance(0);
+          try { localStorage.setItem('stealth_love_balance', '0'); } catch(e) {}
+        }
+        if (clearTarget === 'admin' || clearTarget === 'both') {
+          setAdminLoveBalance(0);
+          try { localStorage.setItem('stealth_admin_love_balance', '0'); } catch(e) {}
+        }
+        return;
+      }
+
       if (isMyOwnAction) return;
 
       // PRIVACY ENFORCEMENT: Dora must NEVER receive or view Darsh's points
@@ -3532,33 +3625,7 @@ export default function App() {
         return;
       }
 
-      if (data.action === 'CLEAR_LEDGER') {
-        const clearTarget = data.target || 'user';
-        if (clearTarget === 'user') {
-          setLoveBalance(0);
-          localStorage.setItem('stealth_love_balance', '0');
-          setLoveLedger(prev => {
-            const next = prev.filter(e => e.target === 'admin' || (e.description && e.description.includes('[Darsh]')));
-            localStorage.setItem('stealth_love_ledger', JSON.stringify(next));
-            return next;
-          });
-        } else if (clearTarget === 'admin') {
-          setAdminLoveBalance(0);
-          localStorage.setItem('stealth_admin_love_balance', '0');
-          setLoveLedger(prev => {
-            const next = prev.filter(e => e.target !== 'admin' && !(e.description && e.description.includes('[Darsh]')));
-            localStorage.setItem('stealth_love_ledger', JSON.stringify(next));
-            return next;
-          });
-        } else {
-          setLoveBalance(0);
-          localStorage.setItem('stealth_love_balance', '0');
-          setAdminLoveBalance(0);
-          localStorage.setItem('stealth_admin_love_balance', '0');
-          setLoveLedger([]);
-          localStorage.setItem('stealth_love_ledger', '[]');
-        }
-      } else if (data.action === 'OVERRIDE_BALANCE') {
+      if (data.action === 'OVERRIDE_BALANCE') {
         if (data.target === 'user') {
           setLoveBalance(data.newBalance);
           try { localStorage.setItem('stealth_love_balance', data.newBalance.toString()); } catch(e) {}
@@ -3693,19 +3760,8 @@ export default function App() {
           try { localStorage.setItem('stealth_admin_love_balance', data.adminLoveBalance.toString()); } catch(e) {}
         }
         if (Array.isArray(data.loveLedger)) {
-          const sanitized = data.loveLedger.filter(item => {
-            if (!item) return false;
-            if (item.id && /^lb_([1-9]|1[0-1])$/.test(item.id)) return false;
-            if (item.description && (
-              item.description.includes('Announcement Read') ||
-              item.description.includes('Monthly Punctuality Reward') ||
-              item.description.includes('Daily Routine: Morning Workout') ||
-              item.description.includes('Daily Routine:')
-            )) return false;
-            return true;
-          });
-          setLoveLedger(sanitized);
-          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(sanitized)); } catch(e) {}
+          setLoveLedger(data.loveLedger);
+          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(data.loveLedger)); } catch(e) {}
         }
         if (Array.isArray(data.wishRequests) && data.wishRequests.length > 0) {
           setWishRequests(data.wishRequests);
