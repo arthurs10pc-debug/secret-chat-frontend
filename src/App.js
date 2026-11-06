@@ -276,6 +276,20 @@ export default function App() {
     }
   });
 
+  const isAutoHabitOrRoutineDebit = useCallback((item) => {
+    if (!item) return true;
+    if (item.id && /^lb_([1-9]|1[0-1])$/.test(item.id)) return true;
+    if (item.description && (
+      item.description.includes('Announcement Read') ||
+      item.description.includes('Monthly Punctuality Reward')
+    )) return true;
+    if (item.type === 'debit' && item.description && (
+      item.description.includes('Missed Morning Greeting') ||
+      item.description.includes('Sleeping Without "Good Night"') ||
+      item.description.includes('Missed Routine Task')
+    )) return true;
+    return false;
+  }, []);
 
   const [loveLedger, setLoveLedger] = useState(() => {
     try {
@@ -286,13 +300,11 @@ export default function App() {
           return parsed
             .filter(item => {
               if (!item) return false;
-              // Purge legacy mock template entries by exact ID pattern (lb_1 .. lb_11)
               if (item.id && /^lb_([1-9]|1[0-1])$/.test(item.id)) return false;
               if (item.description && (
                 item.description.includes('Announcement Read') ||
                 item.description.includes('Monthly Punctuality Reward')
               )) return false;
-              // Purge any phantom auto-debits so earned points stay permanent and steady
               if (item.type === 'debit' && item.description && (
                 item.description.includes('Missed Morning Greeting') ||
                 item.description.includes('Sleeping Without "Good Night"') ||
@@ -317,6 +329,18 @@ export default function App() {
     if (!Array.isArray(ledger)) return 0;
     const entries = ledger.filter(e => {
       if (!e) return false;
+      // Filter out any automated habit or routine penalty debits
+      if (e.id && /^lb_([1-9]|1[0-1])$/.test(e.id)) return false;
+      if (e.description && (
+        e.description.includes('Announcement Read') ||
+        e.description.includes('Monthly Punctuality Reward')
+      )) return false;
+      if (e.type === 'debit' && e.description && (
+        e.description.includes('Missed Morning Greeting') ||
+        e.description.includes('Sleeping Without "Good Night"') ||
+        e.description.includes('Missed Routine Task')
+      )) return false;
+
       if (target === 'admin') {
         return e.target === 'admin' || (e.description && e.description.includes('[Darsh]'));
       }
@@ -352,28 +376,14 @@ export default function App() {
     try { localStorage.setItem('stealth_admin_love_balance', adminNetBalance.toString()); } catch(e) {}
   }, [adminNetBalance]);
 
-  // On mount: purge any stale habit deductions if ledger was cleared or on startup
+  // On mount: unconditionally purge any legacy mock or phantom habit deductions from storage and state
   useEffect(() => {
     try {
       const saved = localStorage.getItem('stealth_love_ledger');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          const lastCleared = Number(localStorage.getItem('stealth_last_cleared_at') || 0);
-          const todayStr = getLocalDateString();
-          const clearedDate = lastCleared > 0 ? getLocalDateString(new Date(lastCleared)) : '';
-          const isClearedToday = clearedDate >= todayStr;
-          const cleaned = parsed.filter(item => {
-            if (!item) return false;
-            if (isClearedToday && item.type === 'debit' && item.description && (
-              item.description.includes('Missed Morning Greeting') ||
-              item.description.includes('Sleeping Without "Good Night"') ||
-              item.description.includes('Missed Routine Task')
-            )) {
-              return false;
-            }
-            return true;
-          });
+          const cleaned = parsed.filter(item => !isAutoHabitOrRoutineDebit(item));
           if (cleaned.length !== parsed.length) {
             localStorage.setItem('stealth_love_ledger', JSON.stringify(cleaned));
             setLoveLedger(cleaned);
@@ -381,7 +391,7 @@ export default function App() {
         }
       }
     } catch(e) {}
-  }, []);
+  }, [isAutoHabitOrRoutineDebit]);
 
   const [showLoveBalanceModal, setShowLoveBalanceModal] = useState(false);
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
@@ -478,6 +488,34 @@ export default function App() {
   const [slotFormTag, setSlotFormTag] = useState('Task');
   const [slotFormPoints, setSlotFormPoints] = useState('2.0');
   const [dailyAITip, setDailyAITip] = useState('');
+  const [refreshingSection, setRefreshingSection] = useState(null);
+
+  const handleManualSectionRefresh = useCallback((sectionName) => {
+    setRefreshingSection(sectionName);
+    if (socketRef.current) {
+      if (sectionName === 'part1_love_balance' || sectionName === 'passbook_modal') {
+        socketRef.current.emit('love_balance_action', { room: GLOBAL_ROOM, action: 'REQUEST_SYNC' });
+      } else if (sectionName === 'part2_recordings') {
+        try {
+          const recs = JSON.parse(localStorage.getItem('stealth_admin_call_recordings') || '[]');
+          setAdminRecordingsList(recs);
+        } catch(e) {}
+      } else if (sectionName === 'part3_pending' || sectionName === 'chat_header') {
+        socketRef.current.emit('request_initial_messages', { room: GLOBAL_ROOM });
+      } else if (sectionName === 'part4_arena') {
+        socketRef.current.emit('ludo_request_sync', { room: GLOBAL_ROOM });
+      } else if (sectionName === 'part5_tasks' || sectionName === 'hourly_report' || sectionName === 'dora_tasks') {
+        socketRef.current.emit('daily_task_request_sync', { date: dailySelectedDate });
+        socketRef.current.emit('love_balance_action', { room: GLOBAL_ROOM, action: 'REQUEST_SYNC' });
+      } else {
+        socketRef.current.emit('love_balance_action', { room: GLOBAL_ROOM, action: 'REQUEST_SYNC' });
+        socketRef.current.emit('daily_task_request_sync', { date: dailySelectedDate });
+      }
+    }
+    setTimeout(() => {
+      setRefreshingSection(null);
+    }, 700);
+  }, [dailySelectedDate]);
   const [dailyAILoading, setDailyAILoading] = useState(false);
   const dailyFileInputRef = useRef(null);
 
@@ -3633,12 +3671,12 @@ export default function App() {
         const activeDelTxs = Array.isArray(data.deletedTransactionIds) 
           ? data.deletedTransactionIds 
           : JSON.parse(localStorage.getItem('stealth_deleted_tx_ids') || '[]');
-        const cleanLedger = data.loveLedger.filter(e => e && !activeDelTxs.includes(e.id));
+        const cleanLedger = data.loveLedger.filter(e => e && !activeDelTxs.includes(e.id) && !isAutoHabitOrRoutineDebit(e));
         setLoveLedger(prev => {
           const map = new Map();
-          cleanLedger.forEach(e => { if (e && e.id && !activeDelTxs.includes(e.id)) map.set(e.id, e); });
+          cleanLedger.forEach(e => { if (e && e.id && !activeDelTxs.includes(e.id) && !isAutoHabitOrRoutineDebit(e)) map.set(e.id, e); });
           (prev || []).forEach(e => {
-            if (e && e.id && !activeDelTxs.includes(e.id) && !map.has(e.id)) {
+            if (e && e.id && !activeDelTxs.includes(e.id) && !isAutoHabitOrRoutineDebit(e) && !map.has(e.id)) {
               map.set(e.id, e);
             }
           });
@@ -6003,6 +6041,16 @@ export default function App() {
               </button>
             )}
 
+            {/* HEADER REFRESH BUTTON */}
+            <button
+              type="button"
+              onClick={() => handleManualSectionRefresh('chat_header')}
+              className="w-7 h-7 rounded-full bg-[#181818] hover:bg-emerald-600/30 border border-[#333] hover:border-emerald-500 text-gray-400 hover:text-emerald-400 flex items-center justify-center transition-all cursor-pointer active:scale-90 shrink-0"
+              title="Refresh Chat & Balance"
+            >
+              <RefreshCw size={12} className={refreshingSection === 'chat_header' ? 'animate-spin text-emerald-400' : ''} />
+            </button>
+
             {/* UPGRADE BUTTON (SPARKLES REMOVED) */}
             <button className="hidden sm:flex items-center gap-1.5 text-white hover:text-gray-200 cursor-pointer font-medium">
               <span>Upgrade</span>
@@ -6915,6 +6963,14 @@ export default function App() {
                               {formatLoveBalance(adminNetBalance)}
                             </div>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => handleManualSectionRefresh('part1_love_balance')}
+                            className="w-7 h-7 rounded-full bg-[#1e1e1e] hover:bg-pink-600/30 border border-[#333] hover:border-pink-500 text-gray-400 hover:text-pink-300 flex items-center justify-center transition-all cursor-pointer active:scale-90 shrink-0"
+                            title="Refresh Love Balance"
+                          >
+                            <RefreshCw size={12} className={refreshingSection === 'part1_love_balance' ? 'animate-spin text-pink-400' : ''} />
+                          </button>
                         </div>
                       </div>
 
@@ -7203,14 +7259,24 @@ export default function App() {
                             <p className="text-[10px] text-gray-400">Mixed dual-channel HD recordings with 24h retention</p>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={handleStartAudioCall}
-                          className="bg-rose-950 hover:bg-rose-900 border border-rose-600/60 text-rose-300 px-2.5 py-1 rounded-xl text-xs font-bold cursor-pointer transition-all shadow flex items-center gap-1 active:scale-95"
-                        >
-                          <Phone size={11} />
-                          <span>Call Now</span>
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleManualSectionRefresh('part2_recordings')}
+                            className="w-7 h-7 rounded-full bg-[#1e1e1e] hover:bg-rose-600/30 border border-[#333] hover:border-rose-500 text-gray-400 hover:text-rose-300 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                            title="Refresh Recordings"
+                          >
+                            <RefreshCw size={12} className={refreshingSection === 'part2_recordings' ? 'animate-spin text-rose-400' : ''} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleStartAudioCall}
+                            className="bg-rose-950 hover:bg-rose-900 border border-rose-600/60 text-rose-300 px-2.5 py-1 rounded-xl text-xs font-bold cursor-pointer transition-all shadow flex items-center gap-1 active:scale-95"
+                          >
+                            <Phone size={11} />
+                            <span>Call Now</span>
+                          </button>
+                        </div>
                       </div>
 
                       {/* RECORDINGS LIST PREVIEW */}
@@ -7286,11 +7352,21 @@ export default function App() {
                             <p className="text-[10px] text-gray-400">Flagged questions & 7:20 PM daily auto-export scheduler</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-[9px] text-gray-400">Daily Export In</div>
-                          <div className="text-xs sm:text-sm font-black text-amber-400 font-mono flex items-center gap-1 justify-end">
-                            <Timer size={11} className="animate-spin" />
-                            <span>{countdownStr}</span>
+                        <div className="text-right flex items-center gap-1.5 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleManualSectionRefresh('part3_pending')}
+                            className="w-7 h-7 rounded-full bg-[#1e1e1e] hover:bg-amber-600/30 border border-[#333] hover:border-amber-500 text-gray-400 hover:text-amber-300 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                            title="Refresh Pending Questions"
+                          >
+                            <RefreshCw size={12} className={refreshingSection === 'part3_pending' ? 'animate-spin text-amber-400' : ''} />
+                          </button>
+                          <div>
+                            <div className="text-[9px] text-gray-400">Daily Export In</div>
+                            <div className="text-xs sm:text-sm font-black text-amber-400 font-mono flex items-center gap-1 justify-end">
+                              <Timer size={11} className="animate-spin" />
+                              <span>{countdownStr}</span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -7378,9 +7454,19 @@ export default function App() {
                             <p className="text-[10px] text-gray-400">Ludo Royale Clash board arena & Codex synchronized cinema</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-[9px] text-gray-400">Ludo Score</div>
-                          <div className="text-xs sm:text-sm font-black text-amber-400 font-mono">Darsh: {scores.H} vs Dora: {scores.A}</div>
+                        <div className="text-right flex items-center gap-1.5 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleManualSectionRefresh('part4_arena')}
+                            className="w-7 h-7 rounded-full bg-[#1e1e1e] hover:bg-blue-600/30 border border-[#333] hover:border-blue-500 text-gray-400 hover:text-blue-300 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                            title="Refresh Arena & Media"
+                          >
+                            <RefreshCw size={12} className={refreshingSection === 'part4_arena' ? 'animate-spin text-blue-400' : ''} />
+                          </button>
+                          <div>
+                            <div className="text-[9px] text-gray-400">Ludo Score</div>
+                            <div className="text-xs sm:text-sm font-black text-amber-400 font-mono">Darsh: {scores.H} vs Dora: {scores.A}</div>
+                          </div>
                         </div>
                       </div>
 
@@ -7485,9 +7571,9 @@ export default function App() {
                             }`}
                           >
                             <span>Review Tasks</span>
-                            {dailySubmissions.filter(s => s.status === 'PENDING').length > 0 && (
+                            {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'PENDING').length > 0 && (
                               <span className="bg-amber-400 text-black text-[9px] font-black px-1.5 py-0.2 rounded-full animate-bounce">
-                                {dailySubmissions.filter(s => s.status === 'PENDING').length}
+                                {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'PENDING').length}
                               </span>
                             )}
                           </button>
@@ -7508,13 +7594,21 @@ export default function App() {
                           onChange={(e) => setDailySelectedDate(e.target.value)}
                           className="bg-[#181818] border border-[#333] text-white text-xs px-2 py-1 rounded-xl outline-none font-mono"
                         />
+                        <button
+                          type="button"
+                          onClick={() => handleManualSectionRefresh('part5_tasks')}
+                          className="w-7 h-7 rounded-full bg-[#1e1e1e] hover:bg-emerald-600/30 border border-[#333] hover:border-emerald-500 text-gray-400 hover:text-emerald-400 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                          title="Refresh Routine Tasks & Slots"
+                        >
+                          <RefreshCw size={12} className={refreshingSection === 'part5_tasks' ? 'animate-spin text-emerald-400' : ''} />
+                        </button>
                       </div>
                     </div>
 
                     {/* REVIEW TAB */}
                     {dailyAdminTab === 'review' && (
                       <div className="space-y-3">
-                        {/* SUMMARY CARDS */}
+                        {/* SUMMARY CARDS (DAY-WISE) */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
                           <div className="bg-[#181818] border border-[#262626] p-2 rounded-xl">
                             <span className="text-[10px] text-gray-400">Total Slots</span>
@@ -7523,19 +7617,21 @@ export default function App() {
                           <div className="bg-[#181818] border border-amber-500/30 p-2 rounded-xl">
                             <span className="text-[10px] text-amber-300">Pending Review</span>
                             <div className="text-sm font-bold text-amber-400 font-mono">
-                              {dailySubmissions.filter(s => s.status === 'PENDING').length}
+                              {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'PENDING').length}
                             </div>
                           </div>
                           <div className="bg-[#181818] border border-emerald-500/30 p-2 rounded-xl">
-                            <span className="text-[10px] text-emerald-300">Approved</span>
+                            <span className="text-[10px] text-emerald-300">
+                              {dailySelectedDate === getLocalDateString() ? 'Approved Today' : `Approved (${dailySelectedDate})`}
+                            </span>
                             <div className="text-sm font-bold text-emerald-400 font-mono">
-                              {dailySubmissions.filter(s => s.status === 'APPROVED').length}
+                              {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'APPROVED').length}
                             </div>
                           </div>
                           <div className="bg-[#181818] border border-blue-500/30 p-2 rounded-xl">
                             <span className="text-[10px] text-blue-300">Points Awarded</span>
                             <div className="text-sm font-bold text-blue-400 font-mono">
-                              ₹ {dailySubmissions.filter(s => s.status === 'APPROVED').reduce((acc, curr) => acc + (curr.pointsAwarded || 0), 0).toFixed(2)}
+                              ₹ {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'APPROVED').reduce((acc, curr) => acc + (curr.pointsAwarded || 0), 0).toFixed(2)}
                             </div>
                           </div>
                         </div>
@@ -7777,11 +7873,19 @@ export default function App() {
                     >
                       Today
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => handleManualSectionRefresh('hourly_report')}
+                      className="w-8 h-8 rounded-full bg-[#181818] hover:bg-amber-600/30 border border-[#333] hover:border-amber-500 text-gray-400 hover:text-amber-400 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                      title="Refresh Hourly Report & Submissions"
+                    >
+                      <RefreshCw size={13} className={refreshingSection === 'hourly_report' ? 'animate-spin text-amber-400' : ''} />
+                    </button>
                   </div>
                 </div>
 
                 <div className="space-y-4">
-                    {/* STATS OVERVIEW */}
+                    {/* STATS OVERVIEW (DAY-WISE) */}
                     <div className="grid grid-cols-3 gap-2.5 text-center text-xs">
                       <div className="bg-[#141414] border border-[#262626] p-3 rounded-2xl">
                         <div className="text-[10px] text-gray-400">Total Routine Slots</div>
@@ -7790,13 +7894,15 @@ export default function App() {
                       <div className="bg-[#141414] border border-amber-500/40 p-3 rounded-2xl">
                         <div className="text-[10px] text-amber-300 font-bold">Awaiting Your Approval</div>
                         <div className="text-lg font-black text-amber-400 font-mono">
-                          {dailySubmissions.filter(s => s.status === 'PENDING').length} ⏳
+                          {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'PENDING').length} ⏳
                         </div>
                       </div>
                       <div className="bg-[#141414] border border-emerald-500/30 p-3 rounded-2xl">
-                        <div className="text-[10px] text-emerald-400 font-bold">Approved Today</div>
+                        <div className="text-[10px] text-emerald-400 font-bold">
+                          {dailySelectedDate === getLocalDateString() ? 'Approved Today' : `Approved (${dailySelectedDate})`}
+                        </div>
                         <div className="text-lg font-black text-emerald-400 font-mono">
-                          {dailySubmissions.filter(s => s.status === 'APPROVED').length} ✓
+                          {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'APPROVED').length} ✓
                         </div>
                       </div>
                     </div>
@@ -8197,25 +8303,35 @@ export default function App() {
                     >
                       Today
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => handleManualSectionRefresh('dora_tasks')}
+                      className="w-7 h-7 rounded-full bg-[#181818] hover:bg-blue-600/30 border border-[#333] hover:border-blue-500 text-gray-400 hover:text-blue-400 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                      title="Refresh Routine Tasks"
+                    >
+                      <RefreshCw size={12} className={refreshingSection === 'dora_tasks' ? 'animate-spin text-blue-400' : ''} />
+                    </button>
                   </div>
                 </div>
 
-                {/* SUMMARY STATS BAR */}
+                {/* SUMMARY STATS BAR (DAY-WISE) */}
                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
                   <div className="bg-[#141414] border border-[#262626] p-2.5 rounded-2xl">
                     <div className="text-[10px] text-gray-400">Total Routine Slots</div>
                     <div className="text-base font-bold text-white font-mono">{dailySlots.filter(s => s.isActive).length}</div>
                   </div>
                   <div className="bg-[#141414] border border-[#262626] p-2.5 rounded-2xl">
-                    <div className="text-[10px] text-gray-400">Completed (Approved)</div>
+                    <div className="text-[10px] text-gray-400">
+                      {dailySelectedDate === getLocalDateString() ? 'Completed Today' : `Completed (${dailySelectedDate})`}
+                    </div>
                     <div className="text-base font-bold text-emerald-400 font-mono">
-                      {dailySubmissions.filter(s => s.status === 'APPROVED').length} ✓
+                      {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'APPROVED').length} ✓
                     </div>
                   </div>
                   <div className="bg-[#141414] border border-[#262626] p-2.5 rounded-2xl">
                     <div className="text-[10px] text-gray-400">Under Review</div>
                     <div className="text-base font-bold text-amber-400 font-mono">
-                      {dailySubmissions.filter(s => s.status === 'PENDING').length} ⏳
+                      {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'PENDING').length} ⏳
                     </div>
                   </div>
                 </div>
@@ -9456,19 +9572,11 @@ export default function App() {
 
                   <button
                     type="button"
-                    onClick={() => {
-                      if (socketRef.current) {
-                        socketRef.current.emit('love_balance_action', {
-                          room: GLOBAL_ROOM,
-                          action: 'REQUEST_SYNC'
-                        });
-                        alert("🔄 Synced latest authoritative Love Balance from server!");
-                      }
-                    }}
-                    className="text-gray-400 hover:text-emerald-400 p-2 rounded-xl hover:bg-[#222] transition-colors cursor-pointer"
+                    onClick={() => handleManualSectionRefresh('passbook_modal')}
+                    className="w-8 h-8 rounded-full bg-[#1e1e1e] hover:bg-emerald-600/30 border border-[#333] hover:border-emerald-500 text-gray-400 hover:text-emerald-400 flex items-center justify-center transition-all cursor-pointer active:scale-90"
                     title="Force Refresh & Sync with Server"
                   >
-                    <RefreshCw size={17} />
+                    <RefreshCw size={14} className={refreshingSection === 'passbook_modal' ? 'animate-spin text-emerald-400' : ''} />
                   </button>
 
                   <button
