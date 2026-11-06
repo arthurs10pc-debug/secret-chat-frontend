@@ -2081,9 +2081,14 @@ export default function App() {
     const currentHour = now.getHours();
     const cleanLower = cleanText.toLowerCase();
 
-    // 1. Virtual Hug / Kiss / Heart Emoji (+1 Point)
+    // 1. Virtual Hug / Kiss / Heart Emoji (+1 Point) - 5-MIN COOLDOWN
+    const lastHeartKey = 'lb_last_heart_' + targetUser;
+    const lastHeartTime = Number(localStorage.getItem(lastHeartKey) || 0);
     if (ROMANTIC_REGEX.test(cleanText)) {
-      handleLoveBalanceTransaction(1.00, 'credit', 'Virtual Hug / Heart Emoji Shared (❤️)', false, targetUser);
+      if (Date.now() - lastHeartTime >= 5 * 60 * 1000) {
+        localStorage.setItem(lastHeartKey, Date.now().toString());
+        handleLoveBalanceTransaction(1.00, 'credit', 'Virtual Hug / Heart Emoji Shared (❤️)', false, targetUser);
+      }
     }
 
     // 2. Morning Sweet Text before 10:00 AM (+2 Points)
@@ -2095,22 +2100,32 @@ export default function App() {
       }
     }
 
-    // 3. Instant Reply within 5 minutes (+1 Point)
+    // 3. Instant Reply within 5 minutes (+1 Point) - 5-MIN COOLDOWN
+    const lastInstantKey = 'lb_last_instant_' + targetUser;
+    const lastInstantTime = Number(localStorage.getItem(lastInstantKey) || 0);
     if (prevMessage && prevMessage.senderRole !== senderRole && prevMessage.timestamp) {
       const diffMs = Date.now() - new Date(prevMessage.timestamp).getTime();
-      if (diffMs > 0 && diffMs <= 5 * 60 * 1000) {
+      if (diffMs > 0 && diffMs <= 5 * 60 * 1000 && Date.now() - lastInstantTime >= 5 * 60 * 1000) {
+        localStorage.setItem(lastInstantKey, Date.now().toString());
         handleLoveBalanceTransaction(1.00, 'credit', 'Instant Reply (Within 5 Mins)', false, targetUser);
       }
     }
 
-    // 4. Food / Meal Care Check-in (+2 Points)
+    // 4. Food / Meal Care Check-in (+2 Points) - 30-MIN COOLDOWN
+    const lastFoodKey = 'lb_last_food_' + targetUser;
+    const lastFoodTime = Number(localStorage.getItem(lastFoodKey) || 0);
     const foodKeywords = ['khana', 'khaana', 'lunch', 'dinner', 'breakfast', 'nashta', 'meal', 'eat', 'khaya', 'khao', 'khali', 'food'];
     const hasFoodCheck = foodKeywords.some(kw => cleanLower.includes(kw));
     if (hasFoodCheck && (cleanLower.includes('?') || cleanLower.includes('khaya') || cleanLower.includes('khao') || cleanLower.includes('eat') || cleanLower.includes('lunch') || cleanLower.includes('dinner'))) {
-      handleLoveBalanceTransaction(2.00, 'credit', 'Food / Meal Care Check-in', false, targetUser);
+      if (Date.now() - lastFoodTime >= 30 * 60 * 1000) {
+        localStorage.setItem(lastFoodKey, Date.now().toString());
+        handleLoveBalanceTransaction(2.00, 'credit', 'Food / Meal Care Check-in', false, targetUser);
+      }
     }
 
-    // 5. Compliment Drop & Romantic Sweet Talk (+3 Points)
+    // 5. Compliment Drop & Romantic Sweet Talk (+3 Points) - 15-MIN COOLDOWN
+    const lastComplimentKey = 'lb_last_compliment_' + targetUser;
+    const lastComplimentTime = Number(localStorage.getItem(lastComplimentKey) || 0);
     const complimentWords = [
       'love you', 'love u', 'i love you', 'i love u', 'ily', 'loveyou',
       'miss you', 'miss u', 'cute', 'sundar', 'pyaari', 'pyari', 'handsome',
@@ -2120,19 +2135,32 @@ export default function App() {
     ];
     const hasCompliment = complimentWords.some(w => cleanLower.includes(w));
     if (hasCompliment) {
-      handleLoveBalanceTransaction(3.00, 'credit', 'Romantic Compliment Drop', false, targetUser);
+      if (Date.now() - lastComplimentTime >= 15 * 60 * 1000) {
+        localStorage.setItem(lastComplimentKey, Date.now().toString());
+        handleLoveBalanceTransaction(3.00, 'credit', 'Romantic Compliment Drop', false, targetUser);
+      }
     }
 
-    // 6. Long Romantic Paragraph (+10 Points)
+    // 6. Long Romantic Paragraph (+10 Points) - 30-MIN COOLDOWN
+    const lastLongKey = 'lb_last_long_' + targetUser;
+    const lastLongTime = Number(localStorage.getItem(lastLongKey) || 0);
     if (cleanText.length >= 70) {
-      handleLoveBalanceTransaction(10.00, 'credit', 'Deep Romantic Long Message', false, targetUser);
+      if (Date.now() - lastLongTime >= 30 * 60 * 1000) {
+        localStorage.setItem(lastLongKey, Date.now().toString());
+        handleLoveBalanceTransaction(10.00, 'credit', 'Deep Romantic Long Message', false, targetUser);
+      }
     }
 
-    // 7. Dry Reply Check (-2 Points)
+    // 7. Dry Reply Check (-2 Points) - 10-MIN COOLDOWN
+    const lastDryKey = 'lb_last_dry_' + targetUser;
+    const lastDryTime = Number(localStorage.getItem(lastDryKey) || 0);
     if (prevMessage && prevMessage.senderRole !== senderRole && prevMessage.text && prevMessage.text.length > 35) {
       const dryWords = ['hmm', 'ok', 'k', 'acha', 'thik', 'humm', 'kk'];
       if (dryWords.includes(cleanLower)) {
-        handleLoveBalanceTransaction(2.00, 'debit', 'Dry Single-Word Reply ("Hmm"/"Ok")', false, targetUser);
+        if (Date.now() - lastDryTime >= 10 * 60 * 1000) {
+          localStorage.setItem(lastDryKey, Date.now().toString());
+          handleLoveBalanceTransaction(2.00, 'debit', 'Dry Single-Word Reply ("Hmm"/"Ok")', false, targetUser);
+        }
       }
     }
   }, [handleLoveBalanceTransaction]);
@@ -2150,6 +2178,33 @@ export default function App() {
     const todayStr = getLocalDateString(now);
     const yesterdayDate = new Date(Date.now() - 86400000);
     const yesterdayStr = getLocalDateString(yesterdayDate);
+
+    // CRITICAL: If admin manually cleared all today, forgive and settle ALL past and today's habits!
+    // Next evaluation will ONLY start from the next day!
+    const lastCleared = Number(localStorage.getItem('stealth_last_cleared_at') || 0);
+    if (lastCleared > 0) {
+      const clearedDate = getLocalDateString(new Date(lastCleared));
+      if (clearedDate >= todayStr) {
+        if (!habitEvals[todayStr]) habitEvals[todayStr] = {};
+        habitEvals[todayStr].doraMorningEvaluated = true;
+        habitEvals[todayStr].darshMorningEvaluated = true;
+        habitEvals[todayStr].doraNightEvaluated = true;
+        habitEvals[todayStr].darshNightEvaluated = true;
+        if (!habitEvals[todayStr].slotsEvaluated) habitEvals[todayStr].slotsEvaluated = {};
+        (dailySlots || []).forEach(s => { habitEvals[todayStr].slotsEvaluated[s.id] = true; });
+
+        if (!habitEvals[yesterdayStr]) habitEvals[yesterdayStr] = {};
+        habitEvals[yesterdayStr].doraMorningEvaluated = true;
+        habitEvals[yesterdayStr].darshMorningEvaluated = true;
+        habitEvals[yesterdayStr].doraNightEvaluated = true;
+        habitEvals[yesterdayStr].darshNightEvaluated = true;
+        if (!habitEvals[yesterdayStr].slotsEvaluated) habitEvals[yesterdayStr].slotsEvaluated = {};
+        (dailySlots || []).forEach(s => { habitEvals[yesterdayStr].slotsEvaluated[s.id] = true; });
+
+        try { localStorage.setItem('stealth_habit_evals', JSON.stringify(habitEvals)); } catch(e) {}
+        return;
+      }
+    }
 
     const isMorningMsg = (text) => {
       if (!text || typeof text !== 'string') return false;
@@ -3690,6 +3745,32 @@ export default function App() {
           setAdminLoveBalance(0);
           try { localStorage.setItem('stealth_admin_love_balance', '0'); } catch(e) {}
         }
+
+        try {
+          const clrTime = data.timestamp || Date.now();
+          localStorage.setItem('stealth_last_cleared_at', clrTime.toString());
+          const now = new Date(clrTime);
+          const todayStr = getLocalDateString(now);
+          const yesterdayStr = getLocalDateString(new Date(now.getTime() - 86400000));
+          const evals = JSON.parse(localStorage.getItem('stealth_habit_evals') || '{}');
+          if (!evals[todayStr]) evals[todayStr] = {};
+          evals[todayStr].doraMorningEvaluated = true;
+          evals[todayStr].darshMorningEvaluated = true;
+          evals[todayStr].doraNightEvaluated = true;
+          evals[todayStr].darshNightEvaluated = true;
+          if (!evals[todayStr].slotsEvaluated) evals[todayStr].slotsEvaluated = {};
+          (data.dailySlots || []).forEach(s => { evals[todayStr].slotsEvaluated[s.id] = true; });
+
+          if (!evals[yesterdayStr]) evals[yesterdayStr] = {};
+          evals[yesterdayStr].doraMorningEvaluated = true;
+          evals[yesterdayStr].darshMorningEvaluated = true;
+          evals[yesterdayStr].doraNightEvaluated = true;
+          evals[yesterdayStr].darshNightEvaluated = true;
+          if (!evals[yesterdayStr].slotsEvaluated) evals[yesterdayStr].slotsEvaluated = {};
+          (data.dailySlots || []).forEach(s => { evals[yesterdayStr].slotsEvaluated[s.id] = true; });
+
+          localStorage.setItem('stealth_habit_evals', JSON.stringify(evals));
+        } catch(e) {}
         return;
       }
 
@@ -4568,7 +4649,12 @@ export default function App() {
 
     if (ROMANTIC_REGEX.test(emoji) || emoji === '❤️' || emoji === '🥰' || emoji === '❤') {
       const targetUser = role === 'parent' ? 'admin' : 'user';
-      handleLoveBalanceTransaction(1.00, 'credit', 'Heart Reaction on Message (❤️)', false, targetUser);
+      const lastReactKey = 'lb_last_heart_react_' + targetUser;
+      const lastReactTime = Number(localStorage.getItem(lastReactKey) || 0);
+      if (Date.now() - lastReactTime >= 5 * 60 * 1000) {
+        localStorage.setItem(lastReactKey, Date.now().toString());
+        handleLoveBalanceTransaction(1.00, 'credit', 'Heart Reaction on Message (❤️)', false, targetUser);
+      }
     }
 
     if (socketRef.current) {
