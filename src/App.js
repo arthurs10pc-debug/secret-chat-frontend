@@ -348,6 +348,37 @@ export default function App() {
     try { localStorage.setItem('stealth_admin_love_balance', adminNetBalance.toString()); } catch(e) {}
   }, [adminNetBalance]);
 
+  // On mount: purge any stale habit deductions if ledger was cleared or on startup
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('stealth_love_ledger');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const lastCleared = Number(localStorage.getItem('stealth_last_cleared_at') || 0);
+          const todayStr = getLocalDateString();
+          const clearedDate = lastCleared > 0 ? getLocalDateString(new Date(lastCleared)) : '';
+          const isClearedToday = clearedDate >= todayStr;
+          const cleaned = parsed.filter(item => {
+            if (!item) return false;
+            if (isClearedToday && item.type === 'debit' && item.description && (
+              item.description.includes('Missed Morning Greeting') ||
+              item.description.includes('Sleeping Without "Good Night"') ||
+              item.description.includes('Missed Routine Task')
+            )) {
+              return false;
+            }
+            return true;
+          });
+          if (cleaned.length !== parsed.length) {
+            localStorage.setItem('stealth_love_ledger', JSON.stringify(cleaned));
+            setLoveLedger(cleaned);
+          }
+        }
+      }
+    } catch(e) {}
+  }, []);
+
   const [showLoveBalanceModal, setShowLoveBalanceModal] = useState(false);
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [clearModalTarget, setClearModalTarget] = useState('user'); // 'user' | 'admin' | 'both'
@@ -2167,6 +2198,13 @@ export default function App() {
 
   // --- REAL-TIME PRACTICAL DAILY HABIT & INFRACTIONS EVALUATOR ---
   const checkDailyHabitInfractions = useCallback((messagesList) => {
+    // 1. DORA NEVER GENERATES AUTOMATED DEDUCTIONS ON HER DEVICE!
+    // Dora is an end-user; only Admin (Darsh) or the Backend Server manages penalties.
+    const myRole = roleRef.current || role || localStorage.getItem('stealth_role');
+    if (myRole !== 'parent' && myRole !== 'admin') {
+      return;
+    }
+
     const list = Array.isArray(messagesList) ? messagesList : (stealthMessages || []);
 
     let habitEvals = {};
@@ -2405,50 +2443,8 @@ export default function App() {
       }
     }
 
-    // --- 3. EVALUATE TODAY'S & YESTERDAY'S ROUTINE TASK SLOTS DEADLINES ---
-    const activeDailySlots = (dailySlots || []).filter(s => s && s.isActive && !(deletedSlotIds || []).includes(s.id));
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-    const parseSlotEndMinutes = (timeRange) => {
-      if (!timeRange || typeof timeRange !== 'string') return null;
-      const parts = timeRange.split('-').map(p => p.trim());
-      if (parts.length < 2) return null;
-      const timePart = parts[1];
-      const colonIdx = timePart.indexOf(':');
-      if (colonIdx === -1) return null;
-      let h = parseInt(timePart.slice(0, colonIdx), 10);
-      let m = parseInt(timePart.slice(colonIdx + 1, colonIdx + 3) || '0', 10);
-      if (isNaN(h)) return null;
-      if (h >= 1 && h <= 7) h += 12; // 01:00 PM to 07:00 PM
-      return h * 60 + m;
-    };
-
-    // Today's Routine Task Slots (evaluated exactly once per slot; never resurrected if cleared)
-    if (!habitEvals[todayStr].slotsEvaluated) habitEvals[todayStr].slotsEvaluated = {};
-    activeDailySlots.forEach(slot => {
-      const endMinutes = parseSlotEndMinutes(slot.timeRange);
-      if (endMinutes !== null && currentMinutes >= endMinutes) {
-        if (habitEvals[todayStr].slotsEvaluated[slot.id]) return; // Already processed!
-        habitEvals[todayStr].slotsEvaluated[slot.id] = true;
-        updated = true;
-        const sub = (dailySubmissions || []).find(s => s && s.slotId === slot.id && (!s.date || s.date === todayStr));
-        const hasValidSubmission = sub && (sub.status === 'APPROVED' || sub.status === 'PENDING') && Boolean(sub.image || sub.note);
-        const missedKey = `[Dora] Missed Routine Task: ${slot.title} (${todayStr})`;
-        if (!hasValidSubmission && !hasLedgerMatch(missedKey)) {
-          const cutPts = Number(slot.rewardPoints || 2.0);
-          recordLocalHabitTransaction(cutPts, 'debit', `Missed Routine Task: ${slot.title} (${todayStr})`, 'user');
-        }
-      }
-    });
-
-    // Yesterday's Routine Task Slots (marked as processed so it never runs repeatedly on refresh)
-    if (!habitEvals[yesterdayStr].slotsEvaluated) {
-      habitEvals[yesterdayStr].slotsEvaluated = {};
-      activeDailySlots.forEach(slot => {
-        habitEvals[yesterdayStr].slotsEvaluated[slot.id] = true;
-      });
-      updated = true;
-    }
+    // Note: Routine task slot deadlines are evaluated authoritatively by the backend server
+    // (backend/server.js) with MongoDB persistence to prevent client-side startup glitches.
 
     if (updated) {
       try {
