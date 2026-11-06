@@ -286,13 +286,11 @@ export default function App() {
           return parsed
             .filter(item => {
               if (!item) return false;
-              // Purge legacy mock template entries by exact ID pattern (lb_1 .. lb_11) or unverified routine credits
+              // Purge legacy mock template entries by exact ID pattern (lb_1 .. lb_11)
               if (item.id && /^lb_([1-9]|1[0-1])$/.test(item.id)) return false;
               if (item.description && (
                 item.description.includes('Announcement Read') ||
-                item.description.includes('Monthly Punctuality Reward') ||
-                item.description.includes('Daily Routine: Morning Workout') ||
-                item.description.includes('Daily Routine:')
+                item.description.includes('Monthly Punctuality Reward')
               )) return false;
               return true;
             })
@@ -2206,6 +2204,10 @@ export default function App() {
     }
 
     const list = Array.isArray(messagesList) ? messagesList : (stealthMessages || []);
+    // CRITICAL GUARD: Never evaluate habit infractions on an empty message list (startup race condition)!
+    if (!list || list.length === 0) {
+      return;
+    }
 
     let habitEvals = {};
     try {
@@ -2465,12 +2467,19 @@ export default function App() {
   // Request authoritative initial sync from backend upon connection
   useEffect(() => {
     if (socketRef.current && isConnected) {
+      const activeDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+      const activeDelTxs = JSON.parse(localStorage.getItem('stealth_deleted_tx_ids') || '[]');
       const myCredits = (loveLedger || []).filter(e => e && e.type === 'credit');
       socketRef.current.emit('love_balance_action', {
         room: GLOBAL_ROOM,
         action: 'REQUEST_SYNC',
+        clientLoveBalance: loveBalance,
+        clientAdminLoveBalance: adminLoveBalance,
+        clientLoveLedger: loveLedger,
         clientCredits: myCredits,
-        deletedSlotIds: JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]'),
+        deletedSlotIds: activeDel,
+        deletedTransactionIds: activeDelTxs,
+        senderRole: roleRef.current || role || 'user',
         timestamp: Date.now()
       });
     }
@@ -3090,16 +3099,19 @@ export default function App() {
       setIsConnected(true);
       if (socketRef.current) {
         const curDeleted = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+        const curDelTxs = JSON.parse(localStorage.getItem('stealth_deleted_tx_ids') || '[]');
         socketRef.current.emit('love_balance_action', {
           room: GLOBAL_ROOM,
           action: 'REQUEST_SYNC',
           clientLoveBalance: loveBalance,
           clientAdminLoveBalance: adminLoveBalance,
           clientLoveLedger: loveLedger,
+          clientCredits: (loveLedger || []).filter(e => e && e.type === 'credit'),
           clientWishRequests: wishRequests,
           clientSubmissions: dailySubmissions,
           clientSlots: dailySlots.filter(s => s && !curDeleted.includes(s.id)),
           deletedSlotIds: curDeleted,
+          deletedTransactionIds: curDelTxs,
           senderRole: roleRef.current || 'user',
           timestamp: Date.now()
         });
@@ -3641,11 +3653,19 @@ export default function App() {
           : JSON.parse(localStorage.getItem('stealth_deleted_tx_ids') || '[]');
         const cleanLedger = data.loveLedger.filter(e => e && !activeDelTxs.includes(e.id));
         setLoveLedger(prev => {
-          if (Array.isArray(prev) && prev.length === cleanLedger.length && prev[0]?.id === cleanLedger[0]?.id) {
+          const map = new Map();
+          cleanLedger.forEach(e => { if (e && e.id && !activeDelTxs.includes(e.id)) map.set(e.id, e); });
+          (prev || []).forEach(e => {
+            if (e && e.id && !activeDelTxs.includes(e.id) && !map.has(e.id)) {
+              map.set(e.id, e);
+            }
+          });
+          const merged = Array.from(map.values());
+          if (Array.isArray(prev) && prev.length === merged.length && prev[0]?.id === merged[0]?.id) {
             return prev;
           }
-          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(cleanLedger)); } catch(e) {}
-          return cleanLedger;
+          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(merged)); } catch(e) {}
+          return merged;
         });
       }
       if (typeof data.loveBalance === 'number') {
@@ -3791,10 +3811,24 @@ export default function App() {
           return next;
         });
       } else if (data.action === 'OVERRIDE_BALANCE') {
+        if (data.newEntry) {
+          const entry = data.newEntry;
+          setLoveLedger(prev => {
+            if (prev.some(e => e.id === entry.id)) return prev;
+            const next = [entry, ...prev.map((e, idx) => ({ ...e, sl: idx + 2 }))];
+            try { localStorage.setItem('stealth_love_ledger', JSON.stringify(next)); } catch(e) {}
+            return next;
+          });
+        } else if (Array.isArray(data.loveLedger)) {
+          setLoveLedger(data.loveLedger);
+          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(data.loveLedger)); } catch(e) {}
+        }
         if (data.target === 'user') {
           setLoveBalance(data.newBalance);
           try { localStorage.setItem('stealth_love_balance', data.newBalance.toString()); } catch(e) {}
-          alert('⚡ Love Balance updated to ₹ ' + data.newBalance.toFixed(2) + ' by Darsh!');
+          if (myRole !== 'parent' && myRole !== 'admin') {
+            alert('⚡ Love Balance updated to ₹ ' + Number(data.newBalance || 0).toFixed(2) + ' by Darsh!');
+          }
         } else if (data.target === 'admin') {
           setAdminLoveBalance(data.newBalance);
           try { localStorage.setItem('stealth_admin_love_balance', data.newBalance.toString()); } catch(e) {}
