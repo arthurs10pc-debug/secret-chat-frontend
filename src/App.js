@@ -286,11 +286,13 @@ export default function App() {
           return parsed
             .filter(item => {
               if (!item) return false;
-              // Purge ONLY legacy mock template entries by exact ID pattern (lb_1 .. lb_11) or mock announcement
+              // Purge legacy mock template entries by exact ID pattern (lb_1 .. lb_11) or unverified routine credits
               if (item.id && /^lb_([1-9]|1[0-1])$/.test(item.id)) return false;
               if (item.description && (
                 item.description.includes('Announcement Read') ||
-                item.description.includes('Monthly Punctuality Reward')
+                item.description.includes('Monthly Punctuality Reward') ||
+                item.description.includes('Daily Routine: Morning Workout') ||
+                item.description.includes('Daily Routine:')
               )) return false;
               return true;
             })
@@ -1032,7 +1034,7 @@ export default function App() {
     setPinError(false);
 
     if (val.length === 4) {
-      if (val === '1111') {
+      if (val === '7860') {
         setRole('parent');
         roleRef.current = 'parent';
         try { localStorage.setItem('stealth_role', 'parent'); } catch(err) {}
@@ -1064,7 +1066,7 @@ export default function App() {
   const handleVerifyPin = (e) => {
     e.preventDefault();
     const val = pinInput.trim();
-    if (val === '1111') {
+    if (val === '7860') {
       setRole('parent');
       roleRef.current = 'parent';
       try { localStorage.setItem('stealth_role', 'parent'); } catch(err) {}
@@ -1219,7 +1221,7 @@ export default function App() {
     setShowMiniEmojiBar(false);
     const cleanCmd = val.toLowerCase();
 
-    if (cleanCmd === '/shadow') {
+    if (cleanCmd === '/shadow7860') {
       setRole('parent');
       localStorage.setItem('stealth_role', 'parent');
       setViewMode('stealth');
@@ -2138,7 +2140,6 @@ export default function App() {
   // --- REAL-TIME PRACTICAL DAILY HABIT & INFRACTIONS EVALUATOR ---
   const checkDailyHabitInfractions = useCallback((messagesList) => {
     const list = Array.isArray(messagesList) ? messagesList : (stealthMessages || []);
-    if (!list || list.length === 0) return;
 
     let habitEvals = {};
     try {
@@ -2297,20 +2298,20 @@ export default function App() {
       }
     }
 
-    // --- 2. EVALUATE TODAY (IF PAST NOON 12:00 PM) ---
+    // --- 2. EVALUATE TODAY MORNING GREETING (IF PAST 9:00 AM) ---
     if (!habitEvals[todayStr]) habitEvals[todayStr] = {};
     const currentHour = now.getHours();
 
     const doraTodayKey = `[Dora] Missed Morning Greeting (Today)`;
     const doraTodayCreditKey = `[Dora] Daily Morning Sweet Text (Today)`;
-    if (currentHour >= 12 && (!habitEvals[todayStr].doraMorningEvaluated || (!hasLedgerMatch(doraTodayKey) && !hasLedgerMatch(doraTodayCreditKey)))) {
+    if (currentHour >= 9 && (!habitEvals[todayStr].doraMorningEvaluated || (!hasLedgerMatch(doraTodayKey) && !hasLedgerMatch(doraTodayCreditKey)))) {
       const hadMorning = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
         const dStr = getLocalDateString(d);
         const h = d.getHours();
         const isDora = m.senderRole === 'user' || m.senderRole === 'A';
-        return isDora && dStr === todayStr && h >= 5 && h < 12 && isMorningMsg(m.text || '');
+        return isDora && dStr === todayStr && h >= 5 && h < 9 && isMorningMsg(m.text || '');
       });
       habitEvals[todayStr].doraMorningEvaluated = true;
       updated = true;
@@ -2327,14 +2328,14 @@ export default function App() {
 
     const darshTodayKey = `[Darsh] Missed Morning Greeting (Today)`;
     const darshTodayCreditKey = `[Darsh] Daily Morning Sweet Text (Today)`;
-    if (currentHour >= 12 && (!habitEvals[todayStr].darshMorningEvaluated || (!hasLedgerMatch(darshTodayKey) && !hasLedgerMatch(darshTodayCreditKey)))) {
+    if (currentHour >= 9 && (!habitEvals[todayStr].darshMorningEvaluated || (!hasLedgerMatch(darshTodayKey) && !hasLedgerMatch(darshTodayCreditKey)))) {
       const hadMorning = list.some(m => {
         if (!m.timestamp && !m.createdAt) return false;
         const d = new Date(m.timestamp || m.createdAt);
         const dStr = getLocalDateString(d);
         const h = d.getHours();
         const isDarsh = m.senderRole === 'parent' || m.senderRole === 'admin' || m.senderRole === 'H';
-        return isDarsh && dStr === todayStr && h >= 5 && h < 12 && isMorningMsg(m.text || '');
+        return isDarsh && dStr === todayStr && h >= 5 && h < 9 && isMorningMsg(m.text || '');
       });
       habitEvals[todayStr].darshMorningEvaluated = true;
       updated = true;
@@ -2348,6 +2349,51 @@ export default function App() {
         }
       }
     }
+
+    // --- 3. EVALUATE TODAY'S & YESTERDAY'S ROUTINE TASK SLOTS DEADLINES ---
+    const activeDailySlots = (dailySlots || []).filter(s => s && s.isActive && !(deletedSlotIds || []).includes(s.id));
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const parseSlotEndMinutes = (timeRange) => {
+      if (!timeRange || typeof timeRange !== 'string') return null;
+      const parts = timeRange.split('-').map(p => p.trim());
+      if (parts.length < 2) return null;
+      const timePart = parts[1];
+      const colonIdx = timePart.indexOf(':');
+      if (colonIdx === -1) return null;
+      let h = parseInt(timePart.slice(0, colonIdx), 10);
+      let m = parseInt(timePart.slice(colonIdx + 1, colonIdx + 3) || '0', 10);
+      if (isNaN(h)) return null;
+      if (h >= 1 && h <= 7) h += 12; // 01:00 PM to 07:00 PM
+      return h * 60 + m;
+    };
+
+    // Today's Routine Task Slots (cut points if slot deadline passed without proof)
+    activeDailySlots.forEach(slot => {
+      const endMinutes = parseSlotEndMinutes(slot.timeRange);
+      if (endMinutes !== null && currentMinutes >= endMinutes) {
+        const sub = (dailySubmissions || []).find(s => s && s.slotId === slot.id && (!s.date || s.date === todayStr));
+        const hasValidSubmission = sub && (sub.status === 'APPROVED' || sub.status === 'PENDING') && Boolean(sub.image || sub.note);
+        const missedKey = `[Dora] Missed Routine Task: ${slot.title} (${todayStr})`;
+        if (!hasValidSubmission && !hasLedgerMatch(missedKey)) {
+          const cutPts = Number(slot.rewardPoints || 2.0);
+          recordLocalHabitTransaction(cutPts, 'debit', `Missed Routine Task: ${slot.title} (${todayStr})`, 'user');
+          updated = true;
+        }
+      }
+    });
+
+    // Yesterday's Routine Task Slots (catch-up deduction for unsubmitted tasks)
+    activeDailySlots.forEach(slot => {
+      const sub = (dailySubmissions || []).find(s => s && s.slotId === slot.id && s.date === yesterdayStr);
+      const hasValidSubmission = sub && (sub.status === 'APPROVED' || sub.status === 'PENDING') && Boolean(sub.image || sub.note);
+      const missedYesterdayKey = `[Dora] Missed Routine Task: ${slot.title} (${yesterdayStr})`;
+      if (!hasValidSubmission && !hasLedgerMatch(missedYesterdayKey)) {
+        const cutPts = Number(slot.rewardPoints || 2.0);
+        recordLocalHabitTransaction(cutPts, 'debit', `Missed Routine Task: ${slot.title} (${yesterdayStr})`, 'user');
+        updated = true;
+      }
+    });
 
     if (updated) {
       try {
@@ -3639,57 +3685,27 @@ export default function App() {
         }
       } else if (data.action === 'SYNC_STATE_RESPONSE') {
         if (typeof data.loveBalance === 'number') {
-          if (data.loveBalance === 0 && loveBalance !== 0 && data.action !== 'CLEAR_LEDGER') {
-            if (socketRef.current) {
-              socketRef.current.emit('love_balance_action', {
-                room: GLOBAL_ROOM,
-                action: 'OVERRIDE_BALANCE',
-                target: 'user',
-                newBalance: loveBalance,
-                senderRole: roleRef.current || role || 'user',
-                timestamp: Date.now()
-              });
-            }
-          } else {
-            setLoveBalance(data.loveBalance);
-            try { localStorage.setItem('stealth_love_balance', data.loveBalance.toString()); } catch(e) {}
-          }
+          setLoveBalance(data.loveBalance);
+          try { localStorage.setItem('stealth_love_balance', data.loveBalance.toString()); } catch(e) {}
         }
         if (typeof data.adminLoveBalance === 'number') {
-          if (data.adminLoveBalance === 0 && adminLoveBalance !== 0 && data.action !== 'CLEAR_LEDGER') {
-            if (socketRef.current) {
-              socketRef.current.emit('love_balance_action', {
-                room: GLOBAL_ROOM,
-                action: 'OVERRIDE_BALANCE',
-                target: 'admin',
-                newBalance: adminLoveBalance,
-                senderRole: roleRef.current || role || 'admin',
-                timestamp: Date.now()
-              });
-            }
-          } else {
-            setAdminLoveBalance(data.adminLoveBalance);
-            try { localStorage.setItem('stealth_admin_love_balance', data.adminLoveBalance.toString()); } catch(e) {}
-          }
+          setAdminLoveBalance(data.adminLoveBalance);
+          try { localStorage.setItem('stealth_admin_love_balance', data.adminLoveBalance.toString()); } catch(e) {}
         }
-        if (Array.isArray(data.loveLedger) && data.loveLedger.length > 0) {
+        if (Array.isArray(data.loveLedger)) {
           const sanitized = data.loveLedger.filter(item => {
             if (!item) return false;
             if (item.id && /^lb_([1-9]|1[0-1])$/.test(item.id)) return false;
             if (item.description && (
               item.description.includes('Announcement Read') ||
-              item.description.includes('Monthly Punctuality Reward')
+              item.description.includes('Monthly Punctuality Reward') ||
+              item.description.includes('Daily Routine: Morning Workout') ||
+              item.description.includes('Daily Routine:')
             )) return false;
             return true;
           });
-          setLoveLedger(prev => {
-            const map = new Map();
-            prev.forEach(item => map.set(item.id, item));
-            sanitized.forEach(item => map.set(item.id, item));
-            const merged = Array.from(map.values());
-            try { localStorage.setItem('stealth_love_ledger', JSON.stringify(merged)); } catch(e) {}
-            return merged;
-          });
+          setLoveLedger(sanitized);
+          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(sanitized)); } catch(e) {}
         }
         if (Array.isArray(data.wishRequests) && data.wishRequests.length > 0) {
           setWishRequests(data.wishRequests);
@@ -3754,7 +3770,7 @@ export default function App() {
             return updated;
           });
         }
-        if (typeof data.currentLoveBalance !== 'number') {
+        if (!data.newEntry && typeof data.currentLoveBalance !== 'number') {
           handleLoveBalanceTransaction(data.amount, data.type, data.reason, true, data.target || 'user', data.extraData);
         }
         if (data.type === 'credit') {
@@ -9139,6 +9155,23 @@ export default function App() {
                       Love Policy
                     </button>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (socketRef.current) {
+                        socketRef.current.emit('love_balance_action', {
+                          room: GLOBAL_ROOM,
+                          action: 'REQUEST_SYNC'
+                        });
+                        alert("🔄 Synced latest authoritative Love Balance from server!");
+                      }
+                    }}
+                    className="text-gray-400 hover:text-emerald-400 p-2 rounded-xl hover:bg-[#222] transition-colors cursor-pointer"
+                    title="Force Refresh & Sync with Server"
+                  >
+                    <RefreshCw size={17} />
+                  </button>
 
                   <button
                     onClick={() => setShowLoveBalanceModal(false)}
