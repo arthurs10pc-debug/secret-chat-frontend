@@ -187,8 +187,6 @@ const formatLoveBalance = (bal) => {
 };
 
 export default function App() {
-  const [showGoogleAuthModal, setShowGoogleAuthModal] = useState(false);
-  const [customGoogleEmail, setCustomGoogleEmail] = useState('');
   const [googleUser, setGoogleUser] = useState(() => {
     try {
       const saved = localStorage.getItem('stealth_user_profile');
@@ -1192,7 +1190,7 @@ export default function App() {
     }
   }, []);
 
-  const triggerDirectGoogleOAuth = useCallback(() => {
+  const handleGoogleLogin = useCallback(() => {
     if (!window.google?.accounts?.oauth2) {
       alert("Google Identity Services is initializing... Please click again in 2 seconds.");
       return;
@@ -1214,7 +1212,6 @@ export default function App() {
             const info = await res.json();
             if (info && info.email) {
               await applyAuthenticatedUser(info.email, info.name, info.picture);
-              setShowGoogleAuthModal(false);
             }
           } catch (err) {
             console.error("Error fetching Google profile:", err);
@@ -1226,10 +1223,6 @@ export default function App() {
       console.error("Failed to start Google OAuth:", e);
     }
   }, [applyAuthenticatedUser]);
-
-  const handleGoogleLogin = useCallback(() => {
-    setShowGoogleAuthModal(true);
-  }, []);
 
   const handleGoogleLogout = useCallback(() => {
     setGoogleUser(null);
@@ -5852,156 +5845,6 @@ export default function App() {
             >
               Got it!
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* GOOGLE DIRECT ACCOUNT CHOOSER MODAL */}
-      {showGoogleAuthModal && (
-        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-[#181818] border border-[#333] rounded-3xl p-5 max-w-sm w-full shadow-2xl relative font-sans transform animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-[#2a2a2a] mb-4">
-              <div className="flex items-center gap-2.5">
-                <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                </svg>
-                <span className="font-bold text-white text-sm">Sign in with Google</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowGoogleAuthModal(false)}
-                className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-[#252525] cursor-pointer"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <p className="text-xs text-gray-400 mb-3.5">
-              Choose an account to synchronize your Karma Points across all devices:
-            </p>
-
-            {/* DIRECT 1-CLICK ACCOUNTS */}
-            <div className="space-y-2.5 mb-4">
-              {/* ADMIN ACCOUNT */}
-              <button
-                type="button"
-                onClick={() => {
-                  applyAuthenticatedUser('arthurs10pc@gmail.com', 'Darsh', '');
-                  setShowGoogleAuthModal(false);
-                }}
-                className="w-full flex items-center justify-between p-3 rounded-2xl bg-[#202020] hover:bg-[#282828] border border-amber-500/40 hover:border-amber-400 text-left transition-all group cursor-pointer shadow-sm active:scale-98"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 text-black font-bold flex items-center justify-center text-sm shadow">
-                    👑
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
-                      <span>Darsh (Admin)</span>
-                      <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1 py-0.2 rounded border border-amber-500/50 font-mono">
-                        DASHBOARD
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-gray-300 font-mono">arthurs10pc@gmail.com</div>
-                  </div>
-                </div>
-                <span className="text-xs text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity font-bold">Select ➔</span>
-              </button>
-
-              {/* DORA ACCOUNT */}
-              <button
-                type="button"
-                onClick={() => {
-                  applyAuthenticatedUser('dora@gmail.com', 'Dora', '');
-                  setShowGoogleAuthModal(false);
-                }}
-                className="w-full flex items-center justify-between p-3 rounded-2xl bg-[#202020] hover:bg-[#282828] border border-[#333] hover:border-pink-500/40 text-left transition-all group cursor-pointer shadow-sm active:scale-98"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-[#1e293b] text-white font-bold flex items-center justify-center text-sm border border-[#444]">
-                    A
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-pink-300">Dora (User)</div>
-                    <div className="text-[11px] text-gray-400 font-mono">dora@gmail.com</div>
-                  </div>
-                </div>
-                <span className="text-xs text-pink-300 opacity-0 group-hover:opacity-100 transition-opacity font-bold">Select ➔</span>
-              </button>
-            </div>
-
-            {/* CUSTOM GMAIL ID */}
-            <div className="pt-3 border-t border-[#2a2a2a] space-y-2">
-              <label className="text-[11px] text-gray-400">Or enter another Gmail ID:</label>
-              <div className="flex gap-2">
-                <input
-                  type="email"
-                  value={customGoogleEmail}
-                  onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                  placeholder="name@gmail.com"
-                  className="flex-1 bg-[#121212] border border-[#333] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (customGoogleEmail && customGoogleEmail.includes('@')) {
-                      const isAdmin = customGoogleEmail.toLowerCase().trim() === 'arthurs10pc@gmail.com';
-                      applyAuthenticatedUser(customGoogleEmail, isAdmin ? 'Darsh' : 'Dora', '');
-                      setShowGoogleAuthModal(false);
-                    } else {
-                      alert("Please enter a valid Gmail address.");
-                    }
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all active:scale-95"
-                >
-                  Login
-                </button>
-              </div>
-            </div>
-
-            {/* OFFICIAL GOOGLE SIGN-IN BUTTON CONTAINER */}
-            <div className="pt-3 mt-3 border-t border-[#2a2a2a] flex flex-col items-center gap-2">
-              <div ref={googleBtnRef} className="min-h-[40px] flex items-center justify-center"></div>
-              
-              <button
-                type="button"
-                onClick={triggerDirectGoogleOAuth}
-                className="w-full flex items-center justify-center gap-2 bg-[#252525] hover:bg-[#303030] border border-[#444] text-white py-2 px-3 rounded-xl text-xs font-semibold cursor-pointer transition-all mt-1"
-                title="Launch Google OAuth browser popup"
-              >
-                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                </svg>
-                <span>Direct Google Account Popup</span>
-              </button>
-
-              {/* ORIGIN MISMATCH HELPER */}
-              <div className="bg-[#111] p-2.5 rounded-xl border border-amber-500/30 text-[10px] text-gray-400 text-left w-full mt-2">
-                <div className="text-amber-400 font-bold mb-1">💡 Origin Mismatch Fix:</div>
-                <div>Add this exact URL to <span className="text-white font-semibold">Google Cloud Console ➔ Authorized JavaScript origins</span>:</div>
-                <div className="flex items-center justify-between bg-black/60 p-1.5 rounded mt-1 font-mono text-emerald-400 text-[10px] border border-[#333]">
-                  <span className="truncate">{typeof window !== 'undefined' ? window.location.origin : ''}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (typeof window !== 'undefined' && navigator.clipboard) {
-                        navigator.clipboard.writeText(window.location.origin);
-                        alert("Copied " + window.location.origin + " to clipboard! Now paste it into Google Cloud Console Authorized JavaScript origins.");
-                      }
-                    }}
-                    className="ml-2 bg-[#222] hover:bg-[#333] text-white px-1.5 py-0.5 rounded text-[9px] cursor-pointer shrink-0"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       )}
