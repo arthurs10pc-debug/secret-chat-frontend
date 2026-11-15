@@ -2780,7 +2780,7 @@ export default function App() {
     // 2. Award Love Balance to Dora (deduplicated by submission ID)
     const approvalId = 'lb_appr_' + (sub.id || `${sub.date}_${sub.slotId}`);
     if (!loveLedger.some(e => e.id === approvalId)) {
-      handleLoveBalanceTransaction(pts, 'credit', `Approved Task: ${slotTitle}`, false, 'user', { approvalId });
+      handleLoveBalanceTransaction(pts, 'credit', `Approved Task: ${slotTitle}`, false, 'user', { approvalId, customId: approvalId });
     }
 
     // 3. Dual-channel emission
@@ -4003,10 +4003,10 @@ export default function App() {
           setLoveLedger(prev => {
             const map = new Map();
             data.loveLedger.forEach(e => {
-              if (e && e.id && !activeDelTxs.includes(e.id)) map.set(e.id, e);
+              if (e && e.id && !activeDelTxs.includes(e.id) && !isLegacyMockEntry(e)) map.set(e.id, e);
             });
             (prev || []).forEach(e => {
-              if (e && e.id && !activeDelTxs.includes(e.id) && !map.has(e.id)) {
+              if (e && e.id && !activeDelTxs.includes(e.id) && !isLegacyMockEntry(e) && !map.has(e.id)) {
                 map.set(e.id, e);
               }
             });
