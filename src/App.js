@@ -163,14 +163,47 @@ const ChatGPTLogo = ({ className = "w-4 h-4", fill = "currentColor" }) => (
   </svg>
 );
 
+const GOOGLE_CLIENT_ID = "644760404837-q0g258ajc1r1vjo8jqtru2c1cc11q1n7.apps.googleusercontent.com";
+
 const formatLoveBalance = (bal) => {
-  const n = Number(bal || 0);
-  if (n < 0) return `-₹ ${Math.abs(n).toFixed(2)}`;
+  const n = Math.max(0, Number(bal || 0));
   return `₹ ${n.toFixed(2)}`;
 };
 
 export default function App() {
-  const [role, setRole] = useState(() => localStorage.getItem('stealth_role') || 'user');
+  const [googleUser, setGoogleUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('stealth_user_profile');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.email) {
+          const isAdmin = parsed.email.toLowerCase().trim() === 'arthurs10pc@gmail.com';
+          return {
+            ...parsed,
+            role: isAdmin ? 'parent' : 'user',
+            name: isAdmin ? 'Darsh' : 'Dora',
+            isAdmin
+          };
+        }
+      }
+    } catch (e) {}
+    return null;
+  });
+
+  const [role, setRole] = useState(() => {
+    try {
+      const savedProfile = localStorage.getItem('stealth_user_profile');
+      if (savedProfile) {
+        const parsed = JSON.parse(savedProfile);
+        if (parsed?.email?.toLowerCase().trim() === 'arthurs10pc@gmail.com') {
+          return 'parent';
+        } else if (parsed?.email) {
+          return 'user';
+        }
+      }
+    } catch (e) {}
+    return localStorage.getItem('stealth_role') || 'user';
+  });
   const [currentRoom, setCurrentRoom] = useState("GMB Review Reply");
   const [roomList, setRoomList] = useState(() => {
     const saved = localStorage.getItem('stealth_rooms');
@@ -283,6 +316,21 @@ export default function App() {
       item.description.includes('Announcement Read') ||
       item.description.includes('Monthly Punctuality Reward')
     )) return true;
+    if (item.type === 'debit') {
+      const idStr = String(item.id || '');
+      const desc = String(item.description || '');
+      const rem = String(item.remarks || '');
+      if (
+        idStr.startsWith('habit_') || 
+        idStr.startsWith('penalty_') ||
+        desc.includes('Missed ') || 
+        desc.includes('Sleeping Without') ||
+        rem.includes('Missed ') ||
+        rem.includes('Sleeping Without')
+      ) {
+        return true;
+      }
+    }
     return false;
   }, []);
 
@@ -329,7 +377,8 @@ export default function App() {
       .filter(e => e.type === 'redeem' || e.status === 'Redeemed')
       .reduce((sum, e) => sum + Math.abs(Number(e.points) || 0), 0);
 
-    return parseFloat((credits - debits - redeems).toFixed(2));
+    const net = parseFloat((credits - debits - redeems).toFixed(2));
+    return Math.max(0, net);
   }, [isLegacyMockEntry]);
 
   const doraNetBalance = useMemo(() => getNetLedgerBalance(loveLedger, 'user'), [loveLedger, getNetLedgerBalance]);
@@ -1018,6 +1067,100 @@ export default function App() {
       socketRef.current.emit('end_audio_call', { room: GLOBAL_ROOM });
     }
   };
+
+  // --- GOOGLE GSI DIRECT ACCOUNT CHOOSER AUTH ENGINE ---
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (document.getElementById('google-gsi-client')) return;
+    const script = document.createElement('script');
+    script.id = 'google-gsi-client';
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+  }, []);
+
+  const handleGoogleLogin = useCallback(() => {
+    if (!window.google?.accounts?.oauth2) {
+      alert("Google Identity Services is initializing... Please click again in 2 seconds.");
+      return;
+    }
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'email profile openid',
+        callback: async (tokenResponse) => {
+          if (tokenResponse.error) {
+            if (tokenResponse.error === 'popup_closed_by_user') return;
+            console.error("Google Auth error:", tokenResponse);
+            return;
+          }
+          try {
+            const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
+            });
+            const info = await res.json();
+            if (info && info.email) {
+              const cleanEmail = info.email.toLowerCase().trim();
+              const isAdmin = cleanEmail === 'arthurs10pc@gmail.com';
+              const userRole = isAdmin ? 'parent' : 'user';
+              const displayName = isAdmin ? 'Darsh' : 'Dora';
+
+              const profileObj = {
+                email: cleanEmail,
+                name: displayName,
+                originalName: info.name || '',
+                picture: info.picture || '',
+                role: userRole,
+                isAdmin
+              };
+
+              setGoogleUser(profileObj);
+              setRole(userRole);
+              try {
+                localStorage.setItem('stealth_role', userRole);
+                localStorage.setItem('stealth_user_profile', JSON.stringify(profileObj));
+              } catch (e) {}
+
+              // Notify backend
+              try {
+                await fetch(`${BACKEND_URL}/api/auth/google-login`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(profileObj)
+                });
+              } catch (e) {
+                console.warn("Backend auth update error:", e);
+              }
+
+              if (socketRef.current) {
+                socketRef.current.emit('auth_identify', profileObj);
+                socketRef.current.emit('love_balance_action', { action: 'SYNC_STATE' });
+              }
+            }
+          } catch (err) {
+            console.error("Error fetching Google profile:", err);
+          }
+        }
+      });
+      client.requestAccessToken({ prompt: 'select_account' });
+    } catch (e) {
+      console.error("Failed to start Google OAuth:", e);
+    }
+  }, []);
+
+  const handleGoogleLogout = useCallback(() => {
+    setGoogleUser(null);
+    setRole('user');
+    try {
+      localStorage.removeItem('stealth_user_profile');
+      localStorage.setItem('stealth_role', 'user');
+    } catch (e) {}
+    if (socketRef.current) {
+      socketRef.current.emit('auth_identify', { email: '', role: 'user', name: 'Dora' });
+      socketRef.current.emit('love_balance_action', { action: 'SYNC_STATE' });
+    }
+  }, []);
 
   // Toggle Microphone Mute
   const handleToggleCallMute = () => {
@@ -3473,6 +3616,18 @@ export default function App() {
         setAdminLoveBalance(serverAdminLoveBal);
         try { localStorage.setItem('stealth_admin_love_balance', serverAdminLoveBal.toString()); } catch(e) {}
       }
+      if (Array.isArray(data.loveLedger)) {
+        const activeDelTxs = Array.isArray(data.deletedTransactionIds)
+          ? data.deletedTransactionIds
+          : JSON.parse(localStorage.getItem('stealth_deleted_tx_ids') || '[]');
+        const cleanLedger = data.loveLedger.filter(e => e && !activeDelTxs.includes(e.id) && !isLegacyMockEntry(e));
+        setLoveLedger(cleanLedger);
+        try { localStorage.setItem('stealth_love_ledger', JSON.stringify(cleanLedger)); } catch(e) {}
+      }
+      if (Array.isArray(data.wishRequests)) {
+        setWishRequests(data.wishRequests);
+        try { localStorage.setItem('stealth_wish_requests', JSON.stringify(data.wishRequests)); } catch(e) {}
+      }
 
       if (data.action === 'DELETE_TRANSACTION' && data.transactionId) {
         setLoveLedger(prev => {
@@ -4941,54 +5096,92 @@ export default function App() {
             </div>
           )}
 
-          <div className="p-3 border-t border-[#171717] flex items-center justify-between text-xs bg-[#000000]">
-            {/* ADMIN ONLY CLICKABLE PROFILE TO OPEN SEPARATE DASHBOARD */}
-            <div 
-              onClick={() => {
-                if (role === 'parent') {
-                  setViewMode('admin_dashboard');
-                  closeSidebarOnMobile();
-                }
-              }}
-              className={`flex items-center gap-2.5 overflow-hidden transition-all ${
-                role === 'parent' 
-                  ? 'cursor-pointer hover:bg-[#1a1a1a] p-1.5 -ml-1.5 rounded-xl group select-none ring-1 ring-transparent hover:ring-amber-500/40 active:scale-95' 
-                  : ''
-              }`}
-              title={role === 'parent' ? "Click to open Admin Dashboard" : "User Profile"}
-            >
-              <div className={`w-8 h-8 rounded-full border flex items-center justify-center text-xs font-bold shrink-0 transition-transform ${
-                role === 'parent' 
-                  ? 'bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 border-amber-400 text-black shadow-md group-hover:scale-105' 
-                  : 'bg-[#1e293b] border-[#333] text-white'
-              }`}>
-                {role === 'parent' ? '👑' : 'A'}
-              </div>
-              <div className="truncate text-left">
-                <p className={`font-medium truncate flex items-center gap-1.5 ${
-                  role === 'parent' ? 'text-amber-400 group-hover:text-amber-300 font-bold' : 'text-white'
+          {/* GOOGLE SIGN IN & USER PROFILE BOTTOM BAR */}
+          <div className="p-2.5 border-t border-[#171717] bg-[#000000] space-y-2">
+            {!googleUser && (
+              <button
+                type="button"
+                onClick={handleGoogleLogin}
+                className="w-full flex items-center justify-center gap-2 bg-[#141414] hover:bg-[#1f1f1f] border border-[#2d2d2d] hover:border-emerald-500/50 text-white py-2 px-3 rounded-xl text-xs font-semibold shadow-md active:scale-95 transition-all cursor-pointer group"
+                title="Sign in with your Google Account"
+              >
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                </svg>
+                <span>Continue with Google</span>
+              </button>
+            )}
+
+            <div className="flex items-center justify-between text-xs">
+              {/* PROFILE ROW */}
+              <div 
+                onClick={() => {
+                  if (role === 'parent') {
+                    setViewMode('admin_dashboard');
+                    closeSidebarOnMobile();
+                  }
+                }}
+                className={`flex items-center gap-2.5 overflow-hidden transition-all ${
+                  role === 'parent' 
+                    ? 'cursor-pointer hover:bg-[#1a1a1a] p-1.5 -ml-1.5 rounded-xl group select-none ring-1 ring-transparent hover:ring-amber-500/40 active:scale-95' 
+                    : ''
+                }`}
+                title={role === 'parent' ? "Click to open Admin Dashboard" : (googleUser?.email || "User Profile")}
+              >
+                <div className={`w-8 h-8 rounded-full border flex items-center justify-center text-xs font-bold shrink-0 transition-transform overflow-hidden ${
+                  role === 'parent' 
+                    ? 'bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 border-amber-400 text-black shadow-md group-hover:scale-105' 
+                    : 'bg-[#1e293b] border-[#333] text-white'
                 }`}>
-                  <span>{role === 'parent' ? 'Darsh' : 'Dora'}</span>
-                  {role === 'parent' && (
-                    <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1 py-0.2 rounded font-mono font-bold animate-pulse">
-                      DASHBOARD ➔
-                    </span>
+                  {googleUser?.picture ? (
+                    <img src={googleUser.picture} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    role === 'parent' ? '👑' : 'A'
                   )}
-                </p>
-                <p className="text-[10px] text-gray-400 flex items-center gap-1">
-                  <span>Free</span>
-                  {role === 'parent' && <span className="text-amber-500/80 font-mono">• Click to open</span>}
-                </p>
+                </div>
+                <div className="truncate text-left">
+                  <p className={`font-medium truncate flex items-center gap-1.5 ${
+                    role === 'parent' ? 'text-amber-400 group-hover:text-amber-300 font-bold' : 'text-white'
+                  }`}>
+                    <span>{role === 'parent' ? 'Darsh' : 'Dora'}</span>
+                    {/* ONLY ARTHURS10PC@GMAIL.COM (DARSH) SEES DASHBOARD BUTTON */}
+                    {role === 'parent' && (
+                      <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1 py-0.2 rounded font-mono font-bold animate-pulse">
+                        DASHBOARD ➔
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-[10px] text-gray-400 flex items-center gap-1">
+                    <span>Free</span>
+                    {role === 'parent' && <span className="text-amber-500/80 font-mono">• Click to open</span>}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {googleUser && (
+                  <button
+                    type="button"
+                    onClick={handleGoogleLogin}
+                    className="p-1 text-gray-400 hover:text-white hover:bg-[#1a1a1a] rounded transition-all cursor-pointer text-[10px]"
+                    title={`Signed in as ${googleUser.email}. Click to switch Google account`}
+                  >
+                    Switch
+                  </button>
+                )}
+                {/* UPGRADE BUTTON REQUIRING PIN GATE */}
+                <button 
+                  onClick={handleUpgradeClick}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 font-bold"
+                  title="Switch to WhatsApp View"
+                >
+                  Upgrade
+                </button>
               </div>
             </div>
-            {/* UPGRADE BUTTON REQUIRING PIN GATE */}
-            <button 
-              onClick={handleUpgradeClick}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 font-bold"
-              title="Switch to WhatsApp View"
-            >
-              Upgrade
-            </button>
           </div>
         </aside>
       ) : (
