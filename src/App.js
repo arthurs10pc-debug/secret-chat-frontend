@@ -2216,334 +2216,45 @@ export default function App() {
     }
   }, [handleLoveBalanceTransaction]);
 
-  // --- REAL-TIME AUTHORITATIVE MULTI-DAY HABIT & KARMA EVALUATOR ---
-  const checkDailyHabitInfractions = useCallback((messagesList) => {
-    const list = Array.isArray(messagesList) ? messagesList : (stealthMessages || []);
-    const inMemoryLedger = Array.isArray(loveLedger) ? [...loveLedger] : [];
-    try {
-      const savedLedger = JSON.parse(localStorage.getItem('stealth_love_ledger') || '[]');
-      if (Array.isArray(savedLedger)) {
-        for (const s of savedLedger) {
-          if (s && !inMemoryLedger.some(m => m.id === s.id)) inMemoryLedger.push(s);
-        }
-      }
-    } catch(e) {}
-
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const now = new Date();
-    const istNow = new Date(now.getTime() + istOffset);
-    const todayStr = istNow.toISOString().split('T')[0];
-    const currentHour = istNow.getUTCHours();
-    const currentMinutes = istNow.getUTCHours() * 60 + istNow.getUTCMinutes();
-
-    const lastCleared = Number(localStorage.getItem('stealth_last_cleared_at') || 0);
-    const clearedDateStr = lastCleared > 0 ? new Date(lastCleared + istOffset).toISOString().split('T')[0] : '';
-    const activeDelTxs = JSON.parse(localStorage.getItem('stealth_deleted_tx_ids') || '[]');
-
-    const hasEntry = (id, target, dateStr, keyword) => {
-      if (activeDelTxs.includes(id)) return true;
-      return inMemoryLedger.some(e => {
-        if (!e) return false;
-        if (e.id === id) return true;
-        if (target && e.target !== target) return false;
-        if (dateStr && e.description && e.description.includes(dateStr)) {
-          if (!keyword || e.description.includes(keyword)) return true;
-        }
-        return false;
-      });
-    };
-
-    const isMorningMsg = (text) => {
-      if (!text || typeof text !== 'string') return false;
-      const lower = text.toLowerCase();
-      return lower.includes('good morning') || lower.includes('morning') || lower.includes('gm') || 
-             lower.includes('gud mrng') || lower.includes('suprabhat') || lower.includes('subah') ||
-             lower.includes('goodmrng') || lower.includes('mrg') || lower.includes('uth jao');
-    };
-
-    const isGoodNightMsg = (text) => {
-      if (!text || typeof text !== 'string') return false;
-      const lower = text.toLowerCase();
-      return lower.includes('good night') || lower.includes('goodnight') || lower.includes('gn') || 
-             lower.includes('gud nite') || lower.includes('sweet dreams') || lower.includes('shubh ratri') || 
-             lower.includes('sleep tight') || lower.includes('so jao') || lower.includes('sleep well') ||
-             lower.includes('gnight') || lower.includes('night') || lower.includes('shubhratri');
-    };
-
-    const parseSlotEndMinutes = (timeRange) => {
-      if (!timeRange || typeof timeRange !== 'string') return null;
-      const parts = timeRange.split('-').map(p => p.trim());
-      if (parts.length < 2) return null;
-      const timePart = parts[1];
-      const colonIdx = timePart.indexOf(':');
-      if (colonIdx === -1) return null;
-      let h = parseInt(timePart.slice(0, colonIdx), 10);
-      let m = parseInt(timePart.slice(colonIdx + 1, colonIdx + 3) || '0', 10);
-      if (isNaN(h)) return null;
-      if (h >= 1 && h <= 7) h += 12;
-      return h * 60 + m;
-    };
-
-    const activeSlots = (dailySlots || []).filter(s => s && s.isActive && !(deletedSlotIds || []).includes(s.id));
-    const newEntries = [];
-
-    // Evaluate past 14 days up to today
-    for (let i = 14; i >= 0; i--) {
-      const d = new Date(istNow.getTime() - i * 86400000);
-      const dayStr = d.toISOString().split('T')[0];
-      if (clearedDateStr && dayStr <= clearedDateStr) continue;
-
-      const nextDayStr = new Date(d.getTime() + 86400000).toISOString().split('T')[0];
-      const isPastDay = dayStr < todayStr;
-      const isToday = dayStr === todayStr;
-
-      // 1. MORNING GREETING (5:00 AM - 9:00 AM)
-      if (isPastDay || (isToday && currentHour >= 9)) {
-        // Dora morning check
-        const doraMId = `habit_morning_${dayStr}_user`;
-        if (!hasEntry(doraMId, 'user', dayStr, 'Morning')) {
-          const hadDoraMorning = list.some(m => {
-            if (!m || !m.timestamp) return false;
-            const mIst = new Date(new Date(m.timestamp).getTime() + istOffset);
-            const mDate = mIst.toISOString().split('T')[0];
-            const mHour = mIst.getUTCHours();
-            const isDora = m.senderRole === 'user' || m.senderRole === 'A';
-            return isDora && mDate === dayStr && mHour >= 5 && mHour < 9 && isMorningMsg(m.text || '');
-          });
-          const type = hadDoraMorning ? 'credit' : 'debit';
-          const reason = hadDoraMorning ? `Daily Morning Sweet Text (${dayStr})` : `Missed Morning Greeting (${dayStr})`;
-          const entry = {
-            id: doraMId,
-            sl: 1,
-            target: 'user',
-            description: `[Dora] ${reason}`,
-            earnedAt: `${dayStr}, 09:00 am`,
-            expireDate: '',
-            points: type === 'credit' ? 2.00 : -2.00,
-            type,
-            remarks: hadDoraMorning ? 'Daily Morning Sweet Greeting' : 'Missed Morning Greeting Before 9:00 AM',
-            status: type === 'credit' ? 'Confirmed' : 'Deducted'
-          };
-          newEntries.push(entry);
-          inMemoryLedger.push(entry);
-        }
-
-        // Darsh morning check
-        const darshMId = `habit_morning_${dayStr}_admin`;
-        if (!hasEntry(darshMId, 'admin', dayStr, 'Morning')) {
-          const hadDarshMorning = list.some(m => {
-            if (!m || !m.timestamp) return false;
-            const mIst = new Date(new Date(m.timestamp).getTime() + istOffset);
-            const mDate = mIst.toISOString().split('T')[0];
-            const mHour = mIst.getUTCHours();
-            const isDarsh = m.senderRole === 'parent' || m.senderRole === 'admin' || m.senderRole === 'H';
-            return isDarsh && mDate === dayStr && mHour >= 5 && mHour < 9 && isMorningMsg(m.text || '');
-          });
-          const type = hadDarshMorning ? 'credit' : 'debit';
-          const reason = hadDarshMorning ? `Daily Morning Sweet Text (${dayStr})` : `Missed Morning Greeting (${dayStr})`;
-          const entry = {
-            id: darshMId,
-            sl: 1,
-            target: 'admin',
-            description: `[Darsh] ${reason}`,
-            earnedAt: `${dayStr}, 09:00 am`,
-            expireDate: '',
-            points: type === 'credit' ? 2.00 : -2.00,
-            type,
-            remarks: hadDarshMorning ? 'Daily Morning Sweet Greeting' : 'Missed Morning Greeting Before 9:00 AM',
-            status: type === 'credit' ? 'Confirmed' : 'Deducted'
-          };
-          newEntries.push(entry);
-          inMemoryLedger.push(entry);
-        }
-      }
-
-      // 2. GOOD NIGHT (past days only)
-      if (isPastDay) {
-        // Dora night check
-        const doraNId = `habit_night_${dayStr}_user`;
-        if (!hasEntry(doraNId, 'user', dayStr, 'Good Night')) {
-          const hadDoraNight = list.some(m => {
-            if (!m || !m.timestamp) return false;
-            const mIst = new Date(new Date(m.timestamp).getTime() + istOffset);
-            const mDate = mIst.toISOString().split('T')[0];
-            const mHour = mIst.getUTCHours();
-            const isDora = m.senderRole === 'user' || m.senderRole === 'A';
-            const eve = mDate === dayStr && mHour >= 20;
-            const wee = mDate === nextDayStr && mHour < 5;
-            return isDora && (eve || wee) && isGoodNightMsg(m.text || '');
-          });
-          const type = hadDoraNight ? 'credit' : 'debit';
-          const reason = hadDoraNight ? `Sweet Good Night Wish (${dayStr})` : `Sleeping Without "Good Night" (${dayStr})`;
-          const entry = {
-            id: doraNId,
-            sl: 1,
-            target: 'user',
-            description: `[Dora] ${reason}`,
-            earnedAt: `${dayStr}, 11:59 pm`,
-            expireDate: '',
-            points: type === 'credit' ? 2.00 : -3.00,
-            type,
-            remarks: hadDoraNight ? 'Sweet Good Night Wish' : 'Sleeping Without "Good Night"',
-            status: type === 'credit' ? 'Confirmed' : 'Deducted'
-          };
-          newEntries.push(entry);
-          inMemoryLedger.push(entry);
-        }
-
-        // Darsh night check
-        const darshNId = `habit_night_${dayStr}_admin`;
-        if (!hasEntry(darshNId, 'admin', dayStr, 'Good Night')) {
-          const hadDarshNight = list.some(m => {
-            if (!m || !m.timestamp) return false;
-            const mIst = new Date(new Date(m.timestamp).getTime() + istOffset);
-            const mDate = mIst.toISOString().split('T')[0];
-            const mHour = mIst.getUTCHours();
-            const isDarsh = m.senderRole === 'parent' || m.senderRole === 'admin' || m.senderRole === 'H';
-            const eve = mDate === dayStr && mHour >= 20;
-            const wee = mDate === nextDayStr && mHour < 5;
-            return isDarsh && (eve || wee) && isGoodNightMsg(m.text || '');
-          });
-          const type = hadDarshNight ? 'credit' : 'debit';
-          const reason = hadDarshNight ? `Sweet Good Night Wish (${dayStr})` : `Sleeping Without "Good Night" (${dayStr})`;
-          const entry = {
-            id: darshNId,
-            sl: 1,
-            target: 'admin',
-            description: `[Darsh] ${reason}`,
-            earnedAt: `${dayStr}, 11:59 pm`,
-            expireDate: '',
-            points: type === 'credit' ? 2.00 : -3.00,
-            type,
-            remarks: hadDarshNight ? 'Sweet Good Night Wish' : 'Sleeping Without "Good Night"',
-            status: type === 'credit' ? 'Confirmed' : 'Deducted'
-          };
-          newEntries.push(entry);
-          inMemoryLedger.push(entry);
-        }
-      }
-
-      // 3. DAILY ROUTINE TASKS (DORA ONLY)
-      activeSlots.forEach(slot => {
-        const slotEndMinutes = parseSlotEndMinutes(slot.timeRange);
-        const shouldCheckSlot = isPastDay || (isToday && slotEndMinutes !== null && currentMinutes >= slotEndMinutes);
-        if (shouldCheckSlot) {
-          const slotTxId = `habit_routine_${slot.id}_${dayStr}_user`;
-          if (!hasEntry(slotTxId, 'user', dayStr, slot.title)) {
-            const sub = (dailySubmissions || []).find(s => s && s.slotId === slot.id && s.date === dayStr);
-            const isSubmitted = sub && (sub.status === 'APPROVED' || sub.status === 'PENDING') && Boolean(sub.image || sub.note);
-            if (!isSubmitted) {
-              const entry = {
-                id: slotTxId,
-                sl: 1,
-                target: 'user',
-                description: `[Dora] Missed Routine Task: ${slot.title} (${dayStr})`,
-                earnedAt: `${dayStr}, 12:00 pm`,
-                expireDate: '',
-                points: -2.00,
-                type: 'debit',
-                remarks: `Missed Routine Task Deadline (${slot.timeRange})`,
-                status: 'Deducted'
-              };
-              newEntries.push(entry);
-              inMemoryLedger.push(entry);
-            }
-          }
-        }
-      });
+  // --- REAL-TIME AUTHORITATIVE SYNC TRIGGER ---
+  // The backend server is the STRICT SINGLE SOURCE OF TRUTH for habits, routine tasks, and ledger transactions.
+  // The client requests synchronization from backend so no client device ever drifts or invents local transactions.
+  const checkDailyHabitInfractions = useCallback(() => {
+    if (socketRef.current) {
+      socketRef.current.emit('love_balance_action', { room: GLOBAL_ROOM, action: 'REQUEST_SYNC' });
+      socketRef.current.emit('daily_task_request_sync', { date: dailySelectedDate });
     }
-
-    // 4. ENSURE ALL APPROVED ROUTINE TASKS ARE CREDITED TO DORA
-    (dailySubmissions || []).forEach(sub => {
-      if (sub && sub.status === 'APPROVED' && (sub.pointsAwarded > 0 || sub.points > 0)) {
-        const pts = parseFloat(sub.pointsAwarded || sub.points || 2.0);
-        const subDate = sub.date || todayStr;
-        if (clearedDateStr && subDate <= clearedDateStr) return;
-        const approvalEntryId = 'lb_appr_' + (sub.id || `${subDate}_${sub.slotId}`);
-        if (activeDelTxs.includes(approvalEntryId)) return;
-        if (!inMemoryLedger.some(e => e && e.id === approvalEntryId)) {
-          const slot = activeSlots.find(s => s.id === sub.slotId);
-          const taskName = sub.slotTitle || (slot ? slot.title : 'Routine Task');
-          const entry = {
-            id: approvalEntryId,
-            sl: 1,
-            target: 'user',
-            description: `[Dora] Approved Task: ${taskName}`,
-            earnedAt: `${subDate}, 12:00 pm`,
-            expireDate: '',
-            points: pts,
-            type: 'credit',
-            remarks: `Approved Task: ${taskName}`,
-            status: 'Confirmed'
-          };
-          newEntries.push(entry);
-          inMemoryLedger.push(entry);
-        }
-      }
-    });
-
-    if (newEntries.length > 0) {
-      setLoveLedger(prev => {
-        const map = new Map();
-        newEntries.forEach(e => map.set(e.id, e));
-        (prev || []).forEach(e => {
-          if (e && e.id && !map.has(e.id)) map.set(e.id, e);
-        });
-        const nextLedger = Array.from(map.values()).map((e, idx) => ({ ...e, sl: idx + 1 }));
-        try { localStorage.setItem('stealth_love_ledger', JSON.stringify(nextLedger)); } catch(e) {}
-        return nextLedger;
-      });
-
-      if (socketRef.current) {
-        newEntries.forEach(entry => {
-          socketRef.current.emit('love_balance_action', {
-            room: GLOBAL_ROOM,
-            action: 'TRANSACTION',
-            target: entry.target,
-            amount: Math.abs(entry.points),
-            type: entry.type,
-            reason: entry.description,
-            newEntry: entry,
-            senderRole: roleRef.current || role || 'admin'
-          });
-        });
-      }
-    }
-  }, [loveLedger, stealthMessages, dailySlots, deletedSlotIds, dailySubmissions, role]);
+  }, [dailySelectedDate]);
 
   useEffect(() => {
     checkDailyHabitInfractionsRef.current = checkDailyHabitInfractions;
   }, [checkDailyHabitInfractions]);
 
-  // Periodic Real-Time Habit Infractions & Negative Balance Check (Every 60s)
+  // Periodic Real-Time Sync Request from Backend (Every 20s)
   useEffect(() => {
-    checkDailyHabitInfractions(stealthMessages);
+    checkDailyHabitInfractions();
     const interval = setInterval(() => {
-      checkDailyHabitInfractions(stealthMessagesRef.current);
-    }, 60000);
+      checkDailyHabitInfractions();
+    }, 20000);
     return () => clearInterval(interval);
-  }, [checkDailyHabitInfractions, stealthMessages]);
+  }, [checkDailyHabitInfractions]);
 
   // Request authoritative initial sync from backend upon connection
   useEffect(() => {
     if (socketRef.current && isConnected) {
       const activeDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
       const activeDelTxs = JSON.parse(localStorage.getItem('stealth_deleted_tx_ids') || '[]');
-      const myCredits = (loveLedger || []).filter(e => e && e.type === 'credit');
       socketRef.current.emit('love_balance_action', {
         room: GLOBAL_ROOM,
         action: 'REQUEST_SYNC',
-        clientLoveBalance: loveBalance,
-        clientAdminLoveBalance: adminLoveBalance,
-        clientLoveLedger: loveLedger,
-        clientCredits: myCredits,
         deletedSlotIds: activeDel,
         deletedTransactionIds: activeDelTxs,
         senderRole: roleRef.current || role || 'user',
         timestamp: Date.now()
       });
+      socketRef.current.emit('daily_task_request_sync', { date: dailySelectedDate });
     }
-  }, [isConnected]);
+  }, [isConnected, dailySelectedDate, role]);
 
 
   const handleOpenClearModal = useCallback((target = null) => {
@@ -3163,18 +2874,12 @@ export default function App() {
         socketRef.current.emit('love_balance_action', {
           room: GLOBAL_ROOM,
           action: 'REQUEST_SYNC',
-          clientLoveBalance: loveBalance,
-          clientAdminLoveBalance: adminLoveBalance,
-          clientLoveLedger: loveLedger,
-          clientCredits: (loveLedger || []).filter(e => e && e.type === 'credit'),
-          clientWishRequests: wishRequests,
-          clientSubmissions: dailySubmissions,
-          clientSlots: dailySlots.filter(s => s && !curDeleted.includes(s.id)),
           deletedSlotIds: curDeleted,
           deletedTransactionIds: curDelTxs,
           senderRole: roleRef.current || 'user',
           timestamp: Date.now()
         });
+        socketRef.current.emit('daily_task_request_sync', { date: dailySelectedDate });
       }
       const currentRole = localStorage.getItem('stealth_role') || 'user';
       socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: currentRole });
@@ -3712,21 +3417,8 @@ export default function App() {
           ? data.deletedTransactionIds 
           : JSON.parse(localStorage.getItem('stealth_deleted_tx_ids') || '[]');
         const cleanLedger = data.loveLedger.filter(e => e && !activeDelTxs.includes(e.id) && !isLegacyMockEntry(e));
-        setLoveLedger(prev => {
-          const map = new Map();
-          cleanLedger.forEach(e => { if (e && e.id && !activeDelTxs.includes(e.id) && !isLegacyMockEntry(e)) map.set(e.id, e); });
-          (prev || []).forEach(e => {
-            if (e && e.id && !activeDelTxs.includes(e.id) && !isLegacyMockEntry(e) && !map.has(e.id)) {
-              map.set(e.id, e);
-            }
-          });
-          const merged = Array.from(map.values());
-          if (Array.isArray(prev) && prev.length === merged.length && prev[0]?.id === merged[0]?.id) {
-            return prev;
-          }
-          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(merged)); } catch(e) {}
-          return merged;
-        });
+        setLoveLedger(cleanLedger);
+        try { localStorage.setItem('stealth_love_ledger', JSON.stringify(cleanLedger)); } catch(e) {}
       }
       if (typeof data.loveBalance === 'number') {
         setLoveBalance(data.loveBalance);
@@ -4032,20 +3724,9 @@ export default function App() {
           const activeDelTxs = Array.isArray(data.deletedTransactionIds) 
             ? data.deletedTransactionIds 
             : JSON.parse(localStorage.getItem('stealth_deleted_tx_ids') || '[]');
-          setLoveLedger(prev => {
-            const map = new Map();
-            data.loveLedger.forEach(e => {
-              if (e && e.id && !activeDelTxs.includes(e.id) && !isLegacyMockEntry(e)) map.set(e.id, e);
-            });
-            (prev || []).forEach(e => {
-              if (e && e.id && !activeDelTxs.includes(e.id) && !isLegacyMockEntry(e) && !map.has(e.id)) {
-                map.set(e.id, e);
-              }
-            });
-            const merged = Array.from(map.values());
-            try { localStorage.setItem('stealth_love_ledger', JSON.stringify(merged)); } catch(e) {}
-            return merged;
-          });
+          const cleanLedger = data.loveLedger.filter(e => e && !activeDelTxs.includes(e.id) && !isLegacyMockEntry(e));
+          setLoveLedger(cleanLedger);
+          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(cleanLedger)); } catch(e) {}
         }
         if (Array.isArray(data.wishRequests) && data.wishRequests.length > 0) {
           setWishRequests(data.wishRequests);
