@@ -378,6 +378,8 @@ export default function App() {
   const [loveModalTab, setLoveModalTab] = useState('passbook'); // 'passbook' | 'redeem' | 'rules'
   const [loveSourceFilter, setLoveSourceFilter] = useState('All');
   const [loveStatusFilter, setLoveStatusFilter] = useState('All');
+  const [loveDateFrom, setLoveDateFrom] = useState('');
+  const [loveDateTo, setLoveDateTo] = useState('');
   const [adminLbAmount, setAdminLbAmount] = useState('');
   const [adminLbReason, setAdminLbReason] = useState('');
 
@@ -2238,13 +2240,15 @@ export default function App() {
     const clearedDateStr = lastCleared > 0 ? new Date(lastCleared + istOffset).toISOString().split('T')[0] : '';
     const activeDelTxs = JSON.parse(localStorage.getItem('stealth_deleted_tx_ids') || '[]');
 
-    const hasEntry = (id, descSnippet, target) => {
+    const hasEntry = (id, target, dateStr, keyword) => {
       if (activeDelTxs.includes(id)) return true;
       return inMemoryLedger.some(e => {
         if (!e) return false;
         if (e.id === id) return true;
         if (target && e.target !== target) return false;
-        if (descSnippet && e.description && e.description.includes(descSnippet)) return true;
+        if (dateStr && e.description && e.description.includes(dateStr)) {
+          if (!keyword || e.description.includes(keyword)) return true;
+        }
         return false;
       });
     };
@@ -2297,7 +2301,7 @@ export default function App() {
       if (isPastDay || (isToday && currentHour >= 9)) {
         // Dora morning check
         const doraMId = `habit_morning_${dayStr}_user`;
-        if (!hasEntry(doraMId, `Morning`, 'user')) {
+        if (!hasEntry(doraMId, 'user', dayStr, 'Morning')) {
           const hadDoraMorning = list.some(m => {
             if (!m || !m.timestamp) return false;
             const mIst = new Date(new Date(m.timestamp).getTime() + istOffset);
@@ -2326,7 +2330,7 @@ export default function App() {
 
         // Darsh morning check
         const darshMId = `habit_morning_${dayStr}_admin`;
-        if (!hasEntry(darshMId, `Morning`, 'admin')) {
+        if (!hasEntry(darshMId, 'admin', dayStr, 'Morning')) {
           const hadDarshMorning = list.some(m => {
             if (!m || !m.timestamp) return false;
             const mIst = new Date(new Date(m.timestamp).getTime() + istOffset);
@@ -2358,7 +2362,7 @@ export default function App() {
       if (isPastDay) {
         // Dora night check
         const doraNId = `habit_night_${dayStr}_user`;
-        if (!hasEntry(doraNId, `Good Night`, 'user')) {
+        if (!hasEntry(doraNId, 'user', dayStr, 'Good Night')) {
           const hadDoraNight = list.some(m => {
             if (!m || !m.timestamp) return false;
             const mIst = new Date(new Date(m.timestamp).getTime() + istOffset);
@@ -2389,7 +2393,7 @@ export default function App() {
 
         // Darsh night check
         const darshNId = `habit_night_${dayStr}_admin`;
-        if (!hasEntry(darshNId, `Good Night`, 'admin')) {
+        if (!hasEntry(darshNId, 'admin', dayStr, 'Good Night')) {
           const hadDarshNight = list.some(m => {
             if (!m || !m.timestamp) return false;
             const mIst = new Date(new Date(m.timestamp).getTime() + istOffset);
@@ -2425,8 +2429,7 @@ export default function App() {
         const shouldCheckSlot = isPastDay || (isToday && slotEndMinutes !== null && currentMinutes >= slotEndMinutes);
         if (shouldCheckSlot) {
           const slotTxId = `habit_routine_${slot.id}_${dayStr}_user`;
-          const slotDesc = `Routine Task: ${slot.title} (${dayStr})`;
-          if (!hasEntry(slotTxId, slotDesc, 'user')) {
+          if (!hasEntry(slotTxId, 'user', dayStr, slot.title)) {
             const sub = (dailySubmissions || []).find(s => s && s.slotId === slot.id && s.date === dayStr);
             const isSubmitted = sub && (sub.status === 'APPROVED' || sub.status === 'PENDING') && Boolean(sub.image || sub.note);
             if (!isSubmitted) {
@@ -2449,6 +2452,35 @@ export default function App() {
         }
       });
     }
+
+    // 4. ENSURE ALL APPROVED ROUTINE TASKS ARE CREDITED TO DORA
+    (dailySubmissions || []).forEach(sub => {
+      if (sub && sub.status === 'APPROVED' && (sub.pointsAwarded > 0 || sub.points > 0)) {
+        const pts = parseFloat(sub.pointsAwarded || sub.points || 2.0);
+        const subDate = sub.date || todayStr;
+        if (clearedDateStr && subDate <= clearedDateStr) return;
+        const approvalEntryId = 'lb_appr_' + (sub.id || `${subDate}_${sub.slotId}`);
+        if (activeDelTxs.includes(approvalEntryId)) return;
+        if (!inMemoryLedger.some(e => e && e.id === approvalEntryId)) {
+          const slot = activeSlots.find(s => s.id === sub.slotId);
+          const taskName = sub.slotTitle || (slot ? slot.title : 'Routine Task');
+          const entry = {
+            id: approvalEntryId,
+            sl: 1,
+            target: 'user',
+            description: `[Dora] Approved Task: ${taskName}`,
+            earnedAt: `${subDate}, 12:00 pm`,
+            expireDate: '',
+            points: pts,
+            type: 'credit',
+            remarks: `Approved Task: ${taskName}`,
+            status: 'Confirmed'
+          };
+          newEntries.push(entry);
+          inMemoryLedger.push(entry);
+        }
+      }
+    });
 
     if (newEntries.length > 0) {
       setLoveLedger(prev => {
@@ -9815,6 +9847,97 @@ export default function App() {
                       </div>
                     </div>
 
+                    {/* CORPORATE ERP FILTER TOOLBAR (INSPIRED BY NEXUS ERP KARMA POINT REFERENCE) */}
+                    <div className="bg-[#181818] border border-[#282828] p-3 sm:p-4 rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between pb-1 border-b border-[#262626]">
+                        <span className="text-xs font-bold text-gray-300 flex items-center gap-1.5 uppercase tracking-wider font-mono">
+                          <Filter size={13} className="text-blue-400" />
+                          <span>Passbook Filters & Search</span>
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {(loveSourceFilter !== 'All' || loveStatusFilter !== 'All' || loveDateFrom || loveDateTo) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLoveSourceFilter('All');
+                                setLoveStatusFilter('All');
+                                setLoveDateFrom('');
+                                setLoveDateTo('');
+                              }}
+                              className="text-[11px] text-rose-400 hover:text-rose-300 font-semibold cursor-pointer underline transition-all"
+                            >
+                              Reset Filters
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleManualSectionRefresh('passbook_refresh')}
+                            className="w-7 h-7 rounded-full bg-[#202020] hover:bg-blue-600/30 border border-[#333] hover:border-blue-500 text-gray-400 hover:text-blue-400 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                            title="Refresh Passbook Real-Time Data"
+                          >
+                            <RefreshCw size={12} className={refreshingSection === 'passbook_refresh' ? 'animate-spin text-blue-400' : ''} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
+                        {/* 1. SOURCE CATEGORY FILTER */}
+                        <div>
+                          <label className="text-[10px] uppercase font-mono text-gray-400 block mb-1">Source Category</label>
+                          <select
+                            value={loveSourceFilter}
+                            onChange={(e) => setLoveSourceFilter(e.target.value)}
+                            className="w-full bg-[#121212] border border-[#333] hover:border-gray-500 rounded-xl px-2.5 py-1.5 text-gray-200 text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
+                          >
+                            <option value="All">All Sources</option>
+                            <option value="routine">Hourly Routine Tasks</option>
+                            <option value="morning">Morning Sweet Text / Greeting</option>
+                            <option value="night">Good Night Wish</option>
+                            <option value="sweet">Sweet Reactions / Gestures</option>
+                            <option value="adjustment">Admin Manual Adjustment</option>
+                            <option value="redeem">Redeemed Wishes</option>
+                          </select>
+                        </div>
+
+                        {/* 2. DATE FROM */}
+                        <div>
+                          <label className="text-[10px] uppercase font-mono text-gray-400 block mb-1">Date From</label>
+                          <input
+                            type="date"
+                            value={loveDateFrom}
+                            onChange={(e) => setLoveDateFrom(e.target.value)}
+                            className="w-full bg-[#121212] border border-[#333] hover:border-gray-500 rounded-xl px-2.5 py-1.5 text-gray-200 text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
+                          />
+                        </div>
+
+                        {/* 3. DATE TO */}
+                        <div>
+                          <label className="text-[10px] uppercase font-mono text-gray-400 block mb-1">Date To</label>
+                          <input
+                            type="date"
+                            value={loveDateTo}
+                            onChange={(e) => setLoveDateTo(e.target.value)}
+                            className="w-full bg-[#121212] border border-[#333] hover:border-gray-500 rounded-xl px-2.5 py-1.5 text-gray-200 text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
+                          />
+                        </div>
+
+                        {/* 4. STATUS FILTER */}
+                        <div>
+                          <label className="text-[10px] uppercase font-mono text-gray-400 block mb-1">Status</label>
+                          <select
+                            value={loveStatusFilter}
+                            onChange={(e) => setLoveStatusFilter(e.target.value)}
+                            className="w-full bg-[#121212] border border-[#333] hover:border-gray-500 rounded-xl px-2.5 py-1.5 text-gray-200 text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
+                          >
+                            <option value="All">All Statuses</option>
+                            <option value="Confirmed">Confirmed (Credit)</option>
+                            <option value="Deducted">Deducted (Debit)</option>
+                            <option value="Redeemed">Redeemed (Wish)</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* PASSBOOK DATA TABLE (STRICTLY ISOLATED: DORA NEVER SEES DARSH'S RECORDS) */}
                     <div className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden">
                       <div className="overflow-x-auto">
@@ -9834,8 +9957,33 @@ export default function App() {
                           <tbody className="divide-y divide-[#242424] text-gray-300">
                             {visibleLoveLedger
                               .filter(e => {
-                                if (loveSourceFilter !== 'All' && e.type !== loveSourceFilter) return false;
+                                if (!e) return false;
+                                if (loveSourceFilter !== 'All') {
+                                  const desc = (e.description || '').toLowerCase();
+                                  if (loveSourceFilter === 'routine' && !desc.includes('routine') && !desc.includes('approved task')) return false;
+                                  if (loveSourceFilter === 'morning' && !desc.includes('morning')) return false;
+                                  if (loveSourceFilter === 'night' && !desc.includes('good night') && !desc.includes('night')) return false;
+                                  if (loveSourceFilter === 'sweet' && !desc.includes('gesture') && !desc.includes('compliment') && !desc.includes('heart') && !desc.includes('reply') && !desc.includes('reaction')) return false;
+                                  if (loveSourceFilter === 'adjustment' && !desc.includes('adjustment')) return false;
+                                  if (loveSourceFilter === 'redeem' && e.type !== 'redeem' && e.status !== 'Redeemed') return false;
+                                }
                                 if (loveStatusFilter !== 'All' && e.status !== loveStatusFilter) return false;
+                                if (loveDateFrom || loveDateTo) {
+                                  const rawEarned = e.earnedAt || '';
+                                  let entryDateStr = '';
+                                  if (rawEarned.includes('/')) {
+                                    const parts = rawEarned.split(',')[0].split('/').map(p => p.trim());
+                                    if (parts.length === 3) {
+                                      entryDateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                                    }
+                                  } else if (rawEarned.includes('-')) {
+                                    entryDateStr = rawEarned.split('T')[0].split(',')[0].trim();
+                                  }
+                                  if (entryDateStr) {
+                                    if (loveDateFrom && entryDateStr < loveDateFrom) return false;
+                                    if (loveDateTo && entryDateStr > loveDateTo) return false;
+                                  }
+                                }
                                 return true;
                               })
                               .map((row, idx) => (
