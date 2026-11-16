@@ -648,6 +648,73 @@ export default function App() {
     return matches[matches.length - 1];
   }, [dailySubmissions]);
 
+  const checkSlotOverdue = useCallback((slot, date) => {
+    if (!slot || !slot.timeRange) return false;
+    try {
+      const parts = slot.timeRange.split('-').map(p => p.trim());
+      if (parts.length < 2) return false;
+      let [endH, endM] = parts[1].split(':').map(n => parseInt(n, 10));
+      if (slot.tag === 'Lunch' && endH < 12) endH += 12;
+      if (slot.tag === 'Water' && endH < 12) endH += 12;
+      if (slot.tag === 'Tea' && endH < 12) endH += 12;
+      if (slot.tag === 'Dinner' && endH < 12) endH += 12;
+      if (slot.tag === 'Steps' && endH < 12) endH += 12;
+      if (slot.tag === 'Skincare' && endH < 12) endH += 12;
+
+      const targetDate = date || dailySelectedDate;
+      const todayStr = getLocalDateString();
+      if (targetDate < todayStr) return true;
+      if (targetDate > todayStr) return false;
+
+      const now = new Date();
+      const curMinutes = now.getHours() * 60 + now.getMinutes();
+      return curMinutes > (endH * 60 + (endM || 0));
+    } catch {
+      return false;
+    }
+  }, [dailySelectedDate]);
+
+  const handleExportDayPdf = useCallback((dateStr) => {
+    try {
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text(`Daily Routine Tasks Report - ${dateStr}`, 14, 20);
+      doc.setFontSize(10);
+      doc.text(`Generated on: ${new Date().toLocaleString()} | Stealth Chat Engine`, 14, 28);
+      doc.setLineWidth(0.5);
+      doc.line(14, 32, 196, 32);
+
+      const daySubs = dailySubmissions.filter(s => s && (!s.date || s.date === dateStr));
+      let y = 42;
+      doc.setFontSize(11);
+      doc.text(`Total Routine Slots: ${dailySlots.filter(s => s.isActive).length} | Submissions Found: ${daySubs.length}`, 14, y);
+      y += 10;
+
+      dailySlots.filter(s => s.isActive).forEach((slot, idx) => {
+        const sub = daySubs.find(s => s.slotId === slot.id);
+        const status = sub ? sub.status : 'NOT SUBMITTED';
+        const points = sub ? (sub.pointsAwarded || 0) : 0;
+        const note = sub?.note ? `Note: "${sub.note}"` : 'No note provided';
+        
+        doc.setFontSize(10);
+        doc.text(`${idx + 1}. [${slot.timeRange}] ${slot.title}`, 14, y);
+        y += 6;
+        doc.setFontSize(9);
+        doc.text(`   Status: ${status} | Points Awarded: ₹ ${points} | ${note}`, 14, y);
+        y += 8;
+        if (y > 275) {
+          doc.addPage();
+          y = 20;
+        }
+      });
+
+      doc.save(`daily_routine_report_${dateStr}.pdf`);
+    } catch(e) {
+      console.error("PDF export error:", e);
+      alert("Could not generate PDF: " + e.message);
+    }
+  }, [dailySubmissions, dailySlots]);
+
   // Mobile Notification Permission State
   // Touch Swipe Gesture State for Mobile Sidebar (Left-to-Right Opens)
   const sidebarSwipeStartXRef = useRef(0);
@@ -1230,15 +1297,28 @@ export default function App() {
     if (!cleanEmail) return;
     const isAdmin = cleanEmail === 'arthurs10pc@gmail.com';
     const userRole = isAdmin ? 'parent' : 'user';
-    const finalName = isAdmin ? 'Darsh' : 'Dora';
+    const fullName = displayName || (isAdmin ? 'Darsh' : 'User');
+    const firstName = fullName.trim().split(' ')[0] || fullName;
+    const finalName = isAdmin ? 'Darsh' : firstName;
+
+    // Check if this account is already authorized as Dora
+    let isDora = cleanEmail === 'dora@gmail.com';
+    try {
+      const savedDir = usersDirectory?.users || [];
+      const found = savedDir.find(u => u && u.email && u.email.toLowerCase() === cleanEmail);
+      if (found) isDora = Boolean(found.isDora);
+    } catch(e) {}
 
     const profileObj = {
       email: cleanEmail,
       name: finalName,
-      originalName: displayName || finalName,
+      firstName,
+      fullName,
+      originalName: displayName || fullName,
       picture: pictureUrl || (isAdmin ? 'https://lh3.googleusercontent.com/a/default-user' : ''),
       role: userRole,
-      isAdmin
+      isAdmin,
+      isDora
     };
 
     setGoogleUser(profileObj);
@@ -1248,22 +1328,36 @@ export default function App() {
       localStorage.setItem('stealth_user_profile', JSON.stringify(profileObj));
     } catch (e) {}
 
-    // Notify backend
+    // Notify backend and get authoritative user data
     try {
-      await fetch(`${BACKEND_URL}/api/auth/google-login`, {
+      const res = await fetch(`${BACKEND_URL}/api/auth/google-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(profileObj)
       });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.user) {
+          const authObj = {
+            ...profileObj,
+            isDora: Boolean(data.user.isDora)
+          };
+          setGoogleUser(authObj);
+          try {
+            localStorage.setItem('stealth_user_profile', JSON.stringify(authObj));
+          } catch(e) {}
+        }
+      }
     } catch (e) {
       console.warn("Backend auth update error:", e);
     }
 
     if (socketRef.current) {
       socketRef.current.emit('auth_identify', profileObj);
+      socketRef.current.emit('request_users_directory');
       socketRef.current.emit('love_balance_action', { action: 'SYNC_STATE' });
     }
-  }, []);
+  }, [usersDirectory]);
 
   const handleGoogleLogin = useCallback(() => {
     if (!window.google?.accounts?.oauth2) {
@@ -1311,6 +1405,29 @@ export default function App() {
       socketRef.current.emit('love_balance_action', { action: 'SYNC_STATE' });
     }
   }, []);
+
+  const handleSetDora = useCallback(async (targetEmail, isDora) => {
+    if (!targetEmail) return;
+    try {
+      if (socketRef.current) {
+        socketRef.current.emit('admin_set_dora', { email: targetEmail, isDora });
+      }
+      await fetch(`${BACKEND_URL}/api/admin/set-dora`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: targetEmail, isDora, adminEmail: googleUser?.email || 'arthurs10pc@gmail.com' })
+      });
+      setUsersDirectory(prev => {
+        if (!prev || !Array.isArray(prev.users)) return prev;
+        return {
+          ...prev,
+          users: prev.users.map(u => (u.email && u.email.toLowerCase() === targetEmail.toLowerCase()) ? { ...u, isDora } : u)
+        };
+      });
+    } catch (e) {
+      console.error("handleSetDora error:", e);
+    }
+  }, [googleUser]);
 
   // Toggle Microphone Mute
   const handleToggleCallMute = () => {
@@ -1580,6 +1697,20 @@ export default function App() {
     }
 
     if (cleanCmd === '/dora') {
+      const isAllowed = role === 'parent' || googleUser?.isAdmin || googleUser?.isDora || googleUser?.email === 'dora@gmail.com' || (usersDirectory?.users || []).some(u => u && u.email && u.email.toLowerCase() === (googleUser?.email || '').toLowerCase() && u.isDora);
+      if (!isAllowed) {
+        setBotTyping(false);
+        const warningMsg = {
+          id: Date.now().toString(),
+          sender: 'assistant',
+          text: `🔒 **Access Locked**: Your Google account (${googleUser?.email || 'Logged User'}) is currently in Standard Mode. Only users designated as **Dora** by Admin (Darsh) can unlock Secret Chat & WhatsApp modes. Ask Darsh to click "Make a Dora" in the Admin Dashboard!`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setGptMessages(prev => [...prev, warningMsg]);
+        setInput('');
+        setReplyTarget(null);
+        return;
+      }
       setRole('user');
       localStorage.setItem('stealth_role', 'user');
       setViewMode('stealth');
@@ -3188,6 +3319,24 @@ export default function App() {
       if (data && Array.isArray(data.users)) {
         setUsersDirectory(data);
       }
+    });
+
+    socketRef.current.on('dora_status_update', ({ email, isDora }) => {
+      setUsersDirectory(prev => {
+        if (!prev || !Array.isArray(prev.users)) return prev;
+        return {
+          ...prev,
+          users: prev.users.map(u => (u.email && u.email.toLowerCase() === (email || '').toLowerCase()) ? { ...u, isDora } : u)
+        };
+      });
+      setGoogleUser(prev => {
+        if (prev && prev.email && prev.email.toLowerCase() === (email || '').toLowerCase()) {
+          const updated = { ...prev, isDora };
+          try { localStorage.setItem('stealth_user_profile', JSON.stringify(updated)); } catch(e) {}
+          return updated;
+        }
+        return prev;
+      });
     });
 
     socketRef.current.on('disconnect', () => {
@@ -5307,11 +5456,20 @@ export default function App() {
                   <p className={`font-medium truncate flex items-center gap-1.5 ${
                     role === 'parent' ? 'text-amber-400 group-hover:text-amber-300 font-bold' : 'text-white'
                   }`}>
-                    <span>{role === 'parent' ? 'Darsh' : 'Dora'}</span>
+                    <span>
+                      {role === 'parent' 
+                        ? 'Darsh' 
+                        : (googleUser?.firstName || (googleUser?.name ? googleUser.name.split(' ')[0] : 'User'))}
+                    </span>
                     {/* ONLY ARTHURS10PC@GMAIL.COM (DARSH) SEES DASHBOARD BUTTON */}
                     {role === 'parent' && (
                       <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1 py-0.2 rounded font-mono font-bold animate-pulse">
                         DASHBOARD ➔
+                      </span>
+                    )}
+                    {role !== 'parent' && (googleUser?.isDora || googleUser?.email === 'dora@gmail.com') && (
+                      <span className="text-[9px] bg-pink-500/20 text-pink-300 border border-pink-500/40 px-1 py-0.2 rounded font-mono font-bold">
+                        DORA
                       </span>
                     )}
                   </p>
@@ -7622,19 +7780,45 @@ export default function App() {
                                 </div>
                               </div>
 
-                              {/* Status & Session Badge */}
-                              <div className="text-right shrink-0">
-                                {user.isOnline ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300 bg-emerald-950/80 border border-emerald-500/50 px-2 py-0.5 rounded-full font-bold shadow-sm">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                                    <span>Online</span>
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-[10px] text-gray-400 bg-[#222] border border-[#333] px-2 py-0.5 rounded-full font-mono">
-                                    Offline
-                                  </span>
-                                )}
-                                <div className="text-[9px] text-gray-500 mt-0.5 font-mono">
+                              {/* Status, Dora Toggle & Session Badge */}
+                              <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
+                                <div className="flex items-center gap-1.5">
+                                  {user.isOnline ? (
+                                    <span className="inline-flex items-center gap-1 text-[9px] text-emerald-300 bg-emerald-950/80 border border-emerald-500/50 px-2 py-0.5 rounded-full font-bold shadow-sm">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                                      <span>Online</span>
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[9px] text-gray-400 bg-[#222] border border-[#333] px-1.5 py-0.2 rounded-full font-mono">
+                                      Offline
+                                    </span>
+                                  )}
+
+                                  {/* MAKE A DORA SELECTION / TOGGLE ACTION */}
+                                  {!user.isAdmin && (
+                                    user.isDora ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSetDora(user.email, false)}
+                                        className="text-[9px] bg-pink-500/20 hover:bg-rose-950 border border-pink-500/50 hover:border-rose-500 text-pink-300 hover:text-rose-300 px-2 py-0.5 rounded-full font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm active:scale-95"
+                                        title="Click to Revoke Dora Role"
+                                      >
+                                        <span>💖 Active Dora</span>
+                                        <span className="text-xs text-rose-400 font-bold">×</span>
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSetDora(user.email, true)}
+                                        className="text-[9px] bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white px-2.5 py-0.5 rounded-full font-bold shadow-md transition-all cursor-pointer flex items-center gap-1 active:scale-95"
+                                        title="Grant Dora Role (unlocks /dora secret chat & WP view)"
+                                      >
+                                        <span>✨ Make a Dora</span>
+                                      </button>
+                                    )
+                                  )}
+                                </div>
+                                <div className="text-[9px] text-gray-500 font-mono">
                                   {user.isOnline ? 'Active Now' : (user.lastLogin ? new Date(user.lastLogin).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Saved')}
                                 </div>
                               </div>
@@ -7712,7 +7896,17 @@ export default function App() {
                           value={dailySelectedDate}
                           onChange={(e) => setDailySelectedDate(e.target.value)}
                           className="bg-[#181818] border border-[#333] text-white text-xs px-2 py-1 rounded-xl outline-none font-mono"
+                          title="Select date to review or download historical data"
                         />
+                        <button
+                          type="button"
+                          onClick={() => handleExportDayPdf(dailySelectedDate)}
+                          className="bg-[#181818] hover:bg-[#252525] border border-[#333] hover:border-emerald-500/50 text-gray-200 hover:text-white px-2 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-sm"
+                          title={`Download Full Day Report PDF for ${dailySelectedDate}`}
+                        >
+                          <FileDown size={13} className="text-emerald-400" />
+                          <span className="hidden sm:inline">Export PDF</span>
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleManualSectionRefresh('part5_tasks')}
@@ -8480,6 +8674,7 @@ export default function App() {
                       const isApproved = sub && sub.status === 'APPROVED';
                       const isPending = sub && sub.status === 'PENDING';
                       const isRejected = sub && sub.status === 'REJECTED';
+                      const isOverdue = checkSlotOverdue(slot, dailySelectedDate);
 
                       const timeParts = slot.timeRange.split('-').map(t => t.trim());
                       const topTime = timeParts[0] || slot.timeRange;
@@ -8491,17 +8686,29 @@ export default function App() {
                           onClick={() => setDailySelectedSlotId(slot.id)}
                           className={`min-w-[90px] sm:min-w-[105px] max-w-[115px] p-2 sm:p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col items-center justify-between text-center select-none shrink-0 ${
                             isSelected 
-                              ? 'bg-blue-950/80 border-blue-500 ring-2 ring-blue-400 shadow-lg scale-105' 
-                              : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-800 shadow-sm'
+                              ? (isOverdue && !isApproved 
+                                  ? 'bg-rose-950/90 border-rose-500 ring-2 ring-rose-400 shadow-lg scale-105 text-white' 
+                                  : 'bg-blue-950/80 border-blue-500 ring-2 ring-blue-400 shadow-lg scale-105 text-white')
+                              : (isOverdue && !isApproved
+                                  ? 'bg-rose-950/30 hover:bg-rose-950/50 border-rose-500/80 text-rose-200 shadow-sm ring-1 ring-rose-500/30'
+                                  : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-800 shadow-sm')
                           }`}
                         >
                           {/* TIME HEADER */}
                           <div className="space-y-0.5">
-                            <div className={`text-xs sm:text-sm font-black ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                            <div className={`text-xs sm:text-sm font-black ${
+                              isSelected 
+                                ? 'text-white' 
+                                : (isOverdue && !isApproved ? 'text-rose-400' : 'text-gray-900')
+                            }`}>
                               {topTime}
                             </div>
                             {botTime && (
-                              <div className={`text-[10px] font-medium ${isSelected ? 'text-blue-300' : 'text-gray-500'}`}>
+                              <div className={`text-[10px] font-medium ${
+                                isSelected 
+                                  ? (isOverdue && !isApproved ? 'text-rose-300' : 'text-blue-300')
+                                  : (isOverdue && !isApproved ? 'text-rose-300/80' : 'text-gray-500')
+                              }`}>
                                 {botTime}
                               </div>
                             )}
@@ -8521,7 +8728,12 @@ export default function App() {
                               </div>
                             ) : isRejected ? (
                               <div className="bg-rose-600 text-white text-[9px] font-bold py-0.5 px-1.5 rounded-full flex items-center justify-center shadow-sm">
-                                <span>Retake</span>
+                                <span>Retake (+)</span>
+                              </div>
+                            ) : isOverdue ? (
+                              <div className="bg-rose-600/30 border border-rose-500/50 text-rose-300 text-[9px] font-bold py-0.5 px-1.5 rounded-full flex items-center justify-center gap-0.5 shadow-sm">
+                                <span>⏰</span>
+                                <span>Late (50%)</span>
                               </div>
                             ) : slot.tag === 'Lunch' ? (
                               <div className="bg-amber-600 text-white text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
@@ -8540,23 +8752,51 @@ export default function App() {
                             )}
                           </div>
 
-                          {/* EYE ICON VIEW BUTTON (EXACTLY AS IN SCREENSHOT) */}
-                          {sub && sub.image ? (
+                          {/* BUTTON: PLUS (+) IF NO PROOF OR REJECTED, EYE IF PENDING, CHECK IF APPROVED */}
+                          {(!sub || !sub.image || isRejected) ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDailySelectedSlotId(slot.id);
+                                if (dailyFileInputRef.current) {
+                                  dailyFileInputRef.current.value = "";
+                                  dailyFileInputRef.current.click();
+                                }
+                              }}
+                              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-md active:scale-90 mt-0.5 font-bold ${
+                                isRejected 
+                                  ? 'bg-rose-600 hover:bg-rose-500 text-white ring-2 ring-rose-400 animate-bounce' 
+                                  : 'bg-blue-600 hover:bg-blue-500 text-white'
+                              }`}
+                              title={isRejected ? "Rejected: Tap + to re-upload fresh photo" : "Tap + to upload/take photo proof"}
+                            >
+                              <Plus size={14} />
+                            </button>
+                          ) : isPending ? (
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setDailyPreviewModalImg(sub.image);
                               }}
-                              className="w-6 h-6 rounded-full border border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-sm active:scale-95 mt-0.5"
-                              title="View Proof Photo"
+                              className="w-7 h-7 rounded-full border border-amber-500 bg-amber-500/10 text-amber-400 hover:bg-amber-500 hover:text-black flex items-center justify-center transition-all cursor-pointer shadow-sm active:scale-90 mt-0.5"
+                              title="Under Review by Darsh - View Submitted Photo"
                             >
                               <Eye size={12} />
                             </button>
                           ) : (
-                            <div className="w-6 h-6 rounded-full border border-gray-300 text-gray-300 flex items-center justify-center mt-0.5">
-                              <Eye size={12} />
-                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDailyPreviewModalImg(sub.image);
+                              }}
+                              className="w-7 h-7 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-all cursor-pointer shadow-md active:scale-90 mt-0.5"
+                              title="Approved by Darsh - View Proof"
+                            >
+                              <Check size={14} />
+                            </button>
                           )}
                         </div>
                       );
@@ -8573,6 +8813,8 @@ export default function App() {
                   const isPending = activeSub && activeSub.status === 'PENDING';
                   const isRejected = activeSub && activeSub.status === 'REJECTED';
 
+                  const activeIsOverdue = checkSlotOverdue(activeSlot, dailySelectedDate);
+
                   return (
                     <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-2xl space-y-4">
                       {/* SLOT HEADER */}
@@ -8585,16 +8827,31 @@ export default function App() {
                             <span className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full font-semibold">
                               {activeSlot.tag}
                             </span>
+                            {activeIsOverdue && !isApproved && (
+                              <span className="text-xs bg-rose-500/20 text-rose-300 border border-rose-500/40 px-2 py-0.5 rounded-full font-bold animate-pulse">
+                                ⏰ Time Expired (50% pts)
+                              </span>
+                            )}
                           </div>
                           <h3 className="text-sm sm:text-base font-bold text-white mt-1">
                             {activeSlot.title}
                           </h3>
                         </div>
 
-                        <div className="bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1 rounded-xl text-right shrink-0">
-                          <div className="text-[9px] text-gray-400">Reward</div>
-                          <div className="text-xs font-mono font-bold text-emerald-400">
-                            +₹ {Number(activeSlot.rewardPoints || 0).toFixed(2)}
+                        <div className={`px-2.5 py-1 rounded-xl text-right shrink-0 border ${
+                          activeIsOverdue && !isApproved 
+                            ? 'bg-rose-950/40 border-rose-500/40 text-rose-300' 
+                            : 'bg-emerald-950/40 border-emerald-500/30'
+                        }`}>
+                          <div className="text-[9px] text-gray-400">
+                            {activeIsOverdue && !isApproved ? 'Reward (Late -50%)' : 'Reward'}
+                          </div>
+                          <div className={`text-xs font-mono font-bold ${
+                            activeIsOverdue && !isApproved ? 'text-rose-400' : 'text-emerald-400'
+                          }`}>
+                            +₹ {(activeIsOverdue && !isApproved 
+                                  ? (Number(activeSlot.rewardPoints || 0) / 2) 
+                                  : Number(activeSlot.rewardPoints || 0)).toFixed(2)}
                           </div>
                         </div>
                       </div>
