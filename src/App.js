@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
+const BACKEND_URL = SOCKET_URL;
 const SECRET_KEY = "StealthMasterKey99";
 const GLOBAL_ROOM = "stealth_master_room";
 
