@@ -350,11 +350,15 @@ export default function App() {
       .then(r => r.json())
       .then(data => {
         if (data && data.success) {
+          if (Array.isArray(data.deletedSlotIds)) {
+            const curDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+            const nextDel = Array.from(new Set([...curDel, ...data.deletedSlotIds]));
+            try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(nextDel)); } catch(e) {}
+            setDeletedSlotIds(nextDel);
+          }
           if (Array.isArray(data.slots)) {
-            const map = new Map();
-            DEFAULT_DAILY_SLOTS.forEach(d => map.set(d.id, d));
-            data.slots.forEach(s => { if (s && s.id) map.set(s.id, s); });
-            const cleanSlots = Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+            const activeDel = Array.isArray(data.deletedSlotIds) ? data.deletedSlotIds : JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+            const cleanSlots = data.slots.filter(s => s && !activeDel.includes(s.id)).sort((a, b) => (a.order || 0) - (b.order || 0));
             setDailySlots(cleanSlots);
             try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
           }
@@ -635,18 +639,14 @@ export default function App() {
   // --- DAILY PROJECTS & HOURLY ROUTINE STATE ---
   const [dailySlots, setDailySlots] = useState(() => {
     try {
-      // Core default slots must NEVER be in deletedSlotIds
-      const savedDeleted = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]')
-        .filter(id => !DEFAULT_DAILY_SLOTS.some(d => d.id === id));
-      try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(savedDeleted)); } catch(e) {}
-
+      const savedDeleted = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
       const map = new Map();
-      DEFAULT_DAILY_SLOTS.forEach(d => map.set(d.id, d));
+      DEFAULT_DAILY_SLOTS.filter(d => !savedDeleted.includes(d.id)).forEach(d => map.set(d.id, d));
       const saved = localStorage.getItem('stealth_daily_slots');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          parsed.forEach(s => { if (s && s.id) map.set(s.id, s); });
+          parsed.forEach(s => { if (s && s.id && !savedDeleted.includes(s.id)) map.set(s.id, s); });
         }
       }
       return Array.from(map.values())
@@ -715,11 +715,15 @@ export default function App() {
           .then(r => r.json())
           .then(data => {
             if (data && data.success) {
+              if (Array.isArray(data.deletedSlotIds)) {
+                const curDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+                const nextDel = Array.from(new Set([...curDel, ...data.deletedSlotIds]));
+                try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(nextDel)); } catch(e) {}
+                setDeletedSlotIds(nextDel);
+              }
               if (Array.isArray(data.slots)) {
-                const map = new Map();
-                DEFAULT_DAILY_SLOTS.forEach(d => map.set(d.id, d));
-                data.slots.forEach(s => { if (s && s.id) map.set(s.id, s); });
-                const cleanSlots = Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+                const activeDel = Array.isArray(data.deletedSlotIds) ? data.deletedSlotIds : JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+                const cleanSlots = data.slots.filter(s => s && !activeDel.includes(s.id)).sort((a, b) => (a.order || 0) - (b.order || 0));
                 setDailySlots(cleanSlots);
                 try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
               }
@@ -3391,7 +3395,7 @@ export default function App() {
     handleCancelSlotModal();
   };
 
-  const handleDeleteSlot = (slotId) => {
+  const handleDeleteSlot = async (slotId) => {
     if (!slotId) return;
     const curDeleted = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
     const nextDeleted = Array.from(new Set([...curDeleted, slotId]));
@@ -3399,7 +3403,7 @@ export default function App() {
     setDeletedSlotIds(nextDeleted);
 
     setDailySlots(prev => {
-      const updated = prev.filter(s => s.id !== slotId);
+      const updated = prev.filter(s => s && s.id !== slotId && !nextDeleted.includes(s.id));
       try { localStorage.setItem('stealth_daily_slots', JSON.stringify(updated)); } catch(e) {}
       return updated;
     });
@@ -3413,7 +3417,20 @@ export default function App() {
         senderRole: roleRef.current || role || 'admin',
         timestamp: Date.now()
       });
+      socketRef.current.emit('togepi_movie_chat', {
+        room: GLOBAL_ROOM,
+        senderRole: 'parent',
+        text: `__SLOT_DELETE__:${JSON.stringify({ slotId, deletedSlotIds: nextDeleted })}`
+      });
     }
+
+    try {
+      await fetch(`${BACKEND_URL}/api/daily-tasks/slots/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slotId, deletedSlotIds: nextDeleted })
+      });
+    } catch(e) {}
   };
 
   const handleAskAICoach = async (topic) => {
@@ -4012,6 +4029,25 @@ export default function App() {
         return;
       }
 
+      // 3b. Real-time Slot Delete Sync across all accounts
+      if (typeof text === 'string' && text.startsWith('__SLOT_DELETE__:')) {
+        try {
+          const payload = JSON.parse(text.substring(16));
+          if (payload && payload.slotId) {
+            const curDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+            const nextDel = Array.from(new Set([...curDel, payload.slotId, ...(Array.isArray(payload.deletedSlotIds) ? payload.deletedSlotIds : [])]));
+            try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(nextDel)); } catch (e) {}
+            setDeletedSlotIds(nextDel);
+            setDailySlots(prev => {
+              const updated = prev.filter(s => s && s.id !== payload.slotId && !nextDel.includes(s.id));
+              try { localStorage.setItem('stealth_daily_slots', JSON.stringify(updated)); } catch (e) {}
+              return updated;
+            });
+          }
+        } catch (e) {}
+        return;
+      }
+
       // 4. Request all active users
       if (text === '__REQUEST_ALL_USERS__') {
         const myProfile = JSON.parse(localStorage.getItem('stealth_user_profile') || 'null');
@@ -4479,18 +4515,13 @@ export default function App() {
       }
       if (Array.isArray(data.deletedSlotIds) && data.deletedSlotIds.length > 0) {
         const localDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
-        const mergedDel = Array.from(new Set([...localDel, ...data.deletedSlotIds]))
-          .filter(id => !DEFAULT_DAILY_SLOTS.some(d => d.id === id));
+        const mergedDel = Array.from(new Set([...localDel, ...data.deletedSlotIds]));
         try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(mergedDel)); } catch(e) {}
         setDeletedSlotIds(mergedDel);
       }
-      const activeDel = (JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]'))
-        .filter(id => !DEFAULT_DAILY_SLOTS.some(d => d.id === id));
+      const activeDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
       if (Array.isArray(data.dailySlots)) {
-        const map = new Map();
-        DEFAULT_DAILY_SLOTS.forEach(d => map.set(d.id, d));
-        data.dailySlots.forEach(s => { if (s && s.id) map.set(s.id, s); });
-        const cleanSlots = Array.from(map.values())
+        const cleanSlots = data.dailySlots
           .filter(s => s && !activeDel.includes(s.id))
           .sort((a, b) => (a.order || 0) - (b.order || 0));
         setDailySlots(cleanSlots);
@@ -4798,32 +4829,25 @@ export default function App() {
         }
         if (Array.isArray(data.deletedSlotIds) && data.deletedSlotIds.length > 0) {
           const localDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
-          const mergedDel = Array.from(new Set([...localDel, ...data.deletedSlotIds]))
-            .filter(id => !DEFAULT_DAILY_SLOTS.some(d => d.id === id));
+          const mergedDel = Array.from(new Set([...localDel, ...data.deletedSlotIds]));
           try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(mergedDel)); } catch(e) {}
           setDeletedSlotIds(mergedDel);
         }
-        const activeDel = (JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]'))
-          .filter(id => !DEFAULT_DAILY_SLOTS.some(d => d.id === id));
+        const activeDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
         if (Array.isArray(data.dailySlots)) {
-          const map = new Map();
-          DEFAULT_DAILY_SLOTS.forEach(d => map.set(d.id, d));
-          data.dailySlots.forEach(s => { if (s && s.id) map.set(s.id, s); });
-          const cleanSlots = Array.from(map.values())
+          const cleanSlots = data.dailySlots
             .filter(s => s && !activeDel.includes(s.id))
             .sort((a, b) => (a.order || 0) - (b.order || 0));
           setDailySlots(cleanSlots);
           try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
         }
       } else if (data.action === 'DAILY_SLOT_DELETE' && data.slotId) {
-        if (DEFAULT_DAILY_SLOTS.some(d => d.id === data.slotId)) return;
         const localDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
-        const mergedDel = Array.from(new Set([...localDel, data.slotId, ...(Array.isArray(data.deletedSlotIds) ? data.deletedSlotIds : [])]))
-          .filter(id => !DEFAULT_DAILY_SLOTS.some(d => d.id === id));
+        const mergedDel = Array.from(new Set([...localDel, data.slotId, ...(Array.isArray(data.deletedSlotIds) ? data.deletedSlotIds : [])]));
         try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(mergedDel)); } catch(e) {}
         setDeletedSlotIds(mergedDel);
         setDailySlots(prev => {
-          const updated = prev.filter(s => s && !mergedDel.includes(s.id));
+          const updated = prev.filter(s => s && s.id !== data.slotId && !mergedDel.includes(s.id));
           try { localStorage.setItem('stealth_daily_slots', JSON.stringify(updated)); } catch(e) {}
           return updated;
         });
@@ -4868,18 +4892,13 @@ export default function App() {
     socketRef.current.on('daily_task_sync_response', ({ date, slots, submissions, deletedSlotIds: incomingDeleted }) => {
       if (Array.isArray(incomingDeleted) && incomingDeleted.length > 0) {
         const localDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
-        const mergedDel = Array.from(new Set([...localDel, ...incomingDeleted]))
-          .filter(id => !DEFAULT_DAILY_SLOTS.some(d => d.id === id));
+        const mergedDel = Array.from(new Set([...localDel, ...incomingDeleted]));
         try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(mergedDel)); } catch(e) {}
         setDeletedSlotIds(mergedDel);
       }
-      const activeDel = (JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]'))
-        .filter(id => !DEFAULT_DAILY_SLOTS.some(d => d.id === id));
+      const activeDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
       if (Array.isArray(slots)) {
-        const map = new Map();
-        DEFAULT_DAILY_SLOTS.forEach(d => map.set(d.id, d));
-        slots.forEach(s => { if (s && s.id) map.set(s.id, s); });
-        const cleanSlots = Array.from(map.values())
+        const cleanSlots = slots
           .filter(s => s && !activeDel.includes(s.id))
           .sort((a, b) => (a.order || 0) - (b.order || 0));
         setDailySlots(cleanSlots);
