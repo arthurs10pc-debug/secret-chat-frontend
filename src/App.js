@@ -308,6 +308,22 @@ export default function App() {
     return list;
   }, [usersDirectory, googleUser]);
 
+  const activeDoraUser = useMemo(() => {
+    const list = displayUsers || [];
+    const designated = list.find(u => u && !u.isAdmin && u.isDora);
+    if (designated) return designated;
+    const doraAccount = list.find(u => u && u.email && u.email.toLowerCase() === 'dora@gmail.com');
+    if (doraAccount) return doraAccount;
+    return list.find(u => u && !u.isAdmin) || null;
+  }, [displayUsers]);
+
+  const activeDoraName = useMemo(() => {
+    if (!activeDoraUser) return 'Dora';
+    return activeDoraUser.firstName || (activeDoraUser.name ? activeDoraUser.name.split(' ')[0] : 'Dora');
+  }, [activeDoraUser]);
+
+  const partnerName = role === 'parent' ? activeDoraName : 'Darsh';
+
   useEffect(() => {
     fetch(`${BACKEND_URL}/api/auth/users-directory`)
       .then(r => r.json())
@@ -1478,7 +1494,14 @@ export default function App() {
     try {
       setUsersDirectory(prev => {
         if (!prev || !Array.isArray(prev.users)) return prev;
-        const updated = prev.users.map(u => (u.email && u.email.toLowerCase() === cleanEmail) ? { ...u, isDora: Boolean(isDora) } : u);
+        const updated = prev.users.map(u => {
+          const isTarget = u.email && u.email.toLowerCase() === cleanEmail;
+          if (isDora) {
+            return { ...u, isDora: isTarget };
+          } else {
+            return isTarget ? { ...u, isDora: false } : u;
+          }
+        });
         try {
           localStorage.setItem('stealth_known_users', JSON.stringify(updated));
         } catch (e) {}
@@ -2576,7 +2599,7 @@ export default function App() {
     expDate.setMonth(expDate.getMonth() + 1);
     const expStr = expDate.toLocaleDateString('en-GB');
 
-    const targetLabel = target === 'user' ? 'Dora' : 'Darsh';
+    const targetLabel = target === 'user' ? activeDoraName : 'Darsh';
     const cleanReason = reason || (type === 'credit' ? 'Love Balance Reward' : (type === 'redeem' ? 'Wish Redeemed' : 'Love Balance Deduction'));
     const customTxId = extraData && extraData.customId;
     const newEntry = {
@@ -2922,8 +2945,8 @@ export default function App() {
       });
     }
     setAdminOverrideVal('');
-    alert(`Success: ${target === 'user' ? "Dora's" : "Darsh's"} Love Balance set to ₹ ${val.toFixed(2)}!`);
-  }, [adminNetBalance, doraNetBalance, handleLoveBalanceTransaction]);
+    alert(`Success: ${target === 'user' ? `${activeDoraName}'s` : "Darsh's"} Love Balance set to ₹ ${val.toFixed(2)}!`);
+  }, [activeDoraName, adminNetBalance, doraNetBalance, handleLoveBalanceTransaction]);
 
   const handleSendLoveNudge = useCallback((target) => {
     if (socketRef.current) {
@@ -2931,13 +2954,13 @@ export default function App() {
         room: GLOBAL_ROOM,
         action: 'LOVE_NUDGE',
         target: target,
-        message: target === 'user' ? "💖 Darsh sent you a sweet Love Nudge!" : "💖 Dora sent you a Love Nudge!",
+        message: target === 'user' ? "💖 Darsh sent you a sweet Love Nudge!" : `💖 ${activeDoraName} sent you a Love Nudge!`,
         senderRole: roleRef.current || 'admin',
         timestamp: Date.now()
       });
-      alert('Love Nudge dispatched to ' + (target === 'user' ? 'Dora' : 'Darsh') + '!');
+      alert('Love Nudge dispatched to ' + (target === 'user' ? activeDoraName : 'Darsh') + '!');
     }
-  }, []);
+  }, [activeDoraName]);
 
   const compressImage = (file, maxWidth = 960, quality = 0.65) => {
     return new Promise((resolve) => {
@@ -2975,7 +2998,7 @@ export default function App() {
       setDailyImageProof(compressed);
 
       if (roleRef.current === 'parent' || role === 'parent') {
-        alert("Task upload is only for Dora. Admin (Darsh) reviews and approves.");
+        alert(`Task upload is only for ${activeDoraName}. Admin (Darsh) reviews and approves.`);
         return;
       }
 
@@ -3029,7 +3052,7 @@ export default function App() {
 
   const handleDailyTaskSubmit = () => {
     if (roleRef.current === 'parent' || role === 'parent') {
-      alert("Task upload is only for Dora. Admin (Darsh) reviews and approves.");
+      alert(`Task upload is only for ${activeDoraName}. Admin (Darsh) reviews and approves.`);
       return;
     }
     if (!dailySelectedSlotId) return;
@@ -3500,9 +3523,17 @@ export default function App() {
     });
 
     socketRef.current.on('dora_status_update', ({ email, isDora }) => {
+      const clean = (email || '').toLowerCase().trim();
       setUsersDirectory(prev => {
         if (!prev || !Array.isArray(prev.users)) return prev;
-        const updated = prev.users.map(u => (u.email && u.email.toLowerCase() === (email || '').toLowerCase()) ? { ...u, isDora } : u);
+        const updated = prev.users.map(u => {
+          const isTarget = u.email && u.email.toLowerCase() === clean;
+          if (isDora) {
+            return { ...u, isDora: isTarget };
+          } else {
+            return isTarget ? { ...u, isDora: false } : u;
+          }
+        });
         try {
           localStorage.setItem('stealth_known_users', JSON.stringify(updated));
         } catch (e) {}
@@ -3512,12 +3543,11 @@ export default function App() {
         };
       });
       setGoogleUser(prev => {
-        if (prev && prev.email && prev.email.toLowerCase() === (email || '').toLowerCase()) {
-          const updated = { ...prev, isDora };
-          try { localStorage.setItem('stealth_user_profile', JSON.stringify(updated)); } catch(e) {}
-          return updated;
-        }
-        return prev;
+        if (!prev || !prev.email) return prev;
+        const isTarget = prev.email.toLowerCase() === clean;
+        const updated = { ...prev, isDora: isDora ? isTarget : (isTarget ? false : prev.isDora) };
+        try { localStorage.setItem('stealth_user_profile', JSON.stringify(updated)); } catch(e) {}
+        return updated;
       });
     });
 
@@ -3778,7 +3808,14 @@ export default function App() {
             const clean = email.toLowerCase().trim();
             setUsersDirectory(prev => {
               if (!prev || !Array.isArray(prev.users)) return prev;
-              const updated = prev.users.map(u => (u.email && u.email.toLowerCase() === clean) ? { ...u, isDora: Boolean(isDora) } : u);
+              const updated = prev.users.map(u => {
+                const isTarget = u.email && u.email.toLowerCase() === clean;
+                if (isDora) {
+                  return { ...u, isDora: isTarget };
+                } else {
+                  return isTarget ? { ...u, isDora: false } : u;
+                }
+              });
               try {
                 localStorage.setItem('stealth_known_users', JSON.stringify(updated));
               } catch (e) {}
@@ -5308,7 +5345,6 @@ export default function App() {
 
   const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
   const partnerRole = role === 'parent' ? 'user' : 'parent';
-  const partnerName = role === 'parent' ? 'Dora' : 'Darsh';
   const isPartnerOnline = onlineRoles.includes(partnerRole);
   const filteredWpMessages = wpSearchQuery.trim()
     ? displayedStealthMessages.filter(m => m.text && m.text.toLowerCase().includes(wpSearchQuery.toLowerCase()))
@@ -5397,7 +5433,7 @@ export default function App() {
           </div>
           <div className="text-left">
             <p className="text-xs font-black text-white">Incoming Whisper Voice Call...</p>
-            <p className="text-[10px] text-emerald-300 font-mono">From {role === 'parent' ? 'Dora' : 'Darsh'}</p>
+            <p className="text-[10px] text-emerald-300 font-mono">From {partnerName}</p>
           </div>
           <div className="flex items-center gap-2 ml-2 shrink-0">
             <button
@@ -5425,7 +5461,7 @@ export default function App() {
             <Phone size={16} />
           </div>
           <div className="text-left">
-            <p className="text-xs font-black text-white">Calling {role === 'parent' ? 'Dora' : 'Darsh'}...</p>
+            <p className="text-xs font-black text-white">Calling {partnerName}...</p>
             <p className="text-[10px] text-gray-400 font-mono">Waiting for peer to answer</p>
           </div>
           <button
@@ -5877,15 +5913,15 @@ export default function App() {
               {role === 'parent' ? (
                 <div
                   className="flex items-center gap-1.5 bg-[#182229] border border-pink-500/50 text-white px-2 sm:px-2.5 py-1 rounded-xl text-xs font-mono font-bold shrink-0 shadow-sm"
-                  title="Dora: 💕 Love Balance | Darsh: 👑 Love Balance (Click either to view passbook)"
+                  title={`${activeDoraName}: 💕 Love Balance | Darsh: 👑 Love Balance (Click either to view passbook)`}
                 >
                   <button
                     type="button"
                     onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
                     className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
-                    title="Dora's Available Balance"
+                    title={`${activeDoraName}'s Available Balance`}
                   >
-                    <span className="text-[10px] text-pink-400/80 font-sans font-semibold">Dora:</span>
+                    <span className="text-[10px] text-pink-400/80 font-sans font-semibold">{activeDoraName}:</span>
                     <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💕'}</span>
                     <span>{formatLoveBalance(doraNetBalance)}</span>
                   </button>
@@ -6560,15 +6596,15 @@ export default function App() {
             {role === 'parent' ? (
               <div
                 className="flex items-center gap-1.5 bg-emerald-950/50 border border-emerald-500/60 text-white px-2.5 py-1 rounded-xl text-xs font-mono font-bold shadow-[0_0_12px_rgba(16,185,129,0.2)] shrink-0"
-                title="Dora: 💕 Love Balance | Darsh: 👑 Love Balance (Click either to view passbook)"
+                title={`${activeDoraName}: 💕 Love Balance | Darsh: 👑 Love Balance (Click either to view passbook)`}
               >
                 <button
                   type="button"
                   onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
                   className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
-                  title="Dora's Available Balance"
+                  title={`${activeDoraName}'s Available Balance`}
                 >
-                  <span className="text-[10px] text-pink-400/80 font-sans font-semibold">Dora:</span>
+                  <span className="text-[10px] text-pink-400/80 font-sans font-semibold">{activeDoraName}:</span>
                   <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💕'}</span>
                   <span>{formatLoveBalance(doraNetBalance)}</span>
                 </button>
@@ -7455,7 +7491,7 @@ export default function App() {
                             ? 'bg-amber-500 text-black border border-amber-300 animate-pulse'
                             : 'bg-[#242424] hover:bg-[#333] border border-[#3a3a3a] text-emerald-300'
                         }`}
-                        title="Review Dora's Project Submissions & Hourly Tasks Proofs"
+                        title={`Review ${activeDoraName}'s Project Submissions & Hourly Tasks Proofs`}
                       >
                         <Briefcase size={13} />
                         <span>Project Submissions {dailySubmissions.filter(s => s.status === 'PENDING').length > 0 ? `(${dailySubmissions.filter(s => s.status === 'PENDING').length} PENDING)` : ''}</span>
@@ -7500,14 +7536,14 @@ export default function App() {
                               <span>Part 1: Love Balance Engine</span>
                               <span className="text-[9px] bg-pink-500/20 text-pink-300 border border-pink-500/30 px-1.5 py-0.2 rounded font-mono">2-WAY</span>
                             </h3>
-                            <p className="text-[10px] text-gray-400">Control & award points for Dora and Darsh</p>
+                            <p className="text-[10px] text-gray-400">Control & award points for {activeDoraName} and Darsh</p>
                           </div>
                         </div>
 
                         {/* DUAL BALANCES DISPLAY */}
                         <div className="flex items-center gap-1.5 text-right">
                           <div className={`bg-[#181818] border ${Number(doraNetBalance || 0) < 0 ? 'border-rose-500/50' : 'border-pink-500/30'} px-2 py-0.5 rounded-xl`}>
-                            <div className="text-[9px] text-gray-400">Dora</div>
+                            <div className="text-[9px] text-gray-400">{activeDoraName}</div>
                             <div className={`text-xs sm:text-sm font-black font-mono ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
                               {formatLoveBalance(doraNetBalance)}
                             </div>
@@ -7540,7 +7576,7 @@ export default function App() {
                               : 'text-gray-400 hover:text-white'
                           }`}
                         >
-                          <span>💕 Dora</span>
+                          <span>💕 {activeDoraName}</span>
                           <span className={`text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : ''}`}>
                             {formatLoveBalance(doraNetBalance)}
                           </span>
@@ -7565,7 +7601,7 @@ export default function App() {
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-[10px] font-semibold text-gray-300">
                           <span className="text-emerald-400 flex items-center gap-1">
-                            ✨ Quick Awards to {activeLbTarget === 'user' ? 'Dora' : 'Darsh'} (+₹):
+                            ✨ Quick Awards to {activeLbTarget === 'user' ? activeDoraName : 'Darsh'} (+₹):
                           </span>
                         </div>
                         <div className="grid grid-cols-3 gap-1">
@@ -7621,7 +7657,7 @@ export default function App() {
 
                         <div className="flex items-center justify-between text-[10px] font-semibold text-gray-300 pt-0.5">
                           <span className="text-rose-400 flex items-center gap-1">
-                            💔 Quick Deductions from {activeLbTarget === 'user' ? 'Dora' : 'Darsh'} (-₹):
+                            💔 Quick Deductions from {activeLbTarget === 'user' ? activeDoraName : 'Darsh'} (-₹):
                           </span>
                         </div>
                         <div className="grid grid-cols-3 gap-1">
@@ -7680,7 +7716,7 @@ export default function App() {
                       <div className="bg-[#161616] border border-amber-500/30 rounded-xl p-2.5 space-y-2">
                         <div className="flex items-center justify-between text-[11px] font-bold text-gray-200">
                           <span className="flex items-center gap-1.5 text-amber-300">
-                            ⚡ Balance Control for {activeLbTarget === 'user' ? 'Dora' : 'Darsh'}
+                            ⚡ Balance Control for {activeLbTarget === 'user' ? activeDoraName : 'Darsh'}
                           </span>
                           <span className="text-[9px] text-gray-500 font-mono">Live Real-time Sync</span>
                         </div>
@@ -7733,7 +7769,7 @@ export default function App() {
                             type="button"
                             onClick={() => {
                               if (!adminLbAmount) {
-                                alert(`Please enter the exact balance amount in the points box for ${activeLbTarget === 'user' ? 'Dora' : 'Darsh'}.`);
+                                alert(`Please enter the exact balance amount in the points box for ${activeLbTarget === 'user' ? activeDoraName : 'Darsh'}.`);
                                 return;
                               }
                               handleAdminOverrideBalance(activeLbTarget, adminLbAmount);
@@ -8194,7 +8230,7 @@ export default function App() {
                               HOURLY ENGINE
                             </span>
                           </h3>
-                          <p className="text-[10px] text-gray-400">Review Dora's submissions, download high-res proof & customize routine slots</p>
+                          <p className="text-[10px] text-gray-400">Review {activeDoraName}'s submissions, download high-res proof & customize routine slots</p>
                         </div>
                       </div>
 
@@ -8390,7 +8426,7 @@ export default function App() {
                                   </div>
                                 ) : (
                                   <div className="mt-2 pt-2 border-t border-[#222] text-[10px] text-gray-500 italic">
-                                    No submission from Dora yet for this time slot.
+                                    No submission from {activeDoraName} yet for this time slot.
                                   </div>
                                 )}
                               </div>
@@ -8503,7 +8539,7 @@ export default function App() {
                           DARSH
                         </span>
                       </div>
-                      <p className="text-[11px] text-gray-400">Review Dora's Hourly Report submissions in real time</p>
+                      <p className="text-[11px] text-gray-400">Review {activeDoraName}'s Hourly Report submissions in real time</p>
                     </div>
                   </div>
 
@@ -9875,7 +9911,7 @@ export default function App() {
                               : 'bg-[#222] text-gray-400 border-[#333] hover:text-white'
                           }`}
                         >
-                          💕 Dora ({formatLoveBalance(doraNetBalance)})
+                          💕 {activeDoraName} ({formatLoveBalance(doraNetBalance)})
                         </button>
                         <button
                           type="button"
@@ -9890,7 +9926,7 @@ export default function App() {
                         </button>
                       </div>
                     ) : (
-                      <p className="text-[11px] text-pink-300 mt-0.5">Dora's Romantic Passbook & Wish Store</p>
+                      <p className="text-[11px] text-pink-300 mt-0.5">{activeDoraName}'s Romantic Passbook & Wish Store</p>
                     )}
                   </div>
                 </div>
@@ -10008,7 +10044,7 @@ export default function App() {
                               : 'text-gray-400 hover:text-white'
                           )}
                         >
-                          <span>💕 Dora</span>
+                          <span>💕 {activeDoraName}</span>
                           <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono">{formatLoveBalance(doraNetBalance)}</span>
                         </button>
                         <button
@@ -10033,7 +10069,7 @@ export default function App() {
                       <div className="bg-blue-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-1.5 relative overflow-hidden">
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] sm:text-xs font-bold tracking-wide">
-                            {isParentAdmin ? (activeLbTarget === 'admin' ? "Darsh's Available" : "Dora's Available") : "Available Balance"}
+                            {isParentAdmin ? (activeLbTarget === 'admin' ? "Darsh's Available" : `${activeDoraName}'s Available`) : "Available Balance"}
                           </span>
                           <span className="text-sm">🤝</span>
                         </div>
@@ -10943,14 +10979,14 @@ export default function App() {
               <div className="bg-rose-950/30 border border-rose-500/40 rounded-2xl p-3.5 space-y-1.5 text-xs">
                 <p className="font-bold text-rose-300 flex items-center gap-1.5">
                   <AlertTriangle size={14} className="text-rose-400 shrink-0" />
-                  <span>Target: <strong className="text-white underline">{clearModalTarget === 'user' ? 'Dora' : (clearModalTarget === 'admin' ? 'Darsh' : 'Both Dora & Darsh')}</strong></span>
+                  <span>Target: <strong className="text-white underline">{clearModalTarget === 'user' ? activeDoraName : (clearModalTarget === 'admin' ? 'Darsh' : `Both ${activeDoraName} & Darsh`)}</strong></span>
                 </p>
                 <p className="text-[11px] text-gray-300 leading-relaxed">
                   {clearModalTarget === 'user' 
-                    ? "Dora's Love Balance will be reset to ₹0.00 and all her passbook entries will be deleted. Darsh's points will remain intact."
+                    ? `${activeDoraName}'s Love Balance will be reset to ₹0.00 and all her passbook entries will be deleted. Darsh's points will remain intact.`
                     : (clearModalTarget === 'admin'
                       ? "Darsh's Love Balance will be reset to ₹0.00 and all his passbook entries will be deleted. Dora's points will remain intact."
-                      : "Both Dora and Darsh will have their Love Balance reset to ₹0.00 and the entire passbook history will be cleared.")
+                      : `Both ${activeDoraName} and Darsh will have their Love Balance reset to ₹0.00 and the entire passbook history will be cleared.`)
                   }
                 </p>
               </div>
