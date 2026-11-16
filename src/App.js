@@ -1094,7 +1094,6 @@ export default function App() {
       const decoded = parseJwt(response.credential);
       if (decoded && decoded.email) {
         await applyAuthenticatedUser(decoded.email, decoded.name, decoded.picture);
-        setShowGoogleAuthModal(false);
       }
     } catch (err) {
       console.error("JWT parse error:", err);
@@ -1148,7 +1147,7 @@ export default function App() {
     } else {
       initGsi();
     }
-  }, [handleGoogleCredentialResponse, showGoogleAuthModal]);
+  }, [handleGoogleCredentialResponse]);
 
   const applyAuthenticatedUser = useCallback(async (email, displayName, pictureUrl) => {
     const cleanEmail = (email || '').toLowerCase().trim();
