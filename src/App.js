@@ -320,7 +320,7 @@ export default function App() {
   const [loveBalance, setLoveBalance] = useState(() => {
     try {
       const saved = localStorage.getItem('stealth_love_balance');
-      return saved !== null ? parseFloat(saved) : 0.00;
+      return saved !== null ? Math.max(0, parseFloat(saved) || 0) : 0.00;
     } catch {
       return 0.00;
     }
@@ -415,6 +415,16 @@ export default function App() {
   // On mount: unconditionally purge any legacy mock template entries from storage and state
   useEffect(() => {
     try {
+      const savedBal = localStorage.getItem('stealth_love_balance');
+      if (savedBal && parseFloat(savedBal) < 0) {
+        localStorage.setItem('stealth_love_balance', '0');
+        setLoveBalance(0);
+      }
+      const savedAdminBal = localStorage.getItem('stealth_admin_love_balance');
+      if (savedAdminBal && parseFloat(savedAdminBal) < 0) {
+        localStorage.setItem('stealth_admin_love_balance', '0');
+        setAdminLoveBalance(0);
+      }
       const saved = localStorage.getItem('stealth_love_ledger');
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -459,7 +469,7 @@ export default function App() {
   const [adminLoveBalance, setAdminLoveBalance] = useState(() => {
     try {
       const saved = localStorage.getItem('stealth_admin_love_balance');
-      return saved !== null ? parseFloat(saved) : 0.00;
+      return saved !== null ? Math.max(0, parseFloat(saved) || 0) : 0.00;
     } catch {
       return 0.00;
     }
