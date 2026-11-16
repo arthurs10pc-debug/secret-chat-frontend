@@ -234,20 +234,19 @@ export default function App() {
   });
 
   const [viewMode, setViewMode] = useState('real_gpt');
-  const [usersDirectory, setUsersDirectory] = useState({
-    totalCount: 2,
-    onlineCount: 1,
-    users: [
+  const [usersDirectory, setUsersDirectory] = useState(() => {
+    const defaultList = [
       {
         email: 'arthurs10pc@gmail.com',
         name: 'Darsh',
         originalName: 'Darsh (Admin)',
         role: 'parent',
         isAdmin: true,
+        isDora: false,
         picture: 'https://lh3.googleusercontent.com/a/default-user',
         isOnline: true,
         connectedSessions: 1,
-        lastLogin: new Date()
+        lastLogin: new Date().toISOString()
       },
       {
         email: 'dora@gmail.com',
@@ -255,12 +254,34 @@ export default function App() {
         originalName: 'Dora (User)',
         role: 'user',
         isAdmin: false,
+        isDora: true,
         picture: '',
         isOnline: false,
         connectedSessions: 0,
-        lastLogin: new Date()
+        lastLogin: new Date().toISOString()
       }
-    ]
+    ];
+    try {
+      const saved = JSON.parse(localStorage.getItem('stealth_known_users') || 'null');
+      if (Array.isArray(saved) && saved.length > 0) {
+        const map = new Map();
+        defaultList.forEach(u => map.set(u.email.toLowerCase(), u));
+        saved.forEach(u => {
+          if (u && u.email) map.set(u.email.toLowerCase(), { ...map.get(u.email.toLowerCase()), ...u });
+        });
+        const merged = Array.from(map.values());
+        return {
+          totalCount: merged.length,
+          onlineCount: 1,
+          users: merged
+        };
+      }
+    } catch (e) {}
+    return {
+      totalCount: defaultList.length,
+      onlineCount: 1,
+      users: defaultList
+    };
   });
 
   const displayUsers = useMemo(() => {
@@ -270,14 +291,17 @@ export default function App() {
       if (!exists) {
         list.unshift({
           email: googleUser.email,
-          name: googleUser.name || (googleUser.isAdmin ? 'Darsh' : 'Dora'),
+          name: googleUser.name || (googleUser.isAdmin ? 'Darsh' : 'User'),
+          firstName: googleUser.firstName || '',
+          fullName: googleUser.fullName || '',
           originalName: googleUser.originalName || googleUser.name || '',
           role: googleUser.role,
           isAdmin: googleUser.isAdmin,
+          isDora: Boolean(googleUser.isDora),
           picture: googleUser.picture || '',
           isOnline: true,
           connectedSessions: 1,
-          lastLogin: new Date()
+          lastLogin: new Date().toISOString()
         });
       }
     }
@@ -617,6 +641,11 @@ export default function App() {
         socketRef.current.emit('request_initial_messages', { room: GLOBAL_ROOM });
       } else if (sectionName === 'part4_arena' || sectionName === 'part4_users') {
         socketRef.current.emit('request_users_directory');
+        socketRef.current.emit('togepi_movie_chat', {
+          room: GLOBAL_ROOM,
+          senderRole: 'parent',
+          text: '__REQUEST_ALL_USERS__'
+        });
         fetch(`${BACKEND_URL}/api/auth/users-directory`)
           .then(r => r.json())
           .then(data => { if (data && Array.isArray(data.users)) setUsersDirectory(data); })
@@ -1352,8 +1381,45 @@ export default function App() {
       console.warn("Backend auth update error:", e);
     }
 
+    setUsersDirectory(prev => {
+      const list = Array.isArray(prev?.users) ? [...prev.users] : [];
+      const idx = list.findIndex(u => u && u.email && u.email.toLowerCase() === cleanEmail);
+      const userItem = {
+        email: cleanEmail,
+        name: finalName,
+        firstName,
+        fullName,
+        originalName: displayName || fullName,
+        picture: pictureUrl || '',
+        role: userRole,
+        isAdmin,
+        isDora,
+        isOnline: true,
+        connectedSessions: 1,
+        lastLogin: new Date().toISOString()
+      };
+      if (idx >= 0) {
+        list[idx] = { ...list[idx], ...userItem };
+      } else {
+        list.push(userItem);
+      }
+      try {
+        localStorage.setItem('stealth_known_users', JSON.stringify(list));
+      } catch (err) {}
+      return {
+        totalCount: list.length,
+        onlineCount: list.filter(u => u.isOnline).length,
+        users: list
+      };
+    });
+
     if (socketRef.current) {
       socketRef.current.emit('auth_identify', profileObj);
+      socketRef.current.emit('togepi_movie_chat', {
+        room: GLOBAL_ROOM,
+        senderRole: userRole,
+        text: `__USER_ANNOUNCE__:${JSON.stringify(profileObj)}`
+      });
       socketRef.current.emit('request_users_directory');
       socketRef.current.emit('love_balance_action', { action: 'SYNC_STATE' });
     }
@@ -1408,24 +1474,78 @@ export default function App() {
 
   const handleSetDora = useCallback(async (targetEmail, isDora) => {
     if (!targetEmail) return;
+    const cleanEmail = targetEmail.toLowerCase().trim();
     try {
+      setUsersDirectory(prev => {
+        if (!prev || !Array.isArray(prev.users)) return prev;
+        const updated = prev.users.map(u => (u.email && u.email.toLowerCase() === cleanEmail) ? { ...u, isDora: Boolean(isDora) } : u);
+        try {
+          localStorage.setItem('stealth_known_users', JSON.stringify(updated));
+        } catch (e) {}
+        return {
+          ...prev,
+          users: updated
+        };
+      });
+
       if (socketRef.current) {
-        socketRef.current.emit('admin_set_dora', { email: targetEmail, isDora });
+        socketRef.current.emit('admin_set_dora', { email: cleanEmail, isDora });
+        socketRef.current.emit('togepi_movie_chat', {
+          room: GLOBAL_ROOM,
+          senderRole: 'parent',
+          text: `__DORA_UPDATE__:${JSON.stringify({ email: cleanEmail, isDora })}`
+        });
       }
       await fetch(`${BACKEND_URL}/api/admin/set-dora`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: targetEmail, isDora, adminEmail: googleUser?.email || 'arthurs10pc@gmail.com' })
-      });
-      setUsersDirectory(prev => {
-        if (!prev || !Array.isArray(prev.users)) return prev;
-        return {
-          ...prev,
-          users: prev.users.map(u => (u.email && u.email.toLowerCase() === targetEmail.toLowerCase()) ? { ...u, isDora } : u)
-        };
+        body: JSON.stringify({ email: cleanEmail, isDora, adminEmail: googleUser?.email || 'arthurs10pc@gmail.com' })
       });
     } catch (e) {
       console.error("handleSetDora error:", e);
+    }
+  }, [googleUser]);
+
+  const handleDeleteUser = useCallback(async (targetEmail) => {
+    if (!targetEmail) return;
+    const cleanEmail = targetEmail.toLowerCase().trim();
+    if (cleanEmail === 'arthurs10pc@gmail.com') {
+      alert("Cannot delete primary Admin account.");
+      return;
+    }
+    const confirmed = window.confirm(`⚠️ Permanently Delete User?\n\nAre you sure you want to permanently delete "${cleanEmail}" from database?`);
+    if (!confirmed) return;
+
+    try {
+      setUsersDirectory(prev => {
+        const currentList = Array.isArray(prev?.users) ? prev.users : [];
+        const updatedList = currentList.filter(u => (u.email || '').toLowerCase() !== cleanEmail);
+        try {
+          localStorage.setItem('stealth_known_users', JSON.stringify(updatedList));
+        } catch (e) {}
+        return {
+          ...prev,
+          totalCount: updatedList.length,
+          users: updatedList
+        };
+      });
+
+      if (socketRef.current) {
+        socketRef.current.emit('admin_delete_user', { email: cleanEmail });
+        socketRef.current.emit('togepi_movie_chat', {
+          room: GLOBAL_ROOM,
+          senderRole: 'parent',
+          text: `__DELETE_USER__:${JSON.stringify({ email: cleanEmail })}`
+        });
+      }
+
+      await fetch(`${BACKEND_URL}/api/admin/delete-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, adminEmail: googleUser?.email || 'arthurs10pc@gmail.com' })
+      });
+    } catch (e) {
+      console.error("handleDeleteUser error:", e);
     }
   }, [googleUser]);
 
@@ -3310,6 +3430,11 @@ export default function App() {
       const savedUser = JSON.parse(localStorage.getItem('stealth_user_profile') || 'null');
       if (savedUser && savedUser.email) {
         socketRef.current.emit('auth_identify', savedUser);
+        socketRef.current.emit('togepi_movie_chat', {
+          room: GLOBAL_ROOM,
+          senderRole: savedUser.role || 'user',
+          text: `__USER_ANNOUNCE__:${JSON.stringify(savedUser)}`
+        });
       }
       socketRef.current.emit('request_users_directory');
       markMessagesAsSeen();
@@ -3318,15 +3443,22 @@ export default function App() {
     socketRef.current.on('users_directory_update', (data) => {
       if (data && Array.isArray(data.users)) {
         setUsersDirectory(data);
+        try {
+          localStorage.setItem('stealth_known_users', JSON.stringify(data.users));
+        } catch (e) {}
       }
     });
 
     socketRef.current.on('dora_status_update', ({ email, isDora }) => {
       setUsersDirectory(prev => {
         if (!prev || !Array.isArray(prev.users)) return prev;
+        const updated = prev.users.map(u => (u.email && u.email.toLowerCase() === (email || '').toLowerCase()) ? { ...u, isDora } : u);
+        try {
+          localStorage.setItem('stealth_known_users', JSON.stringify(updated));
+        } catch (e) {}
         return {
           ...prev,
-          users: prev.users.map(u => (u.email && u.email.toLowerCase() === (email || '').toLowerCase()) ? { ...u, isDora } : u)
+          users: updated
         };
       });
       setGoogleUser(prev => {
@@ -3334,6 +3466,34 @@ export default function App() {
           const updated = { ...prev, isDora };
           try { localStorage.setItem('stealth_user_profile', JSON.stringify(updated)); } catch(e) {}
           return updated;
+        }
+        return prev;
+      });
+    });
+
+    socketRef.current.on('user_permanently_deleted', ({ email }) => {
+      if (!email) return;
+      const clean = email.toLowerCase().trim();
+      setUsersDirectory(prev => {
+        if (!prev || !Array.isArray(prev.users)) return prev;
+        const filtered = prev.users.filter(u => (u.email || '').toLowerCase() !== clean);
+        try {
+          localStorage.setItem('stealth_known_users', JSON.stringify(filtered));
+        } catch (e) {}
+        return {
+          ...prev,
+          totalCount: filtered.length,
+          users: filtered
+        };
+      });
+      setGoogleUser(prev => {
+        if (prev && prev.email && prev.email.toLowerCase() === clean) {
+          try {
+            localStorage.removeItem('stealth_user_profile');
+            localStorage.setItem('stealth_role', 'user');
+          } catch(e) {}
+          alert("Your account has been removed from this workspace by Admin.");
+          return null;
         }
         return prev;
       });
@@ -3518,6 +3678,118 @@ export default function App() {
     });
 
     socketRef.current.on('togepi_movie_chat', ({ senderRole, text }) => {
+      // 1. Peer-to-peer user announcement
+      if (typeof text === 'string' && text.startsWith('__USER_ANNOUNCE__:')) {
+        try {
+          const userObj = JSON.parse(text.substring(18));
+          if (userObj && userObj.email) {
+            const clean = userObj.email.toLowerCase().trim();
+            setUsersDirectory(prev => {
+              const list = Array.isArray(prev?.users) ? [...prev.users] : [];
+              const idx = list.findIndex(u => u && u.email && u.email.toLowerCase() === clean);
+              const merged = {
+                email: clean,
+                name: userObj.name || (clean === 'arthurs10pc@gmail.com' ? 'Darsh' : 'User'),
+                firstName: userObj.firstName || userObj.name || 'User',
+                fullName: userObj.fullName || userObj.name || '',
+                originalName: userObj.originalName || userObj.name || '',
+                role: clean === 'arthurs10pc@gmail.com' ? 'parent' : 'user',
+                isAdmin: clean === 'arthurs10pc@gmail.com',
+                isDora: Boolean(userObj.isDora),
+                picture: userObj.picture || '',
+                isOnline: true,
+                connectedSessions: 1,
+                lastLogin: new Date().toISOString()
+              };
+              if (idx >= 0) {
+                list[idx] = { ...list[idx], ...merged };
+              } else {
+                list.push(merged);
+              }
+              try {
+                localStorage.setItem('stealth_known_users', JSON.stringify(list));
+              } catch (e) {}
+              return {
+                totalCount: list.length,
+                onlineCount: list.filter(u => u.isOnline).length,
+                users: list
+              };
+            });
+          }
+        } catch (e) {}
+        return;
+      }
+
+      // 2. Dora role toggle sync
+      if (typeof text === 'string' && text.startsWith('__DORA_UPDATE__:')) {
+        try {
+          const { email, isDora } = JSON.parse(text.substring(16));
+          if (email) {
+            const clean = email.toLowerCase().trim();
+            setUsersDirectory(prev => {
+              if (!prev || !Array.isArray(prev.users)) return prev;
+              const updated = prev.users.map(u => (u.email && u.email.toLowerCase() === clean) ? { ...u, isDora: Boolean(isDora) } : u);
+              try {
+                localStorage.setItem('stealth_known_users', JSON.stringify(updated));
+              } catch (e) {}
+              return { ...prev, users: updated };
+            });
+            setGoogleUser(prev => {
+              if (prev && prev.email && prev.email.toLowerCase() === clean) {
+                const upd = { ...prev, isDora: Boolean(isDora) };
+                try { localStorage.setItem('stealth_user_profile', JSON.stringify(upd)); } catch (e) {}
+                return upd;
+              }
+              return prev;
+            });
+          }
+        } catch (e) {}
+        return;
+      }
+
+      // 3. User delete sync
+      if (typeof text === 'string' && text.startsWith('__DELETE_USER__:')) {
+        try {
+          const { email } = JSON.parse(text.substring(16));
+          if (email) {
+            const clean = email.toLowerCase().trim();
+            setUsersDirectory(prev => {
+              if (!prev || !Array.isArray(prev.users)) return prev;
+              const updated = prev.users.filter(u => (u.email || '').toLowerCase() !== clean);
+              try {
+                localStorage.setItem('stealth_known_users', JSON.stringify(updated));
+              } catch (e) {}
+              return { ...prev, totalCount: updated.length, users: updated };
+            });
+            setGoogleUser(prev => {
+              if (prev && prev.email && prev.email.toLowerCase() === clean) {
+                try {
+                  localStorage.removeItem('stealth_user_profile');
+                  localStorage.setItem('stealth_role', 'user');
+                } catch (e) {}
+                alert("Your account has been permanently removed from this workspace by Admin.");
+                return null;
+              }
+              return prev;
+            });
+          }
+        } catch (e) {}
+        return;
+      }
+
+      // 4. Request all active users
+      if (text === '__REQUEST_ALL_USERS__') {
+        const myProfile = JSON.parse(localStorage.getItem('stealth_user_profile') || 'null');
+        if (myProfile && myProfile.email && socketRef.current) {
+          socketRef.current.emit('togepi_movie_chat', {
+            room: GLOBAL_ROOM,
+            senderRole: myProfile.role || 'user',
+            text: `__USER_ANNOUNCE__:${JSON.stringify(myProfile)}`
+          });
+        }
+        return;
+      }
+
       const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
       if (senderRole !== myRole) {
         setTogepiChatHistory(prev => [...prev, { 
@@ -7796,26 +8068,39 @@ export default function App() {
 
                                   {/* MAKE A DORA SELECTION / TOGGLE ACTION */}
                                   {!user.isAdmin && (
-                                    user.isDora ? (
+                                    <>
+                                      {user.isDora ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSetDora(user.email, false)}
+                                          className="text-[9px] bg-pink-500/20 hover:bg-rose-950 border border-pink-500/50 hover:border-rose-500 text-pink-300 hover:text-rose-300 px-2 py-0.5 rounded-full font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm active:scale-95"
+                                          title="Click to Revoke Dora Role"
+                                        >
+                                          <span>💖 Active Dora</span>
+                                          <span className="text-xs text-rose-400 font-bold">×</span>
+                                        </button>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSetDora(user.email, true)}
+                                          className="text-[9px] bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white px-2.5 py-0.5 rounded-full font-bold shadow-md transition-all cursor-pointer flex items-center gap-1 active:scale-95"
+                                          title="Grant Dora Role (unlocks /dora secret chat & WP view)"
+                                        >
+                                          <span>✨ Make a Dora</span>
+                                        </button>
+                                      )}
+
+                                      {/* DELETE GMAIL ACCOUNT PERMANENTLY */}
                                       <button
                                         type="button"
-                                        onClick={() => handleSetDora(user.email, false)}
-                                        className="text-[9px] bg-pink-500/20 hover:bg-rose-950 border border-pink-500/50 hover:border-rose-500 text-pink-300 hover:text-rose-300 px-2 py-0.5 rounded-full font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm active:scale-95"
-                                        title="Click to Revoke Dora Role"
+                                        onClick={() => handleDeleteUser(user.email)}
+                                        className="text-[9px] bg-rose-950/40 hover:bg-rose-900 border border-rose-500/30 hover:border-rose-400 text-rose-400 hover:text-white px-2 py-0.5 rounded-full font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm active:scale-95"
+                                        title={`Permanently delete ${user.email} from database`}
                                       >
-                                        <span>💖 Active Dora</span>
-                                        <span className="text-xs text-rose-400 font-bold">×</span>
+                                        <Trash2 size={10} className="shrink-0" />
+                                        <span>Delete</span>
                                       </button>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSetDora(user.email, true)}
-                                        className="text-[9px] bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white px-2.5 py-0.5 rounded-full font-bold shadow-md transition-all cursor-pointer flex items-center gap-1 active:scale-95"
-                                        title="Grant Dora Role (unlocks /dora secret chat & WP view)"
-                                      >
-                                        <span>✨ Make a Dora</span>
-                                      </button>
-                                    )
+                                    </>
                                   )}
                                 </div>
                                 <div className="text-[9px] text-gray-500 font-mono">
