@@ -537,7 +537,13 @@ export default function App() {
     return Math.max(0, net);
   }, [isLegacyMockEntry]);
 
-  const doraNetBalance = useMemo(() => getNetLedgerBalance(loveLedger, 'user'), [loveLedger, getNetLedgerBalance]);
+  const doraNetBalance = useMemo(() => {
+    const userEntries = (loveLedger || []).filter(e => e && !isLegacyMockEntry(e) && e.target !== 'admin' && !(e.description && e.description.includes('[Darsh]')));
+    if (userEntries.length > 0) {
+      return getNetLedgerBalance(loveLedger, 'user');
+    }
+    return typeof loveBalance === 'number' ? loveBalance : 0;
+  }, [loveLedger, getNetLedgerBalance, loveBalance, isLegacyMockEntry]);
   const adminNetBalance = useMemo(() => getNetLedgerBalance(loveLedger, 'admin'), [loveLedger, getNetLedgerBalance]);
 
   // Synchronize loveBalance and adminLoveBalance state with pure mathematical ledger totals
@@ -1549,16 +1555,28 @@ export default function App() {
     }
   }, []);
 
-  const handleSetDora = useCallback(async (targetEmail, isDora) => {
+  const handleSetDora = useCallback(async (targetEmail, isDora = true) => {
     if (!targetEmail) return;
     const cleanEmail = targetEmail.toLowerCase().trim();
+    if (cleanEmail === 'arthurs10pc@gmail.com') {
+      alert("Admin cannot be set as Dora.");
+      return;
+    }
     try {
+      const targetUser = (usersDirectory?.users || []).find(u => (u.email || '').toLowerCase() === cleanEmail);
+      const targetName = targetUser?.firstName || (targetUser?.name ? targetUser.name.split(' ')[0] : cleanEmail.split('@')[0]);
+      const targetBal = typeof targetUser?.loveBalance === 'number' ? targetUser.loveBalance : (cleanEmail === 'dora@gmail.com' ? 25.0 : 0);
+
       setUsersDirectory(prev => {
-        if (!prev || !Array.isArray(prev.users)) return prev;
-        const updated = prev.users.map(u => {
+        const currentList = Array.isArray(prev?.users) ? prev.users : [];
+        const updated = currentList.map(u => {
           const isTarget = u.email && u.email.toLowerCase() === cleanEmail;
           if (isDora) {
-            return { ...u, isDora: isTarget };
+            return {
+              ...u,
+              isDora: isTarget,
+              loveBalance: isTarget ? targetBal : u.loveBalance
+            };
           } else {
             return isTarget ? { ...u, isDora: false } : u;
           }
@@ -1572,23 +1590,40 @@ export default function App() {
         };
       });
 
+      if (Boolean(isDora)) {
+        setLoveBalance(targetBal);
+        try { localStorage.setItem('stealth_love_balance', targetBal.toString()); } catch(e) {}
+        if (cleanEmail !== 'dora@gmail.com') {
+          setLoveLedger(prev => {
+            const adminOnly = (prev || []).filter(e => e && (e.target === 'admin' || (e.description && e.description.includes('[Darsh]'))));
+            try { localStorage.setItem('stealth_love_ledger', JSON.stringify(adminOnly)); } catch(e) {}
+            return adminOnly;
+          });
+        }
+      }
+
       if (socketRef.current) {
         socketRef.current.emit('admin_set_dora', { email: cleanEmail, isDora });
         socketRef.current.emit('togepi_movie_chat', {
           room: GLOBAL_ROOM,
           senderRole: 'parent',
-          text: `__DORA_UPDATE__:${JSON.stringify({ email: cleanEmail, isDora })}`
+          text: `__DORA_UPDATE__:${JSON.stringify({ email: cleanEmail, isDora, name: targetName, loveBalance: targetBal })}`
         });
       }
-      await fetch(`${BACKEND_URL}/api/admin/set-dora`, {
+      const res = await fetch(`${BACKEND_URL}/api/admin/set-dora`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail, isDora, adminEmail: googleUser?.email || 'arthurs10pc@gmail.com' })
       });
+      const data = await res.json();
+      if (data && data.success && typeof data.balance === 'number') {
+        setLoveBalance(data.balance);
+        try { localStorage.setItem('stealth_love_balance', data.balance.toString()); } catch(e) {}
+      }
     } catch (e) {
       console.error("handleSetDora error:", e);
     }
-  }, [googleUser]);
+  }, [googleUser, usersDirectory]);
 
   const handleDeleteUser = useCallback(async (targetEmail) => {
     if (!targetEmail) return;
@@ -3607,14 +3642,19 @@ export default function App() {
       }
     });
 
-    socketRef.current.on('dora_status_update', ({ email, isDora }) => {
+    socketRef.current.on('dora_status_update', (data) => {
+      const { email, isDora, loveBalance, loveLedger } = data || {};
       const clean = (email || '').toLowerCase().trim();
       setUsersDirectory(prev => {
         if (!prev || !Array.isArray(prev.users)) return prev;
         const updated = prev.users.map(u => {
           const isTarget = u.email && u.email.toLowerCase() === clean;
           if (isDora) {
-            return { ...u, isDora: isTarget };
+            return {
+              ...u,
+              isDora: isTarget,
+              loveBalance: isTarget && typeof loveBalance === 'number' ? loveBalance : u.loveBalance
+            };
           } else {
             return isTarget ? { ...u, isDora: false } : u;
           }
@@ -3627,10 +3667,24 @@ export default function App() {
           users: updated
         };
       });
+
+      if (isDora && typeof loveBalance === 'number') {
+        setLoveBalance(loveBalance);
+        try { localStorage.setItem('stealth_love_balance', loveBalance.toString()); } catch(e) {}
+      }
+      if (Array.isArray(loveLedger)) {
+        setLoveLedger(loveLedger);
+        try { localStorage.setItem('stealth_love_ledger', JSON.stringify(loveLedger)); } catch(e) {}
+      }
+
       setGoogleUser(prev => {
         if (!prev || !prev.email) return prev;
         const isTarget = prev.email.toLowerCase() === clean;
-        const updated = { ...prev, isDora: isDora ? isTarget : (isTarget ? false : prev.isDora) };
+        const updated = {
+          ...prev,
+          isDora: isDora ? isTarget : (isTarget ? false : prev.isDora),
+          loveBalance: isTarget && typeof loveBalance === 'number' ? loveBalance : prev.loveBalance
+        };
         try { localStorage.setItem('stealth_user_profile', JSON.stringify(updated)); } catch(e) {}
         return updated;
       });
@@ -3888,7 +3942,8 @@ export default function App() {
       // 2. Dora role toggle sync
       if (typeof text === 'string' && text.startsWith('__DORA_UPDATE__:')) {
         try {
-          const { email, isDora } = JSON.parse(text.substring(16));
+          const payload = JSON.parse(text.substring(16));
+          const { email, isDora, loveBalance } = payload || {};
           if (email) {
             const clean = email.toLowerCase().trim();
             setUsersDirectory(prev => {
@@ -3896,7 +3951,11 @@ export default function App() {
               const updated = prev.users.map(u => {
                 const isTarget = u.email && u.email.toLowerCase() === clean;
                 if (isDora) {
-                  return { ...u, isDora: isTarget };
+                  return {
+                    ...u,
+                    isDora: isTarget,
+                    loveBalance: isTarget && typeof loveBalance === 'number' ? loveBalance : u.loveBalance
+                  };
                 } else {
                   return isTarget ? { ...u, isDora: false } : u;
                 }
@@ -3906,9 +3965,13 @@ export default function App() {
               } catch (e) {}
               return { ...prev, users: updated };
             });
+            if (isDora && typeof loveBalance === 'number') {
+              setLoveBalance(loveBalance);
+              try { localStorage.setItem('stealth_love_balance', loveBalance.toString()); } catch (e) {}
+            }
             setGoogleUser(prev => {
               if (prev && prev.email && prev.email.toLowerCase() === clean) {
-                const upd = { ...prev, isDora: Boolean(isDora) };
+                const upd = { ...prev, isDora: Boolean(isDora), loveBalance: typeof loveBalance === 'number' ? loveBalance : prev.loveBalance };
                 try { localStorage.setItem('stealth_user_profile', JSON.stringify(upd)); } catch (e) {}
                 return upd;
               }
@@ -8311,6 +8374,11 @@ export default function App() {
                                     ) : (
                                       <span className="text-[9px] bg-pink-500/20 text-pink-300 border border-pink-500/40 px-1 rounded font-mono font-bold">
                                         USER
+                                      </span>
+                                    )}
+                                    {!user.isAdmin && (
+                                      <span className="text-[9px] bg-pink-950/60 text-pink-300 border border-pink-500/40 px-1.5 py-0.2 rounded font-mono font-bold" title="Current Love Balance">
+                                        💕 ₹ {Number(user.loveBalance || 0).toFixed(2)}
                                       </span>
                                     )}
                                   </div>
