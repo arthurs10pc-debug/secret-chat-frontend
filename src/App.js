@@ -2971,9 +2971,59 @@ export default function App() {
     if (!file) return;
     try {
       const compressed = await compressImage(file);
+      if (!compressed) return;
       setDailyImageProof(compressed);
+
+      if (roleRef.current === 'parent' || role === 'parent') {
+        alert("Task upload is only for Dora. Admin (Darsh) reviews and approves.");
+        return;
+      }
+
+      const targetSlotId = dailySelectedSlotId || (dailySlots[0] && dailySlots[0].id);
+      if (!targetSlotId) return;
+
+      const selectedSlot = dailySlots.find(s => s.id === targetSlotId);
+      const submissionId = 'sub_' + dailySelectedDate + '_' + targetSlotId;
+      const submissionData = {
+        id: submissionId,
+        date: dailySelectedDate,
+        slotId: targetSlotId,
+        slotTitle: selectedSlot ? selectedSlot.title : 'Routine Task',
+        note: '',
+        image: compressed,
+        userRole: roleRef.current || role || 'user',
+        status: 'PENDING',
+        pointsAwarded: 0,
+        submittedAt: new Date().toISOString(),
+        reviewedAt: null,
+        adminFeedback: ''
+      };
+
+      // 1. Instant optimistic local update
+      setDailySubmissions(prev => {
+        const filtered = prev.filter(s => s.id !== submissionId);
+        const updated = [...filtered, submissionData];
+        try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(updated)); } catch (e) {}
+        return updated;
+      });
+
+      // 2. Dual-channel socket emission for 100% reliable instant delivery
+      if (socketRef.current) {
+        socketRef.current.emit('daily_task_submit', submissionData);
+        socketRef.current.emit('love_balance_action', {
+          room: GLOBAL_ROOM,
+          action: 'DAILY_TASK_SUBMIT',
+          submission: submissionData,
+          senderRole: 'user',
+          timestamp: Date.now()
+        });
+      }
+
+      alert(`✨ Photo Proof for "${selectedSlot ? selectedSlot.title : 'Routine Task'}" attached!\n\nStatus is now Under Review (⏳) by Darsh. Points will be awarded once approved!`);
     } catch (err) {
       console.warn('Image processing error:', err);
+    } finally {
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -9089,238 +9139,15 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* ACTIVE SLOT SUBMISSION / STATUS CARD */}
-                {(() => {
-                  const activeSlot = dailySlots.find(s => s.id === dailySelectedSlotId) || dailySlots[0];
-                  if (!activeSlot) return null;
-                  const activeSub = getSlotSubmission(activeSlot.id, dailySelectedDate);
-                  const isApproved = activeSub && activeSub.status === 'APPROVED';
-                  const isPending = activeSub && activeSub.status === 'PENDING';
-                  const isRejected = activeSub && activeSub.status === 'REJECTED';
-
-                  const activeIsOverdue = checkSlotOverdue(activeSlot, dailySelectedDate);
-
-                  return (
-                    <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-2xl space-y-4">
-                      {/* SLOT HEADER */}
-                      <div className="flex items-start justify-between gap-2 border-b border-[#222] pb-3">
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-full font-mono font-bold">
-                              {activeSlot.timeRange}
-                            </span>
-                            <span className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full font-semibold">
-                              {activeSlot.tag}
-                            </span>
-                            {activeIsOverdue && !isApproved && (
-                              <span className="text-xs bg-rose-500/20 text-rose-300 border border-rose-500/40 px-2 py-0.5 rounded-full font-bold animate-pulse">
-                                ⏰ Time Expired (50% pts)
-                              </span>
-                            )}
-                          </div>
-                          <h3 className="text-sm sm:text-base font-bold text-white mt-1">
-                            {activeSlot.title}
-                          </h3>
-                        </div>
-
-                        <div className={`px-2.5 py-1 rounded-xl text-right shrink-0 border ${
-                          activeIsOverdue && !isApproved 
-                            ? 'bg-rose-950/40 border-rose-500/40 text-rose-300' 
-                            : 'bg-emerald-950/40 border-emerald-500/30'
-                        }`}>
-                          <div className="text-[9px] text-gray-400">
-                            {activeIsOverdue && !isApproved ? 'Reward (Late -50%)' : 'Reward'}
-                          </div>
-                          <div className={`text-xs font-mono font-bold ${
-                            activeIsOverdue && !isApproved ? 'text-rose-400' : 'text-emerald-400'
-                          }`}>
-                            +₹ {(activeIsOverdue && !isApproved 
-                                  ? (Number(activeSlot.rewardPoints || 0) / 2) 
-                                  : Number(activeSlot.rewardPoints || 0)).toFixed(2)}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* STATUS BANNER */}
-                      {isApproved ? (
-                        <div className="bg-emerald-950/40 border border-emerald-500/40 p-3 rounded-2xl flex items-center justify-between gap-2 text-xs text-emerald-300">
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg">🎉</span>
-                            <div>
-                              <div className="font-bold text-white">Task Approved by Darsh!</div>
-                              <div className="text-[11px] text-emerald-300">
-                                +₹ {activeSub.pointsAwarded || activeSlot.rewardPoints} Love Balance has been credited!
-                              </div>
-                            </div>
-                          </div>
-                          <div className="bg-emerald-600 text-white text-[10px] font-bold py-1 px-2.5 rounded-xl">
-                            ✓ Done
-                          </div>
-                        </div>
-                      ) : isPending ? (
-                        <div className="bg-amber-950/40 border border-amber-500/40 p-3 rounded-2xl flex items-center justify-between gap-2 text-xs text-amber-300 animate-in fade-in">
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg animate-spin" style={{ animationDuration: '3s' }}>⏳</span>
-                            <div>
-                              <div className="font-bold text-white">Under Review by Darsh</div>
-                              <div className="text-[11px] text-amber-300">
-                                Proof submitted. Status will change to green "Done" once Darsh approves!
-                              </div>
-                            </div>
-                          </div>
-                          <div className="bg-amber-500 text-black text-[10px] font-bold py-1 px-2 rounded-xl">
-                            Pending Approval
-                          </div>
-                        </div>
-                      ) : isRejected ? (
-                        <div className="bg-rose-950/40 border border-rose-500/40 p-3 rounded-2xl flex items-center justify-between gap-2 text-xs text-rose-300">
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg">⚠️</span>
-                            <div>
-                              <div className="font-bold text-white">Retake Requested</div>
-                              <div className="text-[11px] text-rose-300">
-                                {activeSub.adminFeedback || "Please retake with clear proof photo."}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {/* EXISTING SUBMISSION PREVIEW */}
-                      {activeSub && (activeSub.image || activeSub.note) && (
-                        <div className="bg-[#101010] border border-[#222] p-3 rounded-2xl space-y-2">
-                          <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-                            Your Submitted Proof:
-                          </div>
-                          {activeSub.note && (
-                            <p className="text-xs text-gray-200 italic bg-[#181818] p-2 rounded-xl border border-[#242424]">
-                              "{activeSub.note}"
-                            </p>
-                          )}
-                          {activeSub.image && (
-                            <div className="flex items-center gap-3">
-                              <img
-                                src={activeSub.image}
-                                alt="Proof"
-                                className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-xl border border-[#333] cursor-pointer hover:scale-105 transition-transform"
-                                onClick={() => setDailyPreviewModalImg(activeSub.image)}
-                              />
-                              <div className="space-y-1 text-xs">
-                                <button
-                                  type="button"
-                                  onClick={() => setDailyPreviewModalImg(activeSub.image)}
-                                  className="text-blue-400 hover:text-blue-300 text-xs font-semibold flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Eye size={13} />
-                                  <span>View High-Res Photo</span>
-                                </button>
-                                <a
-                                  href={activeSub.image}
-                                  download={`proof_${activeSlot.id}.jpg`}
-                                  className="text-emerald-400 hover:text-emerald-300 text-xs font-semibold flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Download size={13} />
-                                  <span>Download</span>
-                                </a>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* SUBMISSION FORM (DORA ONLY) */}
-                      {(!activeSub || activeSub.status === 'REJECTED') && (
-                        <div className="space-y-3 pt-1">
-                          <div className="text-xs font-bold text-gray-300 flex items-center gap-1.5">
-                            <span>Upload Proof for {activeSlot.title}:</span>
-                          </div>
-
-                          {/* SINGLE TEXT LINE INPUT + CAMERA PLUS BUTTON */}
-                          <div className="flex items-center gap-2 bg-[#101010] border border-[#333] focus-within:border-blue-500 rounded-2xl px-3 py-2 transition-all shadow-inner">
-                            <input
-                              type="text"
-                              value={dailyNoteInput}
-                              onChange={(e) => setDailyNoteInput(e.target.value)}
-                              placeholder={`Enter note (e.g. 10 squats done / juice glass / 8k steps proof)...`}
-                              className="flex-1 bg-transparent text-xs text-white placeholder-gray-500 outline-none min-w-0"
-                            />
-
-                            {/* HIDDEN FILE INPUT */}
-                            <input
-                              ref={dailyFileInputRef}
-                              type="file"
-                              accept="image/*"
-                              capture="environment"
-                              onChange={handleDailyImageSelected}
-                              className="hidden"
-                            />
-
-                            {/* PLUS CAMERA BUTTON */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (dailyFileInputRef.current) dailyFileInputRef.current.click();
-                              }}
-                              className={`p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center shrink-0 ${
-                                dailyImageProof 
-                                  ? 'bg-emerald-600 text-white' 
-                                  : 'bg-[#222] hover:bg-blue-600 text-gray-300 hover:text-white'
-                              }`}
-                              title="Click to take camera photo or upload screenshot"
-                            >
-                              <Plus size={16} />
-                            </button>
-                          </div>
-
-                          {/* IMAGE PREVIEW BOX IF SELECTED */}
-                          {dailyImageProof && (
-                            <div className="flex items-center gap-3 bg-[#181818] border border-emerald-500/30 p-2.5 rounded-2xl animate-in zoom-in-95">
-                              <img
-                                src={dailyImageProof}
-                                alt="Selected Proof"
-                                className="w-16 h-16 object-cover rounded-xl border border-[#333]"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-bold text-emerald-400">Photo Proof Ready</p>
-                                <p className="text-[10px] text-gray-400">Click submit to send to Darsh</p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => setDailyImageProof('')}
-                                className="text-gray-400 hover:text-rose-400 p-1 rounded cursor-pointer"
-                                title="Remove photo"
-                              >
-                                <X size={16} />
-                              </button>
-                            </div>
-                          )}
-
-                          {/* COMPULSORY PHOTO PROOF SUBMIT BUTTON */}
-                          {dailyImageProof ? (
-                            <button
-                              type="button"
-                              onClick={handleDailyTaskSubmit}
-                              className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold py-3 rounded-2xl cursor-pointer shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 animate-in fade-in slide-in-from-bottom-2"
-                            >
-                              <Camera size={16} />
-                              <span>Submit Task Proof for Darsh's Review (📸 Photo Ready)</span>
-                            </button>
-                          ) : (
-                            <div className="bg-amber-950/20 border border-amber-500/30 rounded-2xl p-3 text-center space-y-1">
-                              <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-amber-300">
-                                <Camera size={15} />
-                                <span>📸 Photo Proof is Compulsory to Submit</span>
-                              </div>
-                              <p className="text-[11px] text-gray-400">
-                                Please tap the <span className="text-white font-bold bg-[#222] px-1.5 py-0.5 rounded border border-[#444]">+</span> camera button above to take a photo or attach screenshot. Submit button will appear once photo is attached!
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
+                {/* HIDDEN FILE INPUT FOR DIRECT HOURLY REPORT PROOF UPLOAD */}
+                <input
+                  ref={dailyFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleDailyImageSelected}
+                  className="hidden"
+                />
               </section>
             )}
 
