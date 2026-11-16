@@ -8577,6 +8577,7 @@ export default function App() {
                           const isApproved = sub && sub.status === 'APPROVED';
                           const isPending = sub && sub.status === 'PENDING';
                           const isRejected = sub && sub.status === 'REJECTED';
+                          const isOverdue = checkSlotOverdue(slot, dailySelectedDate);
 
                           const timeParts = slot.timeRange.split('-').map(t => t.trim());
                           const topTime = timeParts[0] || slot.timeRange;
@@ -8585,19 +8586,24 @@ export default function App() {
                           return (
                             <div
                               key={slot.id}
-                              onClick={() => setDailySelectedSlotId(slot.id)}
+                              onClick={() => {
+                                setDailySelectedSlotId(slot.id);
+                                if (sub && sub.image) setDailyPreviewModalImg(sub.image);
+                              }}
                               className={`min-w-[90px] sm:min-w-[105px] max-w-[115px] p-2 sm:p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col items-center justify-between text-center select-none shrink-0 ${
                                 isSelected 
                                   ? 'bg-amber-950/80 border-amber-500 ring-2 ring-amber-400 shadow-lg scale-105' 
-                                  : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-800 shadow-sm'
+                                  : (isOverdue && !isApproved 
+                                      ? 'bg-rose-950/30 border-rose-500/60 text-rose-300 shadow-sm' 
+                                      : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-800 shadow-sm')
                               }`}
                             >
                               <div className="space-y-0.5">
-                                <div className={`text-xs sm:text-sm font-black ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                                <div className={`text-xs sm:text-sm font-black ${isSelected ? 'text-white' : (isOverdue && !isApproved ? 'text-rose-300' : 'text-gray-900')}`}>
                                   {topTime}
                                 </div>
                                 {botTime && (
-                                  <div className={`text-[10px] font-medium ${isSelected ? 'text-amber-300' : 'text-gray-500'}`}>
+                                  <div className={`text-[10px] font-medium ${isSelected ? 'text-amber-300' : (isOverdue && !isApproved ? 'text-rose-400' : 'text-gray-500')}`}>
                                     {botTime}
                                   </div>
                                 )}
@@ -8629,27 +8635,39 @@ export default function App() {
                                     <span>Tea</span>
                                   </div>
                                 ) : (
-                                  <div className={`text-[9px] py-0.5 px-1.5 rounded-full font-medium ${isSelected ? 'bg-amber-900/50 text-amber-200' : 'bg-gray-100 text-gray-600'}`}>
-                                    {slot.tag || 'Pending'}
+                                  <div className={`text-[9px] py-0.5 px-1.5 rounded-full font-medium ${isSelected ? 'bg-amber-900/50 text-amber-200' : (isOverdue && !isApproved ? 'bg-rose-900/40 text-rose-300' : 'bg-gray-100 text-gray-600')}`}>
+                                    {isOverdue && !isApproved ? 'Overdue' : (slot.tag || 'Pending')}
                                   </div>
                                 )}
                               </div>
 
-                              {sub && sub.image ? (
+                              {isApproved ? (
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setDailyPreviewModalImg(sub.image);
+                                    if (sub && sub.image) setDailyPreviewModalImg(sub.image);
                                   }}
-                                  className="w-6 h-6 rounded-full border border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-sm active:scale-95 mt-0.5"
-                                  title="View Proof Photo"
+                                  className="w-7 h-7 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-all cursor-pointer shadow-md active:scale-90 mt-0.5"
+                                  title="Task Approved ✓ (Click to view proof)"
                                 >
-                                  <Eye size={12} />
+                                  <Check size={14} />
+                                </button>
+                              ) : isPending ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (sub && sub.image) setDailyPreviewModalImg(sub.image);
+                                  }}
+                                  className="w-7 h-7 rounded-full border border-amber-500 bg-amber-500/10 text-amber-400 hover:bg-amber-500 hover:text-black flex items-center justify-center transition-all cursor-pointer shadow-sm active:scale-90 mt-0.5 animate-pulse"
+                                  title="Under Review ⏳ (Click to view proof photo)"
+                                >
+                                  <Eye size={13} />
                                 </button>
                               ) : (
-                                <div className="w-6 h-6 rounded-full border border-gray-300 text-gray-300 flex items-center justify-center mt-0.5">
-                                  <Eye size={12} />
+                                <div className="w-7 h-7 rounded-full border border-gray-200 text-gray-400 flex items-center justify-center mt-0.5 opacity-40">
+                                  <Clock size={12} />
                                 </div>
                               )}
                             </div>
@@ -8658,170 +8676,47 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* FOCUSED SELECTED SLOT REVIEW CARD */}
-                    {(() => {
-                      const activeSlot = dailySlots.find(s => s.id === dailySelectedSlotId) || dailySlots[0];
-                      if (!activeSlot) return null;
-                      const activeSub = getSlotSubmission(activeSlot.id, dailySelectedDate);
-                      const isApproved = activeSub && activeSub.status === 'APPROVED';
-                      const isPending = activeSub && activeSub.status === 'PENDING';
-                      const isRejected = activeSub && activeSub.status === 'REJECTED';
-
-                      return (
-                        <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-2xl space-y-4">
-                          <div className="flex items-start justify-between gap-2 border-b border-[#222] pb-3">
-                            <div className="space-y-0.5">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-mono font-bold">
-                                  {activeSlot.timeRange}
-                                </span>
-                                <span className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full font-semibold">
-                                  {activeSlot.tag}
-                                </span>
-                              </div>
-                              <h3 className="text-sm sm:text-base font-bold text-white mt-1">
-                                {activeSlot.title}
-                              </h3>
-                            </div>
-
-                            <div className="bg-emerald-950/40 border border-emerald-500/30 px-3 py-1 rounded-xl text-right shrink-0">
-                              <div className="text-[9px] text-gray-400">Award</div>
-                              <div className="text-xs font-mono font-bold text-emerald-400">
-                                +₹ {Number(activeSlot.rewardPoints || 0).toFixed(2)}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* SUBMISSION PROOF CONTENT */}
-                          {activeSub ? (
-                            <div className="space-y-3">
-                              {activeSub.note && (
-                                <div className="bg-[#181818] p-3 rounded-xl border border-[#282828] text-xs text-gray-200">
-                                  <span className="text-[10px] text-gray-400 font-bold uppercase block mb-1">Dora's Note:</span>
-                                  "{activeSub.note}"
-                                </div>
-                              )}
-
-                              {activeSub.image && (
-                                <div className="bg-[#181818] p-3 rounded-xl border border-[#282828] space-y-2">
-                                  <span className="text-[10px] text-gray-400 font-bold uppercase block">Photo Proof:</span>
-                                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                                    <img
-                                      src={activeSub.image}
-                                      alt="Proof"
-                                      className="w-36 h-36 sm:w-44 sm:h-44 object-cover rounded-xl border border-[#333] cursor-pointer hover:scale-102 transition-transform shadow-md"
-                                      onClick={() => setDailyPreviewModalImg(activeSub.image)}
-                                    />
-                                    <div className="space-y-2 text-xs">
-                                      <button
-                                        type="button"
-                                        onClick={() => setDailyPreviewModalImg(activeSub.image)}
-                                        className="bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 cursor-pointer"
-                                      >
-                                        <Eye size={14} />
-                                        <span>View High-Res Photo</span>
-                                      </button>
-                                      <a
-                                        href={activeSub.image}
-                                        download={`dora_task_${activeSlot.id}.jpg`}
-                                        className="bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 cursor-pointer inline-flex"
-                                      >
-                                        <Download size={14} />
-                                        <span>Download Proof</span>
-                                      </a>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* APPROVAL ACTION CONTROLS */}
-                              <div className="pt-2">
-                                {isApproved ? (
-                                  <div className="bg-emerald-950/40 border border-emerald-500/40 p-3 rounded-2xl flex items-center justify-between text-xs text-emerald-300">
-                                    <div className="flex items-center gap-2">
-                                      <span>✓</span>
-                                      <div>
-                                        <span className="font-bold">Approved by You</span>
-                                        <div className="text-[11px] text-emerald-400">
-                                          +₹ {activeSub.pointsAwarded || activeSlot.rewardPoints} Love Balance credited to Dora
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <span className="bg-emerald-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-xl">
-                                      Done
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <div className="flex flex-col sm:flex-row items-center gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleApproveDailyTask(activeSub)}
-                                      className="w-full sm:flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-2.5 px-4 rounded-xl cursor-pointer shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5 text-xs"
-                                    >
-                                      <CheckCircle size={15} />
-                                      <span>Approve & Award +₹{Number(activeSlot.rewardPoints || 2.0).toFixed(2)}</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRejectDailyTask(activeSub)}
-                                      className="w-full sm:w-auto bg-rose-950/60 hover:bg-rose-900 border border-rose-800 text-rose-300 font-bold py-2.5 px-4 rounded-xl cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-1.5 text-xs"
-                                    >
-                                      <RotateCcw size={14} />
-                                      <span>Request Retake</span>
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="bg-[#181818] border border-[#2a2a2a] p-4 rounded-2xl text-center space-y-1 text-xs text-gray-400">
-                              <p className="text-gray-300 font-medium">No submission uploaded yet by Dora for this slot.</p>
-                              <p className="text-[11px] text-gray-500">When Dora snaps a photo and submits, it will pop up here in real time for your review.</p>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-
-                    {/* ALL PENDING APPROVALS QUEUE */}
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between text-xs font-bold text-gray-300 px-1">
-                        <span className="flex items-center gap-1.5">
-                          <span>⚡ Submissions Requiring Your Approval:</span>
-                          <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.2 rounded-full font-mono text-[10px]">
-                            {dailySubmissions.filter(s => s.status === 'PENDING').length}
+                    {/* ONLY PENDING SUBMISSIONS REQUIRING APPROVAL (NOTHING ELSE BELOW) */}
+                    {dailySubmissions.filter(s => s.status === 'PENDING').length > 0 && (
+                      <div className="space-y-2.5 animate-in fade-in slide-in-from-top-2">
+                        <div className="flex items-center justify-between text-xs font-bold text-gray-300 px-1">
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                            <span>⚡ Submissions Requiring Your Approval:</span>
+                            <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.2 rounded-full font-mono text-[10px]">
+                              {dailySubmissions.filter(s => s.status === 'PENDING').length}
+                            </span>
                           </span>
-                        </span>
-                      </div>
-
-                      {dailySubmissions.filter(s => s.status === 'PENDING').length === 0 ? (
-                        <div className="bg-[#141414] border border-[#262626] p-5 rounded-2xl text-center text-xs text-gray-400 space-y-1">
-                          <p className="text-white font-bold">🎉 All caught up!</p>
-                          <p className="text-[11px] text-gray-500">There are no pending submissions awaiting review for this date.</p>
                         </div>
-                      ) : (
+
                         <div className="space-y-3">
                           {dailySubmissions.filter(s => s.status === 'PENDING').map(sub => {
                             const slot = dailySlots.find(s => s.id === sub.slotId);
-                            const reward = slot ? slot.rewardPoints : 2.0;
+                            const isLate = checkSlotOverdue(slot, dailySelectedDate);
+                            const reward = slot ? (isLate ? Number(slot.rewardPoints || 2.0) / 2 : Number(slot.rewardPoints || 2.0)) : 2.0;
 
                             return (
-                              <div key={sub.id} className="bg-[#141414] border border-amber-500/40 rounded-2xl p-4 shadow-xl space-y-3">
+                              <div key={sub.id} className="bg-[#141414] border border-amber-500/50 rounded-2xl p-4 shadow-2xl space-y-3">
                                 <div className="flex items-start justify-between gap-2 border-b border-[#222] pb-2.5">
                                   <div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                       <span className="text-xs bg-amber-500/20 text-amber-300 font-mono font-bold px-2 py-0.5 rounded-full">
                                         {slot ? slot.timeRange : 'Routine'}
                                       </span>
                                       <span className="text-xs font-bold text-white">
                                         {slot ? slot.title : 'Routine Task'}
                                       </span>
+                                      {isLate && (
+                                        <span className="text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/40 px-2 py-0.2 rounded-full font-bold">
+                                          ⏰ Submitted Late (50% pts)
+                                        </span>
+                                      )}
                                     </div>
                                     <div className="text-[11px] text-gray-400 mt-1">
                                       Submitted: {new Date(sub.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </div>
                                   </div>
-                                  <div className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2 py-1 rounded-xl">
+                                  <div className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1 rounded-xl shrink-0">
                                     +₹ {Number(reward).toFixed(2)}
                                   </div>
                                 </div>
@@ -8833,30 +8728,32 @@ export default function App() {
                                 )}
 
                                 {sub.image && (
-                                  <div className="flex items-center gap-3">
-                                    <img
-                                      src={sub.image}
-                                      alt="Proof"
-                                      className="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-xl border border-[#333] cursor-pointer hover:scale-105 transition-transform"
-                                      onClick={() => setDailyPreviewModalImg(sub.image)}
-                                    />
-                                    <div className="space-y-1.5 text-xs">
-                                      <button
-                                        type="button"
+                                  <div className="bg-[#101010] p-2.5 rounded-2xl border border-[#262626]">
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                                      <img
+                                        src={sub.image}
+                                        alt="Proof"
+                                        className="w-32 h-32 sm:w-40 sm:h-40 object-cover rounded-xl border border-[#333] cursor-pointer hover:scale-102 transition-transform shadow-md"
                                         onClick={() => setDailyPreviewModalImg(sub.image)}
-                                        className="text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1 cursor-pointer"
-                                      >
-                                        <Eye size={13} />
-                                        <span>View High-Res Photo</span>
-                                      </button>
-                                      <a
-                                        href={sub.image}
-                                        download={`dora_task_${sub.id}.jpg`}
-                                        className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 cursor-pointer inline-flex"
-                                      >
-                                        <Download size={13} />
-                                        <span>Download Proof</span>
-                                      </a>
+                                      />
+                                      <div className="space-y-2 text-xs">
+                                        <button
+                                          type="button"
+                                          onClick={() => setDailyPreviewModalImg(sub.image)}
+                                          className="bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 cursor-pointer shadow"
+                                        >
+                                          <Eye size={13} />
+                                          <span>View High-Res Photo</span>
+                                        </button>
+                                        <a
+                                          href={sub.image}
+                                          download={`dora_task_${sub.id}.jpg`}
+                                          className="bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 cursor-pointer inline-flex shadow"
+                                        >
+                                          <Download size={13} />
+                                          <span>Download Proof</span>
+                                        </a>
+                                      </div>
                                     </div>
                                   </div>
                                 )}
@@ -8865,46 +8762,26 @@ export default function App() {
                                   <button
                                     type="button"
                                     onClick={() => handleApproveDailyTask(sub)}
-                                    className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-2 rounded-xl cursor-pointer active:scale-95 transition-all text-xs flex items-center justify-center gap-1.5 shadow"
+                                    className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-2.5 rounded-xl cursor-pointer active:scale-95 transition-all text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/50"
                                   >
-                                    <CheckCircle size={14} />
+                                    <CheckCircle size={15} />
                                     <span>Approve & Award +₹{Number(reward).toFixed(2)}</span>
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleRejectDailyTask(sub)}
-                                    className="bg-rose-950/60 hover:bg-rose-900 border border-rose-800 text-rose-300 font-bold py-2 px-3 rounded-xl cursor-pointer active:scale-95 transition-all text-xs flex items-center gap-1"
+                                    className="bg-rose-950/60 hover:bg-rose-900 border border-rose-800 text-rose-300 font-bold py-2.5 px-4 rounded-xl cursor-pointer active:scale-95 transition-all text-xs flex items-center gap-1.5 shadow"
                                   >
-                                    <RotateCcw size={13} />
-                                    <span>Retake</span>
+                                    <RotateCcw size={14} />
+                                    <span>Request Retake</span>
                                   </button>
                                 </div>
                               </div>
                             );
                           })}
                         </div>
-                      )}
-                    </div>
-
-                    {/* DIRECT SHORTCUT TO ADMIN DASHBOARD (PART 5) FOR SLOTS CONFIGURATION & HISTORY */}
-                    <div className="bg-[#121212] border border-[#262626] rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs mt-3">
-                      <div className="space-y-0.5">
-                        <div className="font-bold text-white flex items-center gap-1.5">
-                          <span>🛠️ Routine Slots Configuration & History</span>
-                        </div>
-                        <p className="text-[11px] text-gray-400">
-                          To add, edit or delete routine time slots and view report history, visit Admin Dashboard Part 5.
-                        </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setViewMode('admin_dash')}
-                        className="bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 px-3.5 py-2 rounded-xl font-bold transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shrink-0 active:scale-95 shadow"
-                      >
-                        <Briefcase size={14} />
-                        <span>Open Admin Dashboard (Part 5) →</span>
-                      </button>
-                    </div>
+                    )}
                   </div>
               </section>
             )}
