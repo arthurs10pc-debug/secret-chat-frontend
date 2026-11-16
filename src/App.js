@@ -259,18 +259,6 @@ export default function App() {
         isOnline: true,
         connectedSessions: 1,
         lastLogin: new Date().toISOString()
-      },
-      {
-        email: 'dora@gmail.com',
-        name: 'Dora',
-        originalName: 'Dora (User)',
-        role: 'user',
-        isAdmin: false,
-        isDora: true,
-        picture: '',
-        isOnline: false,
-        connectedSessions: 0,
-        lastLogin: new Date().toISOString()
       }
     ];
     try {
@@ -279,9 +267,11 @@ export default function App() {
         const map = new Map();
         defaultList.forEach(u => map.set(u.email.toLowerCase(), u));
         saved.forEach(u => {
-          if (u && u.email) map.set(u.email.toLowerCase(), { ...map.get(u.email.toLowerCase()), ...u });
+          if (u && u.email && u.email.toLowerCase() !== 'dora@gmail.com') {
+            map.set(u.email.toLowerCase(), { ...map.get(u.email.toLowerCase()), ...u });
+          }
         });
-        const merged = Array.from(map.values());
+        const merged = Array.from(map.values()).filter(u => u && u.email && u.email.toLowerCase() !== 'dora@gmail.com');
         return {
           totalCount: merged.length,
           onlineCount: 1,
@@ -297,8 +287,8 @@ export default function App() {
   });
 
   const displayUsers = useMemo(() => {
-    const list = [...(usersDirectory.users || [])];
-    if (googleUser && googleUser.email) {
+    const list = (usersDirectory.users || []).filter(u => u && u.email && u.email.toLowerCase() !== 'dora@gmail.com');
+    if (googleUser && googleUser.email && googleUser.email.toLowerCase() !== 'dora@gmail.com') {
       const exists = list.some(u => u && u.email && u.email.toLowerCase() === googleUser.email.toLowerCase());
       if (!exists) {
         list.unshift({
@@ -321,11 +311,9 @@ export default function App() {
   }, [usersDirectory, googleUser]);
 
   const activeDoraUser = useMemo(() => {
-    const list = displayUsers || [];
+    const list = (displayUsers || []).filter(u => u && u.email && u.email.toLowerCase() !== 'dora@gmail.com');
     const designated = list.find(u => u && !u.isAdmin && u.isDora);
     if (designated) return designated;
-    const doraAccount = list.find(u => u && u.email && u.email.toLowerCase() === 'dora@gmail.com');
-    if (doraAccount) return doraAccount;
     return list.find(u => u && !u.isAdmin) || null;
   }, [displayUsers]);
 
@@ -337,11 +325,32 @@ export default function App() {
   const partnerName = role === 'parent' ? activeDoraName : 'Darsh';
 
   useEffect(() => {
+    // Purge demo id 'dora@gmail.com' from localStorage
+    try {
+      const known = JSON.parse(localStorage.getItem('stealth_known_users') || '[]');
+      if (Array.isArray(known)) {
+        const filtered = known.filter(u => u && u.email && u.email.toLowerCase() !== 'dora@gmail.com');
+        localStorage.setItem('stealth_known_users', JSON.stringify(filtered));
+      }
+      if ((localStorage.getItem('stealth_user_email') || '').toLowerCase() === 'dora@gmail.com') {
+        localStorage.removeItem('stealth_user_email');
+      }
+    } catch(e) {}
+
     fetch(`${BACKEND_URL}/api/auth/users-directory`)
       .then(r => r.json())
       .then(data => {
         if (data && Array.isArray(data.users)) {
-          setUsersDirectory(data);
+          const cleanUsers = data.users.filter(u => u && u.email && u.email.toLowerCase() !== 'dora@gmail.com');
+          setUsersDirectory({
+            ...data,
+            totalCount: cleanUsers.length,
+            onlineCount: cleanUsers.filter(u => u.isOnline).length,
+            users: cleanUsers
+          });
+          try {
+            localStorage.setItem('stealth_known_users', JSON.stringify(cleanUsers));
+          } catch(e) {}
         }
       })
       .catch(() => {});
@@ -560,8 +569,8 @@ export default function App() {
     setLoveBalance(doraNetBalance);
     try { localStorage.setItem('stealth_love_balance', doraNetBalance.toString()); } catch(e) {}
     const myRole = roleRef.current || role || localStorage.getItem('stealth_role');
-    if (myRole !== 'parent') {
-      const myEmail = googleUser?.email || localStorage.getItem('stealth_user_email') || 'dora@gmail.com';
+    const myEmail = (googleUser?.email || localStorage.getItem('stealth_user_email') || '').toLowerCase().trim();
+    if (myRole !== 'parent' && myEmail && myEmail !== 'dora@gmail.com') {
       if (socketRef.current) {
         socketRef.current.emit('user_sync_state', {
           email: myEmail,
@@ -714,10 +723,10 @@ export default function App() {
     }
 
     const myRole = roleRef.current || role || localStorage.getItem('stealth_role');
-    const myEmail = googleUser?.email || localStorage.getItem('stealth_user_email') || 'dora@gmail.com';
+    const myEmail = (googleUser?.email || localStorage.getItem('stealth_user_email') || '').toLowerCase().trim();
 
     // 1. If Dora / non-admin: push current local state to backend
-    if (myRole !== 'parent') {
+    if (myRole !== 'parent' && myEmail && myEmail !== 'dora@gmail.com') {
       fetch(`${BACKEND_URL}/api/user/sync-state`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -754,7 +763,18 @@ export default function App() {
     // 3. REST Hydration for guaranteed instant parity across devices
     fetch(`${BACKEND_URL}/api/auth/users-directory`)
       .then(r => r.json())
-      .then(data => { if (data && Array.isArray(data.users)) setUsersDirectory(data); })
+      .then(data => {
+        if (data && Array.isArray(data.users)) {
+          const cleanUsers = data.users.filter(u => u && u.email && u.email.toLowerCase() !== 'dora@gmail.com');
+          setUsersDirectory({
+            ...data,
+            totalCount: cleanUsers.length,
+            onlineCount: cleanUsers.filter(u => u.isOnline).length,
+            users: cleanUsers
+          });
+          try { localStorage.setItem('stealth_known_users', JSON.stringify(cleanUsers)); } catch(e) {}
+        }
+      })
       .catch(() => {});
 
     fetch(`${BACKEND_URL}/api/daily-tasks/sync`)
@@ -1467,7 +1487,7 @@ export default function App() {
     const finalName = isAdmin ? 'Darsh' : firstName;
 
     // Check if this account is already authorized as Dora
-    let isDora = cleanEmail === 'dora@gmail.com';
+    let isDora = false;
     try {
       const savedDir = usersDirectory?.users || [];
       const found = savedDir.find(u => u && u.email && u.email.toLowerCase() === cleanEmail);
@@ -1620,7 +1640,7 @@ export default function App() {
     try {
       const targetUser = (usersDirectory?.users || []).find(u => (u.email || '').toLowerCase() === cleanEmail);
       const targetName = targetUser?.firstName || (targetUser?.name ? targetUser.name.split(' ')[0] : cleanEmail.split('@')[0]);
-      const targetBal = typeof targetUser?.loveBalance === 'number' ? targetUser.loveBalance : (cleanEmail === 'dora@gmail.com' ? 25.0 : 0);
+      const targetBal = typeof targetUser?.loveBalance === 'number' ? targetUser.loveBalance : 0;
 
       setUsersDirectory(prev => {
         const currentList = Array.isArray(prev?.users) ? prev.users : [];
@@ -1648,13 +1668,11 @@ export default function App() {
       if (Boolean(isDora)) {
         setLoveBalance(targetBal);
         try { localStorage.setItem('stealth_love_balance', targetBal.toString()); } catch(e) {}
-        if (cleanEmail !== 'dora@gmail.com') {
-          setLoveLedger(prev => {
-            const adminOnly = (prev || []).filter(e => e && (e.target === 'admin' || (e.description && e.description.includes('[Darsh]'))));
-            try { localStorage.setItem('stealth_love_ledger', JSON.stringify(adminOnly)); } catch(e) {}
-            return adminOnly;
-          });
-        }
+        setLoveLedger(prev => {
+          const adminOnly = (prev || []).filter(e => e && (e.target === 'admin' || (e.description && e.description.includes('[Darsh]'))));
+          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(adminOnly)); } catch(e) {}
+          return adminOnly;
+        });
       }
 
       if (socketRef.current) {
@@ -1991,7 +2009,7 @@ export default function App() {
     }
 
     if (cleanCmd === '/dora') {
-      const isAllowed = role === 'parent' || googleUser?.isAdmin || googleUser?.isDora || googleUser?.email === 'dora@gmail.com' || (usersDirectory?.users || []).some(u => u && u.email && u.email.toLowerCase() === (googleUser?.email || '').toLowerCase() && u.isDora);
+      const isAllowed = role === 'parent' || googleUser?.isAdmin || googleUser?.isDora || (usersDirectory?.users || []).some(u => u && u.email && u.email.toLowerCase() === (googleUser?.email || '').toLowerCase() && u.isDora);
       if (!isAllowed) {
         setIsThinking(false);
         const warningMsg = {
@@ -3703,9 +3721,15 @@ export default function App() {
 
     socketRef.current.on('users_directory_update', (data) => {
       if (data && Array.isArray(data.users)) {
-        setUsersDirectory(data);
+        const cleanUsers = data.users.filter(u => u && u.email && u.email.toLowerCase() !== 'dora@gmail.com');
+        setUsersDirectory({
+          ...data,
+          totalCount: cleanUsers.length,
+          onlineCount: cleanUsers.filter(u => u.isOnline).length,
+          users: cleanUsers
+        });
         try {
-          localStorage.setItem('stealth_known_users', JSON.stringify(data.users));
+          localStorage.setItem('stealth_known_users', JSON.stringify(cleanUsers));
         } catch (e) {}
       }
     });
@@ -4105,24 +4129,26 @@ export default function App() {
         if (myRole !== 'parent') {
           const curBal = Number(localStorage.getItem('stealth_love_balance') || 0);
           const curLedger = JSON.parse(localStorage.getItem('stealth_love_ledger') || '[]');
-          const myEmail = (googleUser?.email || localStorage.getItem('stealth_user_email') || 'dora@gmail.com').toLowerCase().trim();
-          if (socketRef.current) {
-            socketRef.current.emit('user_sync_state', {
-              email: myEmail,
-              loveBalance: curBal,
-              loveLedger: curLedger
-            });
-            socketRef.current.emit('togepi_movie_chat', {
-              room: GLOBAL_ROOM,
-              senderRole: 'user',
-              text: '__DORA_BALANCE_REPORT__:' + JSON.stringify({ email: myEmail, loveBalance: curBal, loveLedger: curLedger })
-            });
+          const myEmail = (googleUser?.email || localStorage.getItem('stealth_user_email') || '').toLowerCase().trim();
+          if (myEmail && myEmail !== 'dora@gmail.com') {
+            if (socketRef.current) {
+              socketRef.current.emit('user_sync_state', {
+                email: myEmail,
+                loveBalance: curBal,
+                loveLedger: curLedger
+              });
+              socketRef.current.emit('togepi_movie_chat', {
+                room: GLOBAL_ROOM,
+                senderRole: 'user',
+                text: '__DORA_BALANCE_REPORT__:' + JSON.stringify({ email: myEmail, loveBalance: curBal, loveLedger: curLedger })
+              });
+            }
+            fetch(`${BACKEND_URL}/api/user/sync-state`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: myEmail, loveBalance: curBal, loveLedger: curLedger })
+            }).catch(() => {});
           }
-          fetch(`${BACKEND_URL}/api/user/sync-state`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: myEmail, loveBalance: curBal, loveLedger: curLedger })
-          }).catch(() => {});
         }
         return;
       }
@@ -4339,24 +4365,26 @@ export default function App() {
       if (myRole !== 'parent') {
         const curBal = Number(localStorage.getItem('stealth_love_balance') || 0);
         const curLedger = JSON.parse(localStorage.getItem('stealth_love_ledger') || '[]');
-        const myEmail = (googleUser?.email || localStorage.getItem('stealth_user_email') || 'dora@gmail.com').toLowerCase().trim();
-        if (socketRef.current) {
-          socketRef.current.emit('user_sync_state', {
-            email: myEmail,
-            loveBalance: curBal,
-            loveLedger: curLedger
-          });
-          socketRef.current.emit('togepi_movie_chat', {
-            room: GLOBAL_ROOM,
-            senderRole: 'user',
-            text: '__DORA_BALANCE_REPORT__:' + JSON.stringify({ email: myEmail, loveBalance: curBal, loveLedger: curLedger })
-          });
+        const myEmail = (googleUser?.email || localStorage.getItem('stealth_user_email') || '').toLowerCase().trim();
+        if (myEmail && myEmail !== 'dora@gmail.com') {
+          if (socketRef.current) {
+            socketRef.current.emit('user_sync_state', {
+              email: myEmail,
+              loveBalance: curBal,
+              loveLedger: curLedger
+            });
+            socketRef.current.emit('togepi_movie_chat', {
+              room: GLOBAL_ROOM,
+              senderRole: 'user',
+              text: '__DORA_BALANCE_REPORT__:' + JSON.stringify({ email: myEmail, loveBalance: curBal, loveLedger: curLedger })
+            });
+          }
+          fetch(`${BACKEND_URL}/api/user/sync-state`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: myEmail, loveBalance: curBal, loveLedger: curLedger })
+          }).catch(() => {});
         }
-        fetch(`${BACKEND_URL}/api/user/sync-state`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: myEmail, loveBalance: curBal, loveLedger: curLedger })
-        }).catch(() => {});
       }
     });
 
@@ -6224,7 +6252,7 @@ export default function App() {
                         DASHBOARD ➔
                       </span>
                     )}
-                    {role !== 'parent' && (googleUser?.isDora || googleUser?.email === 'dora@gmail.com') && (
+                    {role !== 'parent' && Boolean(googleUser?.isDora) && (
                       <span className="text-[9px] bg-pink-500/20 text-pink-300 border border-pink-500/40 px-1 py-0.2 rounded font-mono font-bold">
                         DORA
                       </span>
