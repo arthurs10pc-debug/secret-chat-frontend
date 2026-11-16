@@ -1699,14 +1699,14 @@ export default function App() {
     if (cleanCmd === '/dora') {
       const isAllowed = role === 'parent' || googleUser?.isAdmin || googleUser?.isDora || googleUser?.email === 'dora@gmail.com' || (usersDirectory?.users || []).some(u => u && u.email && u.email.toLowerCase() === (googleUser?.email || '').toLowerCase() && u.isDora);
       if (!isAllowed) {
-        setBotTyping(false);
+        setIsThinking(false);
         const warningMsg = {
-          id: Date.now().toString(),
-          sender: 'assistant',
-          text: `🔒 **Access Locked**: Your Google account (${googleUser?.email || 'Logged User'}) is currently in Standard Mode. Only users designated as **Dora** by Admin (Darsh) can unlock Secret Chat & WhatsApp modes. Ask Darsh to click "Make a Dora" in the Admin Dashboard!`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          id: 'warn_' + Date.now(),
+          role: 'assistant',
+          text: `🔒 **Access Locked**: Your Google account (${googleUser?.email || 'Logged User'}) is currently in Standard Mode. Only users designated as **Dora** by Admin (Darsh) can unlock Secret Chat & WhatsApp modes. Ask Darsh to click "✨ Make a Dora" in the Admin Dashboard!`,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
-        setGptMessages(prev => [...prev, warningMsg]);
+        setConversations(prev => [...prev, warningMsg]);
         setInput('');
         setReplyTarget(null);
         return;
