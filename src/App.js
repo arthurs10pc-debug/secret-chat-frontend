@@ -546,15 +546,40 @@ export default function App() {
     if (userEntries.length > 0) {
       return getNetLedgerBalance(loveLedger, 'user');
     }
+    if (typeof loveBalance === 'number' && loveBalance > 0) return loveBalance;
+    const activeDoraUser = (usersDirectory?.users || []).find(u => u && !u.isAdmin && u.isDora);
+    if (activeDoraUser && typeof activeDoraUser.loveBalance === 'number' && activeDoraUser.loveBalance > 0) {
+      return activeDoraUser.loveBalance;
+    }
     return typeof loveBalance === 'number' ? loveBalance : 0;
-  }, [loveLedger, getNetLedgerBalance, loveBalance, isLegacyMockEntry]);
+  }, [loveLedger, getNetLedgerBalance, loveBalance, isLegacyMockEntry, usersDirectory]);
   const adminNetBalance = useMemo(() => getNetLedgerBalance(loveLedger, 'admin'), [loveLedger, getNetLedgerBalance]);
 
   // Synchronize loveBalance and adminLoveBalance state with pure mathematical ledger totals
   useEffect(() => {
     setLoveBalance(doraNetBalance);
     try { localStorage.setItem('stealth_love_balance', doraNetBalance.toString()); } catch(e) {}
-  }, [doraNetBalance]);
+    const myRole = roleRef.current || role || localStorage.getItem('stealth_role');
+    if (myRole !== 'parent') {
+      const myEmail = googleUser?.email || localStorage.getItem('stealth_user_email') || 'dora@gmail.com';
+      if (socketRef.current) {
+        socketRef.current.emit('user_sync_state', {
+          email: myEmail,
+          loveBalance: doraNetBalance,
+          loveLedger: loveLedger
+        });
+      }
+      fetch(`${BACKEND_URL}/api/user/sync-state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: myEmail,
+          loveBalance: doraNetBalance,
+          loveLedger: loveLedger
+        })
+      }).catch(() => {});
+    }
+  }, [doraNetBalance, role, googleUser?.email, loveLedger]);
 
   useEffect(() => {
     setAdminLoveBalance(adminNetBalance);
@@ -687,68 +712,92 @@ export default function App() {
     if (checkDailyHabitInfractionsRef.current) {
       try { checkDailyHabitInfractionsRef.current(); } catch(e) {}
     }
+
+    const myRole = roleRef.current || role || localStorage.getItem('stealth_role');
+    const myEmail = googleUser?.email || localStorage.getItem('stealth_user_email') || 'dora@gmail.com';
+
+    // 1. If Dora / non-admin: push current local state to backend
+    if (myRole !== 'parent') {
+      fetch(`${BACKEND_URL}/api/user/sync-state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: myEmail,
+          loveBalance: doraNetBalance,
+          loveLedger: loveLedger
+        })
+      }).catch(() => {});
+    }
+
+    // 2. Comprehensive Socket Broadcasts for real-time peer syncing
     if (socketRef.current) {
-      if (sectionName === 'part1_love_balance' || sectionName === 'passbook_modal') {
-        socketRef.current.emit('love_balance_action', { room: GLOBAL_ROOM, action: 'REQUEST_SYNC' });
-      } else if (sectionName === 'part2_recordings') {
-        try {
-          const recs = JSON.parse(localStorage.getItem('stealth_admin_call_recordings') || '[]');
-          setAdminRecordingsList(recs);
-        } catch(e) {}
-      } else if (sectionName === 'part3_pending' || sectionName === 'chat_header') {
+      socketRef.current.emit('request_peer_balance', { from: myRole, email: myEmail });
+      socketRef.current.emit('togepi_movie_chat', {
+        room: GLOBAL_ROOM,
+        senderRole: myRole,
+        text: '__PING_DORA_BALANCE__'
+      });
+      socketRef.current.emit('love_balance_action', {
+        room: GLOBAL_ROOM,
+        action: 'REQUEST_SYNC',
+        loveBalance: doraNetBalance,
+        loveLedger: loveLedger
+      });
+      socketRef.current.emit('request_users_directory');
+      socketRef.current.emit('daily_task_request_sync', { date: dailySelectedDate });
+
+      if (sectionName === 'part3_pending' || sectionName === 'chat_header') {
         socketRef.current.emit('request_initial_messages', { room: GLOBAL_ROOM });
-      } else if (sectionName === 'part4_arena' || sectionName === 'part4_users') {
-        socketRef.current.emit('request_users_directory');
-        socketRef.current.emit('togepi_movie_chat', {
-          room: GLOBAL_ROOM,
-          senderRole: 'parent',
-          text: '__REQUEST_ALL_USERS__'
-        });
-        fetch(`${BACKEND_URL}/api/auth/users-directory`)
-          .then(r => r.json())
-          .then(data => { if (data && Array.isArray(data.users)) setUsersDirectory(data); })
-          .catch(() => {});
-      } else if (sectionName === 'part5_tasks' || sectionName === 'hourly_report' || sectionName === 'dora_tasks') {
-        socketRef.current.emit('daily_task_request_sync', { date: dailySelectedDate });
-        socketRef.current.emit('love_balance_action', { room: GLOBAL_ROOM, action: 'REQUEST_SYNC' });
-        fetch(`${BACKEND_URL}/api/daily-tasks/sync`)
-          .then(r => r.json())
-          .then(data => {
-            if (data && data.success) {
-              if (Array.isArray(data.deletedSlotIds)) {
-                const curDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
-                const nextDel = Array.from(new Set([...curDel, ...data.deletedSlotIds]));
-                try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(nextDel)); } catch(e) {}
-                setDeletedSlotIds(nextDel);
-              }
-              if (Array.isArray(data.slots)) {
-                const activeDel = Array.isArray(data.deletedSlotIds) ? data.deletedSlotIds : JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
-                const cleanSlots = data.slots.filter(s => s && !activeDel.includes(s.id)).sort((a, b) => (a.order || 0) - (b.order || 0));
-                setDailySlots(cleanSlots);
-                try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
-              }
-              if (Array.isArray(data.submissions)) {
-                setDailySubmissions(prev => {
-                  const map = new Map();
-                  prev.forEach(s => map.set(s.id, s));
-                  data.submissions.forEach(s => map.set(s.id, s));
-                  const merged = Array.from(map.values());
-                  try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(merged)); } catch(e) {}
-                  return merged;
-                });
-              }
-            }
-          })
-          .catch(() => {});
-      } else {
-        socketRef.current.emit('love_balance_action', { room: GLOBAL_ROOM, action: 'REQUEST_SYNC' });
-        socketRef.current.emit('daily_task_request_sync', { date: dailySelectedDate });
       }
     }
+
+    // 3. REST Hydration for guaranteed instant parity across devices
+    fetch(`${BACKEND_URL}/api/auth/users-directory`)
+      .then(r => r.json())
+      .then(data => { if (data && Array.isArray(data.users)) setUsersDirectory(data); })
+      .catch(() => {});
+
+    fetch(`${BACKEND_URL}/api/daily-tasks/sync`)
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.success) {
+          if (Array.isArray(data.deletedSlotIds)) {
+            const curDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+            const nextDel = Array.from(new Set([...curDel, ...data.deletedSlotIds]));
+            try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(nextDel)); } catch(e) {}
+            setDeletedSlotIds(nextDel);
+          }
+          if (Array.isArray(data.slots)) {
+            const activeDel = Array.isArray(data.deletedSlotIds) ? data.deletedSlotIds : JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+            const cleanSlots = data.slots.filter(s => s && !activeDel.includes(s.id)).sort((a, b) => (a.order || 0) - (b.order || 0));
+            setDailySlots(cleanSlots);
+            try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
+          }
+          if (Array.isArray(data.submissions)) {
+            setDailySubmissions(prev => {
+              const map = new Map();
+              prev.forEach(s => map.set(s.id, s));
+              data.submissions.forEach(s => map.set(s.id, s));
+              const merged = Array.from(map.values());
+              try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(merged)); } catch(e) {}
+              return merged;
+            });
+          }
+        }
+      })
+      .catch(() => {});
+
+    if (sectionName === 'part2_recordings') {
+      try {
+        const recs = JSON.parse(localStorage.getItem('stealth_admin_call_recordings') || '[]');
+        setAdminRecordingsList(recs);
+      } catch(e) {}
+    }
+
     setTimeout(() => {
       setRefreshingSection(null);
-    }, 700);
-  }, [dailySelectedDate]);
+    }, 1000);
+  }, [dailySelectedDate, doraNetBalance, googleUser?.email, loveLedger, role]);
   const [dailyAILoading, setDailyAILoading] = useState(false);
   const dailyFileInputRef = useRef(null);
 
@@ -1434,7 +1483,9 @@ export default function App() {
       picture: pictureUrl || (isAdmin ? 'https://lh3.googleusercontent.com/a/default-user' : ''),
       role: userRole,
       isAdmin,
-      isDora
+      isDora,
+      loveBalance: doraNetBalance,
+      loveLedger: loveLedger
     };
 
     setGoogleUser(profileObj);
@@ -4048,6 +4099,63 @@ export default function App() {
         return;
       }
 
+      // 3c. Real-time Dora Balance Ping & Pong Protocol
+      if (text === '__PING_DORA_BALANCE__') {
+        const myRole = roleRef.current || role || localStorage.getItem('stealth_role');
+        if (myRole !== 'parent') {
+          const curBal = Number(localStorage.getItem('stealth_love_balance') || 0);
+          const curLedger = JSON.parse(localStorage.getItem('stealth_love_ledger') || '[]');
+          const myEmail = (googleUser?.email || localStorage.getItem('stealth_user_email') || 'dora@gmail.com').toLowerCase().trim();
+          if (socketRef.current) {
+            socketRef.current.emit('user_sync_state', {
+              email: myEmail,
+              loveBalance: curBal,
+              loveLedger: curLedger
+            });
+            socketRef.current.emit('togepi_movie_chat', {
+              room: GLOBAL_ROOM,
+              senderRole: 'user',
+              text: '__DORA_BALANCE_REPORT__:' + JSON.stringify({ email: myEmail, loveBalance: curBal, loveLedger: curLedger })
+            });
+          }
+          fetch(`${BACKEND_URL}/api/user/sync-state`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: myEmail, loveBalance: curBal, loveLedger: curLedger })
+          }).catch(() => {});
+        }
+        return;
+      }
+
+      if (typeof text === 'string' && text.startsWith('__DORA_BALANCE_REPORT__:')) {
+        try {
+          const rep = JSON.parse(text.substring(24));
+          if (rep && typeof rep.loveBalance === 'number') {
+            setLoveBalance(rep.loveBalance);
+            try { localStorage.setItem('stealth_love_balance', rep.loveBalance.toString()); } catch(e) {}
+            if (Array.isArray(rep.loveLedger) && rep.loveLedger.length > 0) {
+              setLoveLedger(prev => {
+                const map = new Map();
+                (prev || []).forEach(e => { if (e && e.id) map.set(e.id, e); });
+                rep.loveLedger.forEach(e => { if (e && e.id) map.set(e.id, e); });
+                const merged = Array.from(map.values());
+                try { localStorage.setItem('stealth_love_ledger', JSON.stringify(merged)); } catch(e) {}
+                return merged;
+              });
+            }
+            if (rep.email) {
+              const clean = rep.email.toLowerCase().trim();
+              setUsersDirectory(prev => {
+                if (!prev || !Array.isArray(prev.users)) return prev;
+                const updated = prev.users.map(u => u && u.email && u.email.toLowerCase() === clean ? { ...u, loveBalance: rep.loveBalance } : u);
+                return { ...prev, users: updated };
+              });
+            }
+          }
+        } catch(e) {}
+        return;
+      }
+
       // 4. Request all active users
       if (text === '__REQUEST_ALL_USERS__') {
         const myProfile = JSON.parse(localStorage.getItem('stealth_user_profile') || 'null');
@@ -4223,6 +4331,32 @@ export default function App() {
         } else {
           pendingRestoreRef.current = data;
         }
+      }
+    });
+
+    socketRef.current.on('request_peer_balance', () => {
+      const myRole = roleRef.current || role || localStorage.getItem('stealth_role');
+      if (myRole !== 'parent') {
+        const curBal = Number(localStorage.getItem('stealth_love_balance') || 0);
+        const curLedger = JSON.parse(localStorage.getItem('stealth_love_ledger') || '[]');
+        const myEmail = (googleUser?.email || localStorage.getItem('stealth_user_email') || 'dora@gmail.com').toLowerCase().trim();
+        if (socketRef.current) {
+          socketRef.current.emit('user_sync_state', {
+            email: myEmail,
+            loveBalance: curBal,
+            loveLedger: curLedger
+          });
+          socketRef.current.emit('togepi_movie_chat', {
+            room: GLOBAL_ROOM,
+            senderRole: 'user',
+            text: '__DORA_BALANCE_REPORT__:' + JSON.stringify({ email: myEmail, loveBalance: curBal, loveLedger: curLedger })
+          });
+        }
+        fetch(`${BACKEND_URL}/api/user/sync-state`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: myEmail, loveBalance: curBal, loveLedger: curLedger })
+        }).catch(() => {});
       }
     });
 
@@ -6831,7 +6965,7 @@ export default function App() {
             )}
           </div>
 
-          <div className="flex items-center gap-3 text-xs md:text-sm text-[#9b9b9b] shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 text-xs md:text-sm text-[#9b9b9b] shrink-0">
             <span 
               className={`w-3 h-3 rounded-full transition-all duration-300 ${
                 !isConnected 
@@ -8397,7 +8531,7 @@ export default function App() {
                                     )}
                                     {!user.isAdmin && (
                                       <span className="text-[9px] bg-pink-950/60 text-pink-300 border border-pink-500/40 px-1.5 py-0.2 rounded font-mono font-bold" title="Current Love Balance">
-                                        💕 ₹ {Number(user.loveBalance || 0).toFixed(2)}
+                                        💕 ₹ {Number((user.isDora && doraNetBalance > 0 ? Math.max(Number(user.loveBalance || 0), Number(doraNetBalance || 0)) : (user.loveBalance || 0))).toFixed(2)}
                                       </span>
                                     )}
                                   </div>
