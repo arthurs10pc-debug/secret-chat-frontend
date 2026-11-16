@@ -8619,299 +8619,33 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* PART 5: DAILY PROJECTS & HOURLY TASK MANAGER (FOR DARSH TO CHECK & APPROVE) */}
-                  <div id="admin-part-5-daily-tasks" className="bg-[#121212] border-2 border-emerald-500/40 hover:border-emerald-500/60 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-2xl space-y-3 lg:col-span-2 text-left font-sans scroll-mt-4">
-                    {/* PART 5 HEADER */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#222] pb-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-base">
-                          <Briefcase size={16} />
-                        </div>
-                        <div>
-                          <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
-                            <span>Part 5: Daily Projects & Routine Tasks</span>
-                            <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.2 rounded font-mono">
-                              HOURLY ENGINE
-                            </span>
-                          </h3>
-                          <p className="text-[10px] text-gray-400">Review {activeDoraName}'s submissions, download high-res proof & customize routine slots</p>
-                        </div>
+                  {/* PROJECT SUBMISSIONS & HOURLY TASKS QUICK ACCESS LINK */}
+                  <div className="lg:col-span-2 bg-[#121212] border border-[#2a2a2a] hover:border-emerald-500/50 p-3 sm:p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 transition-all shadow-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-base shrink-0">
+                        <Briefcase size={17} />
                       </div>
-
-                      {/* TAB SWITCHER & DATE PICKER */}
-                      <div className="flex items-center gap-2 self-end sm:self-auto">
-                        <div className="flex bg-[#181818] p-0.5 rounded-xl border border-[#2a2a2a] text-xs font-bold">
-                          <button
-                            type="button"
-                            onClick={() => setDailyAdminTab('review')}
-                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
-                              dailyAdminTab === 'review' ? 'bg-emerald-600 text-white shadow' : 'text-gray-400 hover:text-white'
-                            }`}
-                          >
-                            <span>Review Tasks</span>
-                            {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'PENDING').length > 0 && (
-                              <span className="bg-amber-400 text-black text-[9px] font-black px-1.5 py-0.2 rounded-full animate-bounce">
-                                {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'PENDING').length}
-                              </span>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDailyAdminTab('slots')}
-                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                              dailyAdminTab === 'slots' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'
-                            }`}
-                          >
-                            ⚙️ Slot Manager
-                          </button>
+                      <div className="text-left">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-xs sm:text-sm font-bold text-white">Daily Projects & Hourly Routine Engine</h4>
+                          <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.2 rounded font-mono font-bold">
+                            DEDICATED SECTION
+                          </span>
                         </div>
-
-                        <input
-                          type="date"
-                          value={dailySelectedDate}
-                          onChange={(e) => setDailySelectedDate(e.target.value)}
-                          className="bg-[#181818] border border-[#333] text-white text-xs px-2 py-1 rounded-xl outline-none font-mono"
-                          title="Select date to review or download historical data"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleExportDayPdf(dailySelectedDate)}
-                          className="bg-[#181818] hover:bg-[#252525] border border-[#333] hover:border-emerald-500/50 text-gray-200 hover:text-white px-2 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-sm"
-                          title={`Download Full Day Report PDF for ${dailySelectedDate}`}
-                        >
-                          <FileDown size={13} className="text-emerald-400" />
-                          <span className="hidden sm:inline">Export PDF</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleManualSectionRefresh('part5_tasks')}
-                          className="w-7 h-7 rounded-full bg-[#1e1e1e] hover:bg-emerald-600/30 border border-[#333] hover:border-emerald-500 text-gray-400 hover:text-emerald-400 flex items-center justify-center transition-all cursor-pointer active:scale-90"
-                          title="Refresh Routine Tasks & Slots"
-                        >
-                          <RefreshCw size={12} className={refreshingSection === 'part5_tasks' ? 'animate-spin text-emerald-400' : ''} />
-                        </button>
+                        <p className="text-[11px] text-gray-400">Review {activeDoraName}'s task proofs, download day reports, and manage routine slots in dedicated screen</p>
                       </div>
                     </div>
-
-                    {/* REVIEW TAB */}
-                    {dailyAdminTab === 'review' && (
-                      <div className="space-y-3">
-                        {/* SUMMARY CARDS (DAY-WISE) */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
-                          <div className="bg-[#181818] border border-[#262626] p-2 rounded-xl">
-                            <span className="text-[10px] text-gray-400">Total Slots</span>
-                            <div className="text-sm font-bold text-white font-mono">{dailySlots.filter(s => s.isActive).length}</div>
-                          </div>
-                          <div className="bg-[#181818] border border-amber-500/30 p-2 rounded-xl">
-                            <span className="text-[10px] text-amber-300">Pending Review</span>
-                            <div className="text-sm font-bold text-amber-400 font-mono">
-                              {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'PENDING').length}
-                            </div>
-                          </div>
-                          <div className="bg-[#181818] border border-emerald-500/30 p-2 rounded-xl">
-                            <span className="text-[10px] text-emerald-300">
-                              {dailySelectedDate === getLocalDateString() ? 'Approved Today' : `Approved (${dailySelectedDate})`}
-                            </span>
-                            <div className="text-sm font-bold text-emerald-400 font-mono">
-                              {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'APPROVED').length}
-                            </div>
-                          </div>
-                          <div className="bg-[#181818] border border-blue-500/30 p-2 rounded-xl">
-                            <span className="text-[10px] text-blue-300">Points Awarded</span>
-                            <div className="text-sm font-bold text-blue-400 font-mono">
-                              ₹ {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'APPROVED').reduce((acc, curr) => acc + (curr.pointsAwarded || 0), 0).toFixed(2)}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* SUBMISSIONS LIST */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                          {dailySlots.filter(s => s.isActive).map((slot) => {
-                            const sub = getSlotSubmission(slot.id, dailySelectedDate);
-                            const isApproved = sub && sub.status === 'APPROVED';
-                            const isPending = sub && sub.status === 'PENDING';
-                            const isRejected = sub && sub.status === 'REJECTED';
-
-                            return (
-                              <div
-                                key={slot.id}
-                                className={`p-3 rounded-2xl border transition-all ${
-                                  isPending 
-                                    ? 'bg-[#1a1813] border-amber-500/60 shadow-lg' 
-                                    : isApproved 
-                                      ? 'bg-[#121815] border-emerald-500/40' 
-                                      : 'bg-[#161616] border-[#262626]'
-                                }`}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div>
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.2 rounded font-mono font-bold">
-                                        {slot.timeRange}
-                                      </span>
-                                      <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.2 rounded">
-                                        {slot.tag}
-                                      </span>
-                                    </div>
-                                    <h4 className="text-xs font-bold text-white mt-1">{slot.title}</h4>
-                                  </div>
-                                  <span className="text-xs font-bold text-emerald-400 font-mono shrink-0">
-                                    +₹ {Number(slot.rewardPoints || 0).toFixed(2)}
-                                  </span>
-                                </div>
-
-                                {sub ? (
-                                  <div className="mt-2.5 space-y-2 pt-2 border-t border-[#222]">
-                                    {sub.note && (
-                                      <p className="text-xs text-gray-300 italic bg-[#101010] p-2 rounded-xl border border-[#242424]">
-                                        "{sub.note}"
-                                      </p>
-                                    )}
-
-                                    {sub.image && (
-                                      <div className="flex items-center gap-2.5">
-                                        <img
-                                          src={sub.image}
-                                          alt="Proof"
-                                          className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-xl border border-[#333] cursor-pointer hover:scale-105 transition-transform shrink-0"
-                                          onClick={() => setDailyPreviewModalImg(sub.image)}
-                                        />
-                                        <div className="space-y-1 text-[11px] flex-1 min-w-0">
-                                          <button
-                                            type="button"
-                                            onClick={() => setDailyPreviewModalImg(sub.image)}
-                                            className="text-blue-400 hover:text-blue-300 flex items-center gap-1 font-semibold cursor-pointer"
-                                          >
-                                            <Eye size={12} />
-                                            <span>Full Preview</span>
-                                          </button>
-                                          <a
-                                            href={sub.image}
-                                            download={`dora_task_${dailySelectedDate}_${slot.id}.jpg`}
-                                            className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-semibold cursor-pointer"
-                                          >
-                                            <Download size={12} />
-                                            <span>Download Photo</span>
-                                          </a>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* ACTION BUTTONS FOR DARSH */}
-                                    <div className="pt-1 flex items-center gap-2">
-                                      {isPending ? (
-                                        <>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleApproveDailyTask(sub)}
-                                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 px-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all text-center flex items-center justify-center gap-1"
-                                          >
-                                            <Check size={13} />
-                                            <span>Approve & Award +₹{slot.rewardPoints}</span>
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleRejectDailyTask(sub)}
-                                            className="bg-rose-950/60 hover:bg-rose-900/80 border border-rose-500/40 text-rose-300 text-xs font-semibold py-1.5 px-2.5 rounded-xl cursor-pointer active:scale-95"
-                                          >
-                                            Retake
-                                          </button>
-                                        </>
-                                      ) : isApproved ? (
-                                        <div className="w-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-xs font-bold py-1 px-2 rounded-xl text-center flex items-center justify-center gap-1">
-                                          <span>✓ Approved & Awarded (+₹{sub.pointsAwarded})</span>
-                                        </div>
-                                      ) : isRejected ? (
-                                        <div className="w-full bg-rose-950/60 border border-rose-500/30 text-rose-300 text-xs font-bold py-1 px-2 rounded-xl text-center">
-                                          <span>Retake Requested</span>
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="mt-2 pt-2 border-t border-[#222] text-[10px] text-gray-500 italic">
-                                    No submission from {activeDoraName} yet for this time slot.
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* SLOTS MANAGER TAB (DYNAMIC ADD / EDIT / DELETE) */}
-                    {dailyAdminTab === 'slots' && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-gray-300">
-                            Configure Hourly Routine Slots:
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingSlotId(null);
-                              setSlotFormTitle('');
-                              setSlotFormTimeRange('');
-                              setSlotFormTag('Task');
-                              setSlotFormPoints('2.0');
-                              setShowAddSlotModal(true);
-                            }}
-                            className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-1 px-3 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1"
-                          >
-                            <Plus size={13} />
-                            <span>Add New Routine Slot</span>
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          {dailySlots.map((slot) => (
-                            <div key={slot.id} className="bg-[#181818] border border-[#2a2a2a] p-3 rounded-2xl flex items-center justify-between gap-2">
-                              <div className="space-y-0.5">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.2 rounded font-mono font-bold">
-                                    {slot.timeRange}
-                                  </span>
-                                  <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.2 rounded">
-                                    {slot.tag}
-                                  </span>
-                                  <span className="text-xs font-bold text-emerald-400 font-mono">
-                                    +₹{slot.rewardPoints}
-                                  </span>
-                                </div>
-                                <h4 className="text-xs font-bold text-white">{slot.title}</h4>
-                              </div>
-
-                              <div className="flex items-center gap-1 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingSlotId(slot.id);
-                                    setSlotFormTitle(slot.title);
-                                    setSlotFormTimeRange(slot.timeRange);
-                                    setSlotFormTag(slot.tag);
-                                    setSlotFormPoints(String(slot.rewardPoints));
-                                    setShowAddSlotModal(true);
-                                  }}
-                                  className="text-gray-400 hover:text-white p-1 rounded-lg bg-[#222]"
-                                  title="Edit Slot"
-                                >
-                                  <Edit3 size={13} />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteSlot(slot.id)}
-                                  className="text-gray-400 hover:text-rose-400 p-1 rounded-lg bg-[#222]"
-                                  title="Delete Slot"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDailyAdminTab('review');
+                        setViewMode('daily_projects');
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
+                    >
+                      <span>Open Project Submissions</span>
+                      <span>➔</span>
+                    </button>
                   </div>
 
                 </div>
@@ -8927,32 +8661,64 @@ export default function App() {
                   <div className="flex items-center gap-2.5">
                     <button
                       type="button"
-                      onClick={() => setViewMode('real_gpt')}
-                      className="text-gray-400 hover:text-white p-1.5 rounded-xl cursor-pointer transition-colors bg-[#181818] border border-[#2a2a2a]"
-                      title="Return to Chat"
+                      onClick={() => setViewMode('admin_dashboard')}
+                      className="text-gray-400 hover:text-white p-1.5 rounded-xl cursor-pointer transition-colors bg-[#181818] border border-[#2a2a2a] flex items-center gap-1 text-xs font-semibold"
+                      title="Back to Admin Dashboard"
                     >
-                      <ArrowLeft size={17} />
+                      <ArrowLeft size={16} />
+                      <span className="hidden sm:inline">Dashboard</span>
                     </button>
                     <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold text-lg">
                       👑
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h2 className="text-sm sm:text-base font-bold text-white">Project Submission (Admin)</h2>
+                        <h2 className="text-sm sm:text-base font-bold text-white">Daily Projects & Routine Tasks</h2>
                         <span className="text-[9px] bg-amber-500 text-black px-1.5 py-0.2 rounded font-bold font-mono">
-                          DARSH
+                          DARSH ADMIN
+                        </span>
+                        <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.2 rounded font-mono hidden sm:inline">
+                          HOURLY ENGINE
                         </span>
                       </div>
-                      <p className="text-[11px] text-gray-400">Review {activeDoraName}'s Hourly Report submissions in real time</p>
+                      <p className="text-[11px] text-gray-400">Review {activeDoraName}'s submissions, download high-res proof & customize routine slots</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                  {/* TAB SWITCHER, DATE PICKER & ACTIONS */}
+                  <div className="flex items-center gap-2 flex-wrap self-end sm:self-auto">
+                    <div className="flex bg-[#181818] p-0.5 rounded-xl border border-[#2a2a2a] text-xs font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setDailyAdminTab('review')}
+                        className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                          dailyAdminTab === 'review' ? 'bg-emerald-600 text-white shadow' : 'text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        <span>Review Tasks</span>
+                        {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'PENDING').length > 0 && (
+                          <span className="bg-amber-400 text-black text-[9px] font-black px-1.5 py-0.2 rounded-full animate-bounce">
+                            {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'PENDING').length}
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDailyAdminTab('slots')}
+                        className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                          dailyAdminTab === 'slots' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        <span>⚙️ Slot Manager</span>
+                      </button>
+                    </div>
+
                     <input
                       type="date"
                       value={dailySelectedDate}
                       onChange={(e) => setDailySelectedDate(e.target.value)}
                       className="bg-[#181818] border border-[#333] text-white text-xs px-2.5 py-1.5 rounded-xl outline-none focus:border-amber-500 font-mono"
+                      title="Select date to review or download historical data"
                     />
                     <button
                       type="button"
@@ -8960,6 +8726,15 @@ export default function App() {
                       className="bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 border border-amber-500/40 px-2.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all"
                     >
                       Today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleExportDayPdf(dailySelectedDate)}
+                      className="bg-[#181818] hover:bg-[#252525] border border-[#333] hover:border-emerald-500/50 text-gray-200 hover:text-white px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-sm"
+                      title={`Download Full Day Report PDF for ${dailySelectedDate}`}
+                    >
+                      <FileDown size={13} className="text-emerald-400" />
+                      <span className="hidden sm:inline">Export PDF</span>
                     </button>
                     <button
                       type="button"
@@ -8972,25 +8747,32 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="space-y-4">
+                {dailyAdminTab === 'review' && (
+                  <div className="space-y-4">
                     {/* STATS OVERVIEW (DAY-WISE) */}
-                    <div className="grid grid-cols-3 gap-2.5 text-center text-xs">
-                      <div className="bg-[#141414] border border-[#262626] p-3 rounded-2xl">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                      <div className="bg-[#141414] border border-[#262626] p-2.5 rounded-2xl">
                         <div className="text-[10px] text-gray-400">Total Routine Slots</div>
-                        <div className="text-lg font-bold text-white font-mono">{dailySlots.filter(s => s.isActive).length}</div>
+                        <div className="text-base font-bold text-white font-mono">{dailySlots.filter(s => s.isActive).length}</div>
                       </div>
-                      <div className="bg-[#141414] border border-amber-500/40 p-3 rounded-2xl">
-                        <div className="text-[10px] text-amber-300 font-bold">Awaiting Your Approval</div>
-                        <div className="text-lg font-black text-amber-400 font-mono">
+                      <div className="bg-[#141414] border border-amber-500/40 p-2.5 rounded-2xl">
+                        <div className="text-[10px] text-amber-300 font-bold">Pending Review</div>
+                        <div className="text-base font-black text-amber-400 font-mono">
                           {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'PENDING').length} ⏳
                         </div>
                       </div>
-                      <div className="bg-[#141414] border border-emerald-500/30 p-3 rounded-2xl">
+                      <div className="bg-[#141414] border border-emerald-500/30 p-2.5 rounded-2xl">
                         <div className="text-[10px] text-emerald-400 font-bold">
                           {dailySelectedDate === getLocalDateString() ? 'Approved Today' : `Approved (${dailySelectedDate})`}
                         </div>
-                        <div className="text-lg font-black text-emerald-400 font-mono">
+                        <div className="text-base font-black text-emerald-400 font-mono">
                           {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'APPROVED').length} ✓
+                        </div>
+                      </div>
+                      <div className="bg-[#141414] border border-blue-500/30 p-2.5 rounded-2xl">
+                        <div className="text-[10px] text-blue-300 font-bold">Points Awarded</div>
+                        <div className="text-base font-bold text-blue-400 font-mono">
+                          ₹ {dailySubmissions.filter(s => s.date === dailySelectedDate && s.status === 'APPROVED').reduce((acc, curr) => acc + (curr.pointsAwarded || 0), 0).toFixed(2)}
                         </div>
                       </div>
                     </div>
@@ -9116,7 +8898,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* ONLY PENDING SUBMISSIONS REQUIRING APPROVAL (NOTHING ELSE BELOW) */}
+                    {/* SUBMISSIONS REQUIRING APPROVAL (PRIORITY BANNER) */}
                     {dailySubmissions.filter(s => s.status === 'PENDING').length > 0 && (
                       <div className="space-y-2.5 animate-in fade-in slide-in-from-top-2">
                         <div className="flex items-center justify-between text-xs font-bold text-gray-300 px-1">
@@ -9222,7 +9004,207 @@ export default function App() {
                         </div>
                       </div>
                     )}
+
+                    {/* COMPLETE ALL ROUTINE SLOTS & SUBMISSIONS GRID (MATCHING USER SCREENSHOT) */}
+                    <div className="space-y-2.5 pt-2">
+                      <div className="flex items-center justify-between text-xs font-bold text-gray-300 px-1 border-t border-[#222] pt-3">
+                        <span className="flex items-center gap-1.5">
+                          <CheckCircle size={14} className="text-emerald-400" />
+                          <span>All Hourly Routine Slots ({dailySelectedDate}):</span>
+                        </span>
+                        <span className="text-[10px] text-gray-400 font-mono">
+                          {dailySlots.filter(s => s.isActive).length} Slots Total
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                        {dailySlots.filter(s => s.isActive).map((slot) => {
+                          const sub = getSlotSubmission(slot.id, dailySelectedDate);
+                          const isApproved = sub && sub.status === 'APPROVED';
+                          const isPending = sub && sub.status === 'PENDING';
+                          const isRejected = sub && sub.status === 'REJECTED';
+
+                          return (
+                            <div
+                              key={slot.id}
+                              className={`p-3 rounded-2xl border transition-all ${
+                                isPending 
+                                  ? 'bg-[#1a1813] border-amber-500/60 shadow-lg' 
+                                  : isApproved 
+                                    ? 'bg-[#121815] border-emerald-500/40' 
+                                    : 'bg-[#161616] border-[#262626]'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.2 rounded font-mono font-bold">
+                                      {slot.timeRange}
+                                    </span>
+                                    <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.2 rounded">
+                                      {slot.tag}
+                                    </span>
+                                  </div>
+                                  <h4 className="text-xs font-bold text-white mt-1">{slot.title}</h4>
+                                </div>
+                                <span className="text-xs font-bold text-emerald-400 font-mono shrink-0">
+                                  +₹ {Number(slot.rewardPoints || 0).toFixed(2)}
+                                </span>
+                              </div>
+
+                              {sub ? (
+                                <div className="mt-2.5 space-y-2 pt-2 border-t border-[#222]">
+                                  {sub.note && (
+                                    <p className="text-xs text-gray-300 italic bg-[#101010] p-2 rounded-xl border border-[#242424]">
+                                      "{sub.note}"
+                                    </p>
+                                  )}
+
+                                  {sub.image && (
+                                    <div className="flex items-center gap-2.5">
+                                      <img
+                                        src={sub.image}
+                                        alt="Proof"
+                                        className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-xl border border-[#333] cursor-pointer hover:scale-105 transition-transform shrink-0"
+                                        onClick={() => setDailyPreviewModalImg(sub.image)}
+                                      />
+                                      <div className="space-y-1 text-[11px] flex-1 min-w-0">
+                                        <button
+                                          type="button"
+                                          onClick={() => setDailyPreviewModalImg(sub.image)}
+                                          className="text-blue-400 hover:text-blue-300 flex items-center gap-1 font-semibold cursor-pointer"
+                                        >
+                                          <Eye size={12} />
+                                          <span>Full Preview</span>
+                                        </button>
+                                        <a
+                                          href={sub.image}
+                                          download={`dora_task_${dailySelectedDate}_${slot.id}.jpg`}
+                                          className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-semibold cursor-pointer"
+                                        >
+                                          <Download size={12} />
+                                          <span>Download Photo</span>
+                                        </a>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* ACTION BUTTONS FOR DARSH */}
+                                  <div className="pt-1 flex items-center gap-2">
+                                    {isPending ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleApproveDailyTask(sub)}
+                                          className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 px-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all text-center flex items-center justify-center gap-1"
+                                        >
+                                          <Check size={13} />
+                                          <span>Approve & Award +₹{slot.rewardPoints}</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRejectDailyTask(sub)}
+                                          className="bg-rose-950/60 hover:bg-rose-900/80 border border-rose-500/40 text-rose-300 text-xs font-semibold py-1.5 px-2.5 rounded-xl cursor-pointer active:scale-95"
+                                        >
+                                          Retake
+                                        </button>
+                                      </>
+                                    ) : isApproved ? (
+                                      <div className="w-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-xs font-bold py-1 px-2 rounded-xl text-center flex items-center justify-center gap-1">
+                                        <span>✓ Approved & Awarded (+₹{sub.pointsAwarded})</span>
+                                      </div>
+                                    ) : isRejected ? (
+                                      <div className="w-full bg-rose-950/60 border border-rose-500/30 text-rose-300 text-xs font-bold py-1 px-2 rounded-xl text-center">
+                                        <span>Retake Requested</span>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="mt-2 pt-2 border-t border-[#222] text-[10px] text-gray-500 italic">
+                                  No submission from {activeDoraName} yet for this time slot.
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
+                )}
+
+                {/* SLOTS MANAGER TAB (DYNAMIC ADD / EDIT / DELETE) */}
+                {dailyAdminTab === 'slots' && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-gray-300">
+                        Configure Hourly Routine Slots:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingSlotId(null);
+                          setSlotFormTitle('');
+                          setSlotFormTimeRange('');
+                          setSlotFormTag('Task');
+                          setSlotFormPoints('2.0');
+                          setShowAddSlotModal(true);
+                        }}
+                        className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-1 px-3 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1"
+                      >
+                        <Plus size={13} />
+                        <span>Add New Routine Slot</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {dailySlots.map((slot) => (
+                        <div key={slot.id} className="bg-[#181818] border border-[#2a2a2a] p-3 rounded-2xl flex items-center justify-between gap-2">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.2 rounded font-mono font-bold">
+                                {slot.timeRange}
+                              </span>
+                              <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.2 rounded">
+                                {slot.tag}
+                              </span>
+                              <span className="text-xs font-bold text-emerald-400 font-mono">
+                                +₹{slot.rewardPoints}
+                              </span>
+                            </div>
+                            <h4 className="text-xs font-bold text-white">{slot.title}</h4>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingSlotId(slot.id);
+                                setSlotFormTitle(slot.title);
+                                setSlotFormTimeRange(slot.timeRange);
+                                setSlotFormTag(slot.tag);
+                                setSlotFormPoints(String(slot.rewardPoints));
+                                setShowAddSlotModal(true);
+                              }}
+                              className="text-gray-400 hover:text-white p-1 rounded-lg bg-[#222]"
+                              title="Edit Slot"
+                            >
+                              <Edit3 size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSlot(slot.id)}
+                              className="text-gray-400 hover:text-rose-400 p-1 rounded-lg bg-[#222]"
+                              title="Delete Slot"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </section>
             )}
 
