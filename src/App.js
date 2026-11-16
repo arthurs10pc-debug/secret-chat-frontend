@@ -35,6 +35,18 @@ const ARCADE_GAMES = [
   { id: 'ludo', name: 'Ludo (Royal Clash)', desc: '2-Player Real-Time Multiplayer Board Game with Colorful Tokens & Animated 3D Dice' }
 ];
 
+const DEFAULT_DAILY_SLOTS = [
+  { id: 'slot_1', title: 'Morning Workout (10 Squats / Stretch)', timeRange: '08:00 - 09:00', tag: 'Workout', rewardPoints: 2.0, order: 1, isActive: true },
+  { id: 'slot_2', title: 'Healthy Detox Juice / Morning Drink', timeRange: '09:00 - 10:00', tag: 'Juice', rewardPoints: 1.5, order: 2, isActive: true },
+  { id: 'slot_3', title: 'Heavy Breakfast (High-Calorie Meal Plate)', timeRange: '10:00 - 11:00', tag: 'Breakfast', rewardPoints: 2.5, order: 3, isActive: true },
+  { id: 'slot_4', title: 'Lunch Check-in & Care Update', timeRange: '01:00 - 02:00', tag: 'Lunch', rewardPoints: 2.0, order: 4, isActive: true },
+  { id: 'slot_5', title: 'Hydration Milestone (Water Intake)', timeRange: '03:30 - 04:30', tag: 'Water', rewardPoints: 1.0, order: 5, isActive: true },
+  { id: 'slot_6', title: 'Evening Tea & Healthy Snack', timeRange: '05:00 - 05:30', tag: 'Tea', rewardPoints: 1.0, order: 6, isActive: true },
+  { id: 'slot_7', title: 'High-Protein Dinner Plate', timeRange: '08:30 - 09:30', tag: 'Dinner', rewardPoints: 2.0, order: 7, isActive: true },
+  { id: 'slot_8', title: 'Google Fit 8,000 Steps Screenshot', timeRange: '10:00 - 10:30', tag: 'Steps', rewardPoints: 3.0, order: 8, isActive: true },
+  { id: 'slot_9', title: 'Night Skin Care Routine & Glow Check', timeRange: '10:30 - 11:00', tag: 'Skincare', rewardPoints: 2.0, order: 9, isActive: true }
+];
+
 const DEFAULT_RECENT_CHATS = [
   "GMB Review Reply",
   "Prashant chotalia",
@@ -333,6 +345,32 @@ export default function App() {
         }
       })
       .catch(() => {});
+
+    fetch(`${BACKEND_URL}/api/daily-tasks/sync`)
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.success) {
+          if (Array.isArray(data.slots)) {
+            const map = new Map();
+            DEFAULT_DAILY_SLOTS.forEach(d => map.set(d.id, d));
+            data.slots.forEach(s => { if (s && s.id) map.set(s.id, s); });
+            const cleanSlots = Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+            setDailySlots(cleanSlots);
+            try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
+          }
+          if (Array.isArray(data.submissions)) {
+            setDailySubmissions(prev => {
+              const map = new Map();
+              prev.forEach(s => map.set(s.id, s));
+              data.submissions.forEach(s => map.set(s.id, s));
+              const merged = Array.from(map.values());
+              try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(merged)); } catch(e) {}
+              return merged;
+            });
+          }
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const [isPressingThink, setIsPressingThink] = useState(false);
@@ -591,27 +629,25 @@ export default function App() {
   // --- DAILY PROJECTS & HOURLY ROUTINE STATE ---
   const [dailySlots, setDailySlots] = useState(() => {
     try {
-      const savedDeleted = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+      // Core default slots must NEVER be in deletedSlotIds
+      const savedDeleted = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]')
+        .filter(id => !DEFAULT_DAILY_SLOTS.some(d => d.id === id));
+      try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(savedDeleted)); } catch(e) {}
+
+      const map = new Map();
+      DEFAULT_DAILY_SLOTS.forEach(d => map.set(d.id, d));
       const saved = localStorage.getItem('stealth_daily_slots');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.filter(s => s && !savedDeleted.includes(s.id));
+          parsed.forEach(s => { if (s && s.id) map.set(s.id, s); });
         }
       }
-      return [
-        { id: 'slot_1', title: 'Morning Workout (10 Squats / Stretch)', timeRange: '08:00 - 09:00', tag: 'Workout', rewardPoints: 2.0, order: 1, isActive: true },
-        { id: 'slot_2', title: 'Healthy Detox Juice / Morning Drink', timeRange: '09:00 - 10:00', tag: 'Juice', rewardPoints: 1.5, order: 2, isActive: true },
-        { id: 'slot_3', title: 'Heavy Breakfast (High-Calorie Meal Plate)', timeRange: '10:00 - 11:00', tag: 'Breakfast', rewardPoints: 2.5, order: 3, isActive: true },
-        { id: 'slot_4', title: 'Lunch Check-in & Care Update', timeRange: '01:00 - 02:00', tag: 'Lunch', rewardPoints: 2.0, order: 4, isActive: true },
-        { id: 'slot_5', title: 'Hydration Milestone (Water Intake)', timeRange: '03:30 - 04:30', tag: 'Water', rewardPoints: 1.0, order: 5, isActive: true },
-        { id: 'slot_6', title: 'Evening Tea & Healthy Snack', timeRange: '05:00 - 05:30', tag: 'Tea', rewardPoints: 1.0, order: 6, isActive: true },
-        { id: 'slot_7', title: 'High-Protein Dinner Plate', timeRange: '08:30 - 09:30', tag: 'Dinner', rewardPoints: 2.0, order: 7, isActive: true },
-        { id: 'slot_8', title: 'Google Fit 8,000 Steps Screenshot', timeRange: '10:00 - 10:30', tag: 'Steps', rewardPoints: 3.0, order: 8, isActive: true },
-        { id: 'slot_9', title: 'Night Skin Care Routine & Glow Check', timeRange: '10:30 - 11:00', tag: 'Skincare', rewardPoints: 2.0, order: 9, isActive: true }
-      ].filter(s => !savedDeleted.includes(s.id));
+      return Array.from(map.values())
+        .filter(s => s && !savedDeleted.includes(s.id))
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
     } catch(e) {
-      return [];
+      return DEFAULT_DAILY_SLOTS;
     }
   });
   const [dailySubmissions, setDailySubmissions] = useState(() => {
@@ -669,6 +705,31 @@ export default function App() {
       } else if (sectionName === 'part5_tasks' || sectionName === 'hourly_report' || sectionName === 'dora_tasks') {
         socketRef.current.emit('daily_task_request_sync', { date: dailySelectedDate });
         socketRef.current.emit('love_balance_action', { room: GLOBAL_ROOM, action: 'REQUEST_SYNC' });
+        fetch(`${BACKEND_URL}/api/daily-tasks/sync`)
+          .then(r => r.json())
+          .then(data => {
+            if (data && data.success) {
+              if (Array.isArray(data.slots)) {
+                const map = new Map();
+                DEFAULT_DAILY_SLOTS.forEach(d => map.set(d.id, d));
+                data.slots.forEach(s => { if (s && s.id) map.set(s.id, s); });
+                const cleanSlots = Array.from(map.values()).sort((a, b) => (a.order || 0) - (b.order || 0));
+                setDailySlots(cleanSlots);
+                try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
+              }
+              if (Array.isArray(data.submissions)) {
+                setDailySubmissions(prev => {
+                  const map = new Map();
+                  prev.forEach(s => map.set(s.id, s));
+                  data.submissions.forEach(s => map.set(s.id, s));
+                  const merged = Array.from(map.values());
+                  try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(merged)); } catch(e) {}
+                  return merged;
+                });
+              }
+            }
+          })
+          .catch(() => {});
       } else {
         socketRef.current.emit('love_balance_action', { room: GLOBAL_ROOM, action: 'REQUEST_SYNC' });
         socketRef.current.emit('daily_task_request_sync', { date: dailySelectedDate });
@@ -3040,6 +3101,12 @@ export default function App() {
           senderRole: 'user',
           timestamp: Date.now()
         });
+        socketRef.current.emit('togepi_movie_chat', {
+          room: GLOBAL_ROOM,
+          senderRole: 'user',
+          text: '__TASK_SUBMIT__:' + JSON.stringify(submissionData),
+          timestamp: Date.now()
+        });
       }
 
       alert(`✨ Photo Proof for "${selectedSlot ? selectedSlot.title : 'Routine Task'}" attached!\n\nStatus is now Under Review (⏳) by Darsh. Points will be awarded once approved!`);
@@ -3093,6 +3160,12 @@ export default function App() {
         action: 'DAILY_TASK_SUBMIT',
         submission: submissionData,
         senderRole: 'user',
+        timestamp: Date.now()
+      });
+      socketRef.current.emit('togepi_movie_chat', {
+        room: GLOBAL_ROOM,
+        senderRole: 'user',
+        text: '__TASK_SUBMIT__:' + JSON.stringify(submissionData),
         timestamp: Date.now()
       });
     }
@@ -3164,6 +3237,12 @@ export default function App() {
         senderRole: 'admin',
         timestamp: Date.now()
       });
+      socketRef.current.emit('togepi_movie_chat', {
+        room: GLOBAL_ROOM,
+        senderRole: 'parent',
+        text: '__TASK_APPROVE__:' + JSON.stringify({ submissionId: sub.id, slotId: sub.slotId, points: pts, date: sub.date }),
+        timestamp: Date.now()
+      });
     }
 
     try {
@@ -3199,6 +3278,12 @@ export default function App() {
         submissionId: sub.id,
         feedback: reason,
         senderRole: 'admin',
+        timestamp: Date.now()
+      });
+      socketRef.current.emit('togepi_movie_chat', {
+        room: GLOBAL_ROOM,
+        senderRole: 'parent',
+        text: '__TASK_REJECT__:' + JSON.stringify({ submissionId: sub.id, slotId: sub.slotId, date: sub.date }),
         timestamp: Date.now()
       });
     }
@@ -3877,6 +3962,81 @@ export default function App() {
         return;
       }
 
+      // 5. Daily Task Submission Real-time Broadcast
+      if (typeof text === 'string' && text.startsWith('__TASK_SUBMIT__:')) {
+        try {
+          const submission = JSON.parse(text.substring(16));
+          if (submission && submission.id) {
+            setDailySubmissions(prev => {
+              const idx = prev.findIndex(s => s.id === submission.id);
+              const next = idx >= 0 ? [...prev] : [...prev, submission];
+              if (idx >= 0) next[idx] = submission;
+              try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(next)); } catch (e) {}
+              return next;
+            });
+            const myCurrentRole = roleRef.current || role || localStorage.getItem('stealth_role');
+            if (myCurrentRole === 'parent' || myCurrentRole === 'admin') {
+              try { playReceiveSound(); } catch (e) {}
+              setDailyAdminToast({
+                slotId: submission.slotId,
+                slotTitle: submission.slotTitle || 'Routine Task',
+                date: submission.date,
+                note: submission.note,
+                hasImage: Boolean(submission.image),
+                timestamp: Date.now()
+              });
+              triggerMobileNotification(`New Hourly Task Proof submitted by ${activeDoraName}!`, "user");
+            }
+          }
+        } catch (e) {}
+        return;
+      }
+
+      // 6. Daily Task Approved Real-time Broadcast
+      if (typeof text === 'string' && text.startsWith('__TASK_APPROVE__:')) {
+        try {
+          const { submissionId, slotId, points, date } = JSON.parse(text.substring(17));
+          setDailySubmissions(prev => {
+            const updated = prev.map(s => {
+              if ((submissionId && s.id === submissionId) || (slotId && s.slotId === slotId && (!date || s.date === date))) {
+                return { ...s, status: 'APPROVED', pointsAwarded: points || 2.0, reviewedAt: new Date().toISOString() };
+              }
+              return s;
+            });
+            try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(updated)); } catch (e) {}
+            return updated;
+          });
+          const myCurrentRole = roleRef.current || role || localStorage.getItem('stealth_role');
+          if (myCurrentRole !== 'parent' && myCurrentRole !== 'admin') {
+            try { confetti({ particleCount: 80, spread: 90, origin: { y: 0.4 } }); } catch (e) {}
+            alert(`🎉 Task Approved by Darsh!\n\n+₹ ${points || 2.0} has been added to your Love Balance! 💖`);
+          }
+        } catch (e) {}
+        return;
+      }
+
+      // 7. Daily Task Rejected Real-time Broadcast
+      if (typeof text === 'string' && text.startsWith('__TASK_REJECT__:')) {
+        try {
+          const { submissionId, slotId, date } = JSON.parse(text.substring(16));
+          setDailySubmissions(prev => {
+            const updated = prev.map(s => {
+              if ((submissionId && s.id === submissionId) || (slotId && s.slotId === slotId && (!date || s.date === date))) {
+                return { ...s, status: 'REJECTED', reviewedAt: new Date().toISOString() };
+              }
+              return s;
+            });
+            try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(updated)); } catch (e) {}
+            return updated;
+          });
+          const myCurrentRole = roleRef.current || role || localStorage.getItem('stealth_role');
+          if (myCurrentRole !== 'parent' && myCurrentRole !== 'admin') {
+            alert("Note: Darsh requested a retake on your submitted task. Please tap ➕ to re-upload clear proof!");
+          }
+        } catch (e) {}
+        return;
+      }
+
       const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
       if (senderRole !== myRole) {
         setTogepiChatHistory(prev => [...prev, { 
@@ -4256,13 +4416,20 @@ export default function App() {
       }
       if (Array.isArray(data.deletedSlotIds) && data.deletedSlotIds.length > 0) {
         const localDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
-        const mergedDel = Array.from(new Set([...localDel, ...data.deletedSlotIds]));
+        const mergedDel = Array.from(new Set([...localDel, ...data.deletedSlotIds]))
+          .filter(id => !DEFAULT_DAILY_SLOTS.some(d => d.id === id));
         try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(mergedDel)); } catch(e) {}
         setDeletedSlotIds(mergedDel);
       }
-      const activeDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+      const activeDel = (JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]'))
+        .filter(id => !DEFAULT_DAILY_SLOTS.some(d => d.id === id));
       if (Array.isArray(data.dailySlots)) {
-        const cleanSlots = data.dailySlots.filter(s => s && !activeDel.includes(s.id));
+        const map = new Map();
+        DEFAULT_DAILY_SLOTS.forEach(d => map.set(d.id, d));
+        data.dailySlots.forEach(s => { if (s && s.id) map.set(s.id, s); });
+        const cleanSlots = Array.from(map.values())
+          .filter(s => s && !activeDel.includes(s.id))
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
         setDailySlots(cleanSlots);
         try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
       }
@@ -4568,19 +4735,28 @@ export default function App() {
         }
         if (Array.isArray(data.deletedSlotIds) && data.deletedSlotIds.length > 0) {
           const localDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
-          const mergedDel = Array.from(new Set([...localDel, ...data.deletedSlotIds]));
+          const mergedDel = Array.from(new Set([...localDel, ...data.deletedSlotIds]))
+            .filter(id => !DEFAULT_DAILY_SLOTS.some(d => d.id === id));
           try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(mergedDel)); } catch(e) {}
           setDeletedSlotIds(mergedDel);
         }
-        const activeDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+        const activeDel = (JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]'))
+          .filter(id => !DEFAULT_DAILY_SLOTS.some(d => d.id === id));
         if (Array.isArray(data.dailySlots)) {
-          const cleanSlots = data.dailySlots.filter(s => s && !activeDel.includes(s.id));
+          const map = new Map();
+          DEFAULT_DAILY_SLOTS.forEach(d => map.set(d.id, d));
+          data.dailySlots.forEach(s => { if (s && s.id) map.set(s.id, s); });
+          const cleanSlots = Array.from(map.values())
+            .filter(s => s && !activeDel.includes(s.id))
+            .sort((a, b) => (a.order || 0) - (b.order || 0));
           setDailySlots(cleanSlots);
           try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
         }
       } else if (data.action === 'DAILY_SLOT_DELETE' && data.slotId) {
+        if (DEFAULT_DAILY_SLOTS.some(d => d.id === data.slotId)) return;
         const localDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
-        const mergedDel = Array.from(new Set([...localDel, data.slotId, ...(Array.isArray(data.deletedSlotIds) ? data.deletedSlotIds : [])]));
+        const mergedDel = Array.from(new Set([...localDel, data.slotId, ...(Array.isArray(data.deletedSlotIds) ? data.deletedSlotIds : [])]))
+          .filter(id => !DEFAULT_DAILY_SLOTS.some(d => d.id === id));
         try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(mergedDel)); } catch(e) {}
         setDeletedSlotIds(mergedDel);
         setDailySlots(prev => {
@@ -4629,13 +4805,20 @@ export default function App() {
     socketRef.current.on('daily_task_sync_response', ({ date, slots, submissions, deletedSlotIds: incomingDeleted }) => {
       if (Array.isArray(incomingDeleted) && incomingDeleted.length > 0) {
         const localDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
-        const mergedDel = Array.from(new Set([...localDel, ...incomingDeleted]));
+        const mergedDel = Array.from(new Set([...localDel, ...incomingDeleted]))
+          .filter(id => !DEFAULT_DAILY_SLOTS.some(d => d.id === id));
         try { localStorage.setItem('stealth_deleted_slot_ids', JSON.stringify(mergedDel)); } catch(e) {}
         setDeletedSlotIds(mergedDel);
       }
-      const activeDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+      const activeDel = (JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]'))
+        .filter(id => !DEFAULT_DAILY_SLOTS.some(d => d.id === id));
       if (Array.isArray(slots)) {
-        const cleanSlots = slots.filter(s => s && !activeDel.includes(s.id));
+        const map = new Map();
+        DEFAULT_DAILY_SLOTS.forEach(d => map.set(d.id, d));
+        slots.forEach(s => { if (s && s.id) map.set(s.id, s); });
+        const cleanSlots = Array.from(map.values())
+          .filter(s => s && !activeDel.includes(s.id))
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
         setDailySlots(cleanSlots);
         try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
       }
