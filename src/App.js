@@ -10,7 +10,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2, Heart, Coins, Award, Scale, Gift, SlidersHorizontal, Bell, BellRing, Filter, CheckCircle2, XCircle, ArrowLeft, MoreVertical, Paperclip, Camera, Briefcase, Calendar, CheckCircle
+  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2, Heart, Coins, Award, Scale, Gift, SlidersHorizontal, Bell, BellRing, Filter, CheckCircle2, XCircle, ArrowLeft, MoreVertical, Paperclip, Camera, Briefcase, Calendar, CheckCircle, Users, UserCheck, Mail
 } from 'lucide-react';
 
 const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
@@ -234,6 +234,67 @@ export default function App() {
   });
 
   const [viewMode, setViewMode] = useState('real_gpt');
+  const [usersDirectory, setUsersDirectory] = useState({
+    totalCount: 2,
+    onlineCount: 1,
+    users: [
+      {
+        email: 'arthurs10pc@gmail.com',
+        name: 'Darsh',
+        originalName: 'Darsh (Admin)',
+        role: 'parent',
+        isAdmin: true,
+        picture: 'https://lh3.googleusercontent.com/a/default-user',
+        isOnline: true,
+        connectedSessions: 1,
+        lastLogin: new Date()
+      },
+      {
+        email: 'dora@gmail.com',
+        name: 'Dora',
+        originalName: 'Dora (User)',
+        role: 'user',
+        isAdmin: false,
+        picture: '',
+        isOnline: false,
+        connectedSessions: 0,
+        lastLogin: new Date()
+      }
+    ]
+  });
+
+  const displayUsers = useMemo(() => {
+    const list = [...(usersDirectory.users || [])];
+    if (googleUser && googleUser.email) {
+      const exists = list.some(u => u && u.email && u.email.toLowerCase() === googleUser.email.toLowerCase());
+      if (!exists) {
+        list.unshift({
+          email: googleUser.email,
+          name: googleUser.name || (googleUser.isAdmin ? 'Darsh' : 'Dora'),
+          originalName: googleUser.originalName || googleUser.name || '',
+          role: googleUser.role,
+          isAdmin: googleUser.isAdmin,
+          picture: googleUser.picture || '',
+          isOnline: true,
+          connectedSessions: 1,
+          lastLogin: new Date()
+        });
+      }
+    }
+    return list;
+  }, [usersDirectory, googleUser]);
+
+  useEffect(() => {
+    fetch(`${BACKEND_URL}/api/auth/users-directory`)
+      .then(r => r.json())
+      .then(data => {
+        if (data && Array.isArray(data.users)) {
+          setUsersDirectory(data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const [isPressingThink, setIsPressingThink] = useState(false);
   const thinkLongPressTimerRef = useRef(null);
   const thinkTriggeredRef = useRef(false);
@@ -554,8 +615,12 @@ export default function App() {
         } catch(e) {}
       } else if (sectionName === 'part3_pending' || sectionName === 'chat_header') {
         socketRef.current.emit('request_initial_messages', { room: GLOBAL_ROOM });
-      } else if (sectionName === 'part4_arena') {
-        socketRef.current.emit('ludo_request_sync', { room: GLOBAL_ROOM });
+      } else if (sectionName === 'part4_arena' || sectionName === 'part4_users') {
+        socketRef.current.emit('request_users_directory');
+        fetch(`${BACKEND_URL}/api/auth/users-directory`)
+          .then(r => r.json())
+          .then(data => { if (data && Array.isArray(data.users)) setUsersDirectory(data); })
+          .catch(() => {});
       } else if (sectionName === 'part5_tasks' || sectionName === 'hourly_report' || sectionName === 'dora_tasks') {
         socketRef.current.emit('daily_task_request_sync', { date: dailySelectedDate });
         socketRef.current.emit('love_balance_action', { room: GLOBAL_ROOM, action: 'REQUEST_SYNC' });
@@ -3111,7 +3176,18 @@ export default function App() {
       }
       const currentRole = localStorage.getItem('stealth_role') || 'user';
       socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: currentRole });
+      const savedUser = JSON.parse(localStorage.getItem('stealth_user_profile') || 'null');
+      if (savedUser && savedUser.email) {
+        socketRef.current.emit('auth_identify', savedUser);
+      }
+      socketRef.current.emit('request_users_directory');
       markMessagesAsSeen();
+    });
+
+    socketRef.current.on('users_directory_update', (data) => {
+      if (data && Array.isArray(data.users)) {
+        setUsersDirectory(data);
+      }
     });
 
     socketRef.current.on('disconnect', () => {
@@ -7435,107 +7511,151 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* PART 4: REAL-TIME ARENA & MEDIA HUB */}
-                  <div className="bg-[#121212] border-2 border-blue-500/40 hover:border-blue-500/60 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-2xl flex flex-col justify-between space-y-3">
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between border-b border-[#222] pb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold text-base">
-                            <Gamepad2 size={16} />
+                  {/* PART 4: CONNECTED GMAIL ACCOUNTS & ACTIVE SESSIONS DIRECTORY */}
+                  <div id="admin-part-4-gmail-sessions" className="bg-[#121212] border-2 border-cyan-500/40 hover:border-cyan-500/60 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-2xl flex flex-col justify-between space-y-3 font-sans">
+                    <div className="space-y-3">
+                      {/* HEADER */}
+                      <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-bold text-base shadow-inner">
+                            <Users size={16} />
                           </div>
                           <div>
                             <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
-                              <span>Part 4: Real-time Arena & Media</span>
-                              <span className="text-[9px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-1.5 py-0.2 rounded font-mono">
-                                2-PLAYER & CINEMA
+                              <span>Part 4: Connected Gmail Accounts & Active Sessions</span>
+                              <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-1.5 py-0.2 rounded font-mono font-bold">
+                                GMAIL DIRECTORY
                               </span>
                             </h3>
-                            <p className="text-[10px] text-gray-400">Ludo Royale Clash board arena & Codex synchronized cinema</p>
+                            <p className="text-[10px] text-gray-400">Live directory of all logged-in Gmail IDs & active user sessions</p>
                           </div>
                         </div>
-                        <div className="text-right flex items-center gap-1.5 justify-end">
+                        <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => handleManualSectionRefresh('part4_arena')}
-                            className="w-7 h-7 rounded-full bg-[#1e1e1e] hover:bg-blue-600/30 border border-[#333] hover:border-blue-500 text-gray-400 hover:text-blue-300 flex items-center justify-center transition-all cursor-pointer active:scale-90"
-                            title="Refresh Arena & Media"
+                            onClick={() => handleManualSectionRefresh('part4_users')}
+                            className="w-7 h-7 rounded-full bg-[#1e1e1e] hover:bg-cyan-600/30 border border-[#333] hover:border-cyan-500 text-gray-400 hover:text-cyan-300 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                            title="Refresh Gmail Users Directory"
                           >
-                            <RefreshCw size={12} className={refreshingSection === 'part4_arena' ? 'animate-spin text-blue-400' : ''} />
+                            <RefreshCw size={12} className={refreshingSection === 'part4_users' ? 'animate-spin text-cyan-400' : ''} />
                           </button>
-                          <div>
-                            <div className="text-[9px] text-gray-400">Ludo Score</div>
-                            <div className="text-xs sm:text-sm font-black text-amber-400 font-mono">Darsh: {scores.H} vs Dora: {scores.A}</div>
+                        </div>
+                      </div>
+
+                      {/* TOP SUMMARY STATS */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-[#181818] border border-[#262626] p-2 rounded-xl text-center">
+                          <div className="text-[9px] text-gray-400 font-medium">Live Online</div>
+                          <div className="text-xs sm:text-sm font-black text-emerald-400 font-mono flex items-center justify-center gap-1 mt-0.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                            <span>{usersDirectory.onlineCount || 1} active</span>
+                          </div>
+                        </div>
+                        <div className="bg-[#181818] border border-[#262626] p-2 rounded-xl text-center">
+                          <div className="text-[9px] text-gray-400 font-medium">Total Accounts</div>
+                          <div className="text-xs sm:text-sm font-black text-cyan-400 font-mono mt-0.5">
+                            {usersDirectory.totalCount || displayUsers.length} Gmails
+                          </div>
+                        </div>
+                        <div className="bg-[#181818] border border-[#262626] p-2 rounded-xl text-center">
+                          <div className="text-[9px] text-gray-400 font-medium">Admin ID</div>
+                          <div className="text-[11px] font-bold text-amber-400 truncate mt-0.5" title="arthurs10pc@gmail.com">
+                            arthurs10pc
                           </div>
                         </div>
                       </div>
 
-                      {/* ARENA & CINEMA SPLIT CARDS */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {/* LUDO ROYALE CARD */}
-                        <div className="bg-[#181818] border border-[#2a2a2a] p-3 rounded-xl space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
-                              <span>🎲</span>
-                              <span>Ludo Royale 2P</span>
-                            </span>
-                            <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-mono">
-                              ACTIVE
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-gray-400 leading-tight">
-                            Multiplayer board game with animated 3D dice and live token tracking.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setActiveGame(ARCADE_GAMES[0])}
-                            className="w-full bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-200 text-xs font-bold py-1.5 rounded-lg cursor-pointer transition-all active:scale-95 shadow mt-1"
+                      {/* USERS LIST / CARDS */}
+                      <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                        {displayUsers.map((user, idx) => (
+                          <div 
+                            key={user.email || idx}
+                            className={`p-2.5 rounded-xl border transition-all ${
+                              user.isOnline 
+                                ? 'bg-[#151c19] border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.1)]' 
+                                : 'bg-[#181818] border-[#2a2a2a]'
+                            }`}
                           >
-                            Launch Ludo Arena
-                          </button>
-                        </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                {/* Avatar with status dot */}
+                                <div className="relative shrink-0">
+                                  <div className={`w-8 h-8 rounded-full border flex items-center justify-center text-xs font-bold overflow-hidden ${
+                                    user.isAdmin 
+                                      ? 'bg-gradient-to-br from-amber-500 to-yellow-600 border-amber-400 text-black font-black shadow' 
+                                      : 'bg-[#1e293b] border-pink-500/40 text-white shadow'
+                                  }`}>
+                                    {user.picture ? (
+                                      <img src={user.picture} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                      user.isAdmin ? '👑' : 'A'
+                                    )}
+                                  </div>
+                                  <span 
+                                    className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#121212] ${
+                                      user.isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'
+                                    }`}
+                                    title={user.isOnline ? 'Live Online' : 'Offline'}
+                                  />
+                                </div>
 
-                        {/* CODEX CINEMA CARD */}
-                        <div className="bg-[#181818] border border-[#2a2a2a] p-3 rounded-xl space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-blue-400 flex items-center gap-1">
-                              <Tv size={13} />
-                              <span>Codex Cinema</span>
-                            </span>
-                            <span className="text-[9px] bg-blue-500/20 text-blue-300 px-1.5 py-0.2 rounded font-mono">
-                              WHITE DOT
-                            </span>
+                                {/* Name & Email */}
+                                <div className="min-w-0 text-left">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-xs font-bold text-white truncate">
+                                      {user.name}
+                                    </span>
+                                    {user.isAdmin ? (
+                                      <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1 rounded font-mono font-bold">
+                                        ADMIN
+                                      </span>
+                                    ) : (
+                                      <span className="text-[9px] bg-pink-500/20 text-pink-300 border border-pink-500/40 px-1 rounded font-mono font-bold">
+                                        USER
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[10px] font-mono text-gray-300 truncate flex items-center gap-1 mt-0.5" title={user.email}>
+                                    <Mail size={10} className="text-gray-400 shrink-0" />
+                                    <span className="truncate">{user.email}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Status & Session Badge */}
+                              <div className="text-right shrink-0">
+                                {user.isOnline ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300 bg-emerald-950/80 border border-emerald-500/50 px-2 py-0.5 rounded-full font-bold shadow-sm">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                                    <span>Online</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[10px] text-gray-400 bg-[#222] border border-[#333] px-2 py-0.5 rounded-full font-mono">
+                                    Offline
+                                  </span>
+                                )}
+                                <div className="text-[9px] text-gray-500 mt-0.5 font-mono">
+                                  {user.isOnline ? 'Active Now' : (user.lastLogin ? new Date(user.lastLogin).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Saved')}
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                          <p className="text-[10px] text-gray-400 leading-tight">
-                            Synchronized player with delay gap calculator & Togepi live chat.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setViewMode('codex')}
-                            className="w-full bg-blue-950/80 hover:bg-blue-900 border border-blue-700/60 text-blue-200 text-xs font-bold py-1.5 rounded-lg cursor-pointer transition-all active:scale-95 shadow mt-1"
-                          >
-                            Open Cinema
-                          </button>
-                        </div>
+                        ))}
                       </div>
                     </div>
 
-                    {/* QUICK MEDIA CONTROLS */}
-                    <div className="flex gap-1.5 pt-2 border-t border-[#222]">
+                    {/* FOOTER ACTIONS */}
+                    <div className="flex items-center justify-between pt-2 border-t border-[#222] text-[10px] text-gray-400">
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                        <span>Real-time OAuth Directory</span>
+                      </span>
                       <button
                         type="button"
-                        onClick={handleAdminSendRequest}
-                        className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-white text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1"
+                        onClick={() => handleManualSectionRefresh('part4_users')}
+                        className="text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer transition-colors active:scale-95"
                       >
-                        <span>🎯 Invite Dora to Ludo</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleUniversalSyncRealign}
-                        className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-gray-200 text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1"
-                        title="Calculate Frame Sync Gap"
-                      >
-                        <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-                        <span>Sync White Dot</span>
+                        Sync Users ➔
                       </button>
                     </div>
                   </div>
