@@ -2978,6 +2978,38 @@ export default function App() {
   // The backend server is the STRICT SINGLE SOURCE OF TRUTH for habits, routine tasks, and ledger transactions.
   // The client requests synchronization from backend so no client device ever drifts or invents local transactions.
   const checkDailyHabitInfractions = useCallback(() => {
+    fetch(`${BACKEND_URL}/api/love-balance/evaluate`, { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.success) {
+          if (typeof data.loveBalance === 'number') {
+            setLoveBalance(data.loveBalance);
+            try { localStorage.setItem('stealth_love_balance', data.loveBalance.toString()); } catch(e) {}
+          }
+          if (typeof data.adminLoveBalance === 'number') {
+            setAdminLoveBalance(data.adminLoveBalance);
+            try { localStorage.setItem('stealth_admin_love_balance', data.adminLoveBalance.toString()); } catch(e) {}
+          }
+          if (Array.isArray(data.loveLedger)) {
+            setLoveLedger(data.loveLedger);
+            try { localStorage.setItem('stealth_love_ledger', JSON.stringify(data.loveLedger)); } catch(e) {}
+          }
+        }
+      })
+      .catch(() => {});
+
+    fetch(`${BACKEND_URL}/api/daily-tasks/sync`)
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.success && Array.isArray(data.slots)) {
+          const activeDel = Array.isArray(data.deletedSlotIds) ? data.deletedSlotIds : JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
+          const cleanSlots = data.slots.filter(s => s && !activeDel.includes(s.id)).sort((a, b) => (a.order || 0) - (b.order || 0));
+          setDailySlots(cleanSlots);
+          try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
+        }
+      })
+      .catch(() => {});
+
     if (socketRef.current) {
       socketRef.current.emit('love_balance_action', { room: GLOBAL_ROOM, action: 'REQUEST_SYNC' });
       socketRef.current.emit('daily_task_request_sync', { date: dailySelectedDate });
@@ -3436,16 +3468,23 @@ export default function App() {
     const newReward = parseFloat(slotFormPoints) || 1.0;
     if (editingSlotId) {
       const updates = {
+        id: editingSlotId,
         title: slotFormTitle.trim(),
         timeRange: slotFormTimeRange.trim(),
         tag: slotFormTag,
-        rewardPoints: newReward
+        rewardPoints: newReward,
+        isActive: true
       };
       setDailySlots(prev => {
         const updated = prev.map(s => s.id === editingSlotId ? { ...s, ...updates } : s);
         try { localStorage.setItem('stealth_daily_slots', JSON.stringify(updated)); } catch(e) {}
         return updated;
       });
+      fetch(`${BACKEND_URL}/api/daily-tasks/slots/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      }).catch(() => {});
       if (socketRef.current) {
         socketRef.current.emit('daily_slot_update', { slotId: editingSlotId, updates });
         socketRef.current.emit('love_balance_action', {
@@ -3472,6 +3511,20 @@ export default function App() {
         try { localStorage.setItem('stealth_daily_slots', JSON.stringify(updated)); } catch(e) {}
         return updated;
       });
+      fetch(`${BACKEND_URL}/api/daily-tasks/slots/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSlot)
+      })
+      .then(r => r.json())
+      .then(res => {
+        if (res && Array.isArray(res.slots)) {
+          setDailySlots(res.slots);
+          try { localStorage.setItem('stealth_daily_slots', JSON.stringify(res.slots)); } catch(e) {}
+        }
+      })
+      .catch(() => {});
+
       if (socketRef.current) {
         socketRef.current.emit('daily_slot_create', newSlot);
         socketRef.current.emit('love_balance_action', {
