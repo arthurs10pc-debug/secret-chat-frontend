@@ -2879,17 +2879,13 @@ export default function App() {
   }, []);
 
 
-  // --- REAL-TIME AUTOMATIC LOVE KARMA / LOVE BALANCE RULES ENGINE ---
+  // --- REAL-TIME AUTOMATIC LOVE KARMA / LOVE BALANCE RULES ENGINE (2-WAY FOR BOTH DORA & DARSH) ---
   const evaluateLoveKarmaMessageRules = useCallback((messageText, senderRole, prevMessage = null) => {
     if (!messageText || typeof messageText !== 'string') return;
     const cleanText = messageText.trim();
     if (!cleanText) return;
 
-    // Automated message karma rules reward/track Dora's activity
-    // Admin (Darsh) controls ledger manually via Admin Command Center and should not receive automated instant replies
-    if (senderRole === 'parent' || senderRole === 'admin') return;
-
-    const targetUser = 'user';
+    const targetUser = (senderRole === 'parent' || senderRole === 'admin' || senderRole === 'H') ? 'admin' : 'user';
     const now = new Date();
     const currentHour = now.getHours();
     const cleanLower = cleanText.toLowerCase();
@@ -2914,9 +2910,15 @@ export default function App() {
     }
 
     // 3. Instant Reply within 5 minutes (+1 Point) - 5-MIN COOLDOWN
+    // Checked when either user replies to a message sent by counterpart within 5 mins
     const lastInstantKey = 'lb_last_instant_' + targetUser;
     const lastInstantTime = Number(localStorage.getItem(lastInstantKey) || 0);
-    if (prevMessage && prevMessage.senderRole !== senderRole && prevMessage.timestamp) {
+    const isCounterpartMsg = prevMessage && (
+      targetUser === 'user'
+        ? (prevMessage.senderRole === 'parent' || prevMessage.senderRole === 'admin' || prevMessage.senderRole === 'H')
+        : (prevMessage.senderRole === 'user' || prevMessage.senderRole === 'A')
+    );
+    if (isCounterpartMsg && prevMessage.timestamp) {
       const diffMs = Math.abs(Date.now() - new Date(prevMessage.timestamp).getTime());
       if (diffMs <= 5 * 60 * 1000 && (Date.now() - lastInstantTime >= 4 * 60 * 1000)) {
         localStorage.setItem(lastInstantKey, Date.now().toString());
