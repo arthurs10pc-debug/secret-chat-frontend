@@ -195,7 +195,9 @@ const parseJwt = (token) => {
 };
 
 const formatLoveBalance = (bal) => {
-  const n = Math.max(0, Number(bal || 0));
+  const n = Number(bal || 0);
+  if (isNaN(n)) return '₹ 0.00';
+  if (n < 0) return `-₹ ${Math.abs(n).toFixed(2)}`;
   return `₹ ${n.toFixed(2)}`;
 };
 
@@ -314,13 +316,22 @@ export default function App() {
     const list = (displayUsers || []).filter(u => u && u.email && u.email.toLowerCase() !== 'dora@gmail.com');
     const designated = list.find(u => u && !u.isAdmin && u.isDora);
     if (designated) return designated;
-    return list.find(u => u && !u.isAdmin) || null;
+    return null;
   }, [displayUsers]);
 
   const activeDoraName = useMemo(() => {
     if (!activeDoraUser) return 'Dora';
     return activeDoraUser.firstName || (activeDoraUser.name ? activeDoraUser.name.split(' ')[0] : 'Dora');
   }, [activeDoraUser]);
+
+  const isCurrentUserDora = useMemo(() => {
+    if (!googleUser || !googleUser.email) return false;
+    const clean = googleUser.email.toLowerCase().trim();
+    if (clean === 'arthurs10pc@gmail.com') return false;
+    const fromUser = Boolean(googleUser.isDora);
+    const fromDir = (usersDirectory?.users || []).some(u => u && u.email && u.email.toLowerCase() === clean && u.isDora);
+    return fromUser || fromDir;
+  }, [googleUser, usersDirectory]);
 
   const partnerName = role === 'parent' ? activeDoraName : 'Darsh';
 
@@ -472,7 +483,7 @@ export default function App() {
   const [loveBalance, setLoveBalance] = useState(() => {
     try {
       const saved = localStorage.getItem('stealth_love_balance');
-      return saved !== null ? Math.max(0, parseFloat(saved) || 0) : 0.00;
+      return saved !== null ? (parseFloat(saved) || 0.00) : 0.00;
     } catch {
       return 0.00;
     }
@@ -485,21 +496,6 @@ export default function App() {
       item.description.includes('Announcement Read') ||
       item.description.includes('Monthly Punctuality Reward')
     )) return true;
-    if (item.type === 'debit') {
-      const idStr = String(item.id || '');
-      const desc = String(item.description || '');
-      const rem = String(item.remarks || '');
-      if (
-        idStr.startsWith('habit_') || 
-        idStr.startsWith('penalty_') ||
-        desc.includes('Missed ') || 
-        desc.includes('Sleeping Without') ||
-        rem.includes('Missed ') ||
-        rem.includes('Sleeping Without')
-      ) {
-        return true;
-      }
-    }
     return false;
   }, []);
 
@@ -547,7 +543,7 @@ export default function App() {
       .reduce((sum, e) => sum + Math.abs(Number(e.points) || 0), 0);
 
     const net = parseFloat((credits - debits - redeems).toFixed(2));
-    return Math.max(0, net);
+    return net;
   }, [isLegacyMockEntry]);
 
   const doraNetBalance = useMemo(() => {
@@ -555,9 +551,9 @@ export default function App() {
     if (userEntries.length > 0) {
       return getNetLedgerBalance(loveLedger, 'user');
     }
-    if (typeof loveBalance === 'number' && loveBalance > 0) return loveBalance;
+    if (typeof loveBalance === 'number') return loveBalance;
     const activeDoraUser = (usersDirectory?.users || []).find(u => u && !u.isAdmin && u.isDora);
-    if (activeDoraUser && typeof activeDoraUser.loveBalance === 'number' && activeDoraUser.loveBalance > 0) {
+    if (activeDoraUser && typeof activeDoraUser.loveBalance === 'number') {
       return activeDoraUser.loveBalance;
     }
     return typeof loveBalance === 'number' ? loveBalance : 0;
@@ -1794,6 +1790,10 @@ export default function App() {
 
   // --- INSTANT AUTO-UNLOCK & AUTO-CLEAR PIN GATE FOR WP UPGRADE VIEW ---
   const handleUpgradeClick = () => {
+    if (role !== 'parent' && !isCurrentUserDora) {
+      alert("🔒 Access Restricted: Upgrade is only available for accounts designated as Dora by Admin (Darsh).");
+      return;
+    }
     setPinInput('');
     setPinError(false);
     setShowPinModal(true);
@@ -6276,14 +6276,16 @@ export default function App() {
                     Switch
                   </button>
                 )}
-                {/* UPGRADE BUTTON REQUIRING PIN GATE */}
-                <button 
-                  onClick={handleUpgradeClick}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 font-bold"
-                  title="Switch to WhatsApp View"
-                >
-                  Upgrade
-                </button>
+                {/* UPGRADE BUTTON REQUIRING PIN GATE - ONLY FOR DESIGNATED DORA OR ADMIN */}
+                {(role === 'parent' || isCurrentUserDora) && (
+                  <button 
+                    onClick={handleUpgradeClick}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 font-bold"
+                    title="Switch to WhatsApp View"
+                  >
+                    Upgrade
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -7069,10 +7071,15 @@ export default function App() {
               <RefreshCw size={12} className={refreshingSection === 'chat_header' ? 'animate-spin text-emerald-400' : ''} />
             </button>
 
-            {/* UPGRADE BUTTON (SPARKLES REMOVED) */}
-            <button className="hidden sm:flex items-center gap-1.5 text-white hover:text-gray-200 cursor-pointer font-medium">
-              <span>Upgrade</span>
-            </button>
+            {/* UPGRADE BUTTON - ONLY FOR DESIGNATED DORA OR ADMIN */}
+            {(role === 'parent' || isCurrentUserDora) && (
+              <button 
+                onClick={handleUpgradeClick}
+                className="hidden sm:flex items-center gap-1.5 text-white hover:text-gray-200 cursor-pointer font-medium"
+              >
+                <span>Upgrade</span>
+              </button>
+            )}
 
             {/* MOBILE NOTIFICATION TOGGLE / STATUS */}
             <button
@@ -8558,8 +8565,13 @@ export default function App() {
                                       </span>
                                     )}
                                     {!user.isAdmin && (
-                                      <span className="text-[9px] bg-pink-950/60 text-pink-300 border border-pink-500/40 px-1.5 py-0.2 rounded font-mono font-bold" title="Current Love Balance">
-                                        💕 ₹ {Number((user.isDora && doraNetBalance > 0 ? Math.max(Number(user.loveBalance || 0), Number(doraNetBalance || 0)) : (user.loveBalance || 0))).toFixed(2)}
+                                      <span className={`text-[9px] border px-1.5 py-0.2 rounded font-mono font-bold ${
+                                        Number(user.isDora ? doraNetBalance : (user.loveBalance || 0)) < 0 
+                                          ? 'bg-rose-950/80 text-rose-300 border-rose-500/50' 
+                                          : 'bg-pink-950/60 text-pink-300 border border-pink-500/40'
+                                      }`} title="Current Love Balance">
+                                        {Number(user.isDora ? doraNetBalance : (user.loveBalance || 0)) < 0 ? '💔 ' : '💕 '}
+                                        {formatLoveBalance(user.isDora ? doraNetBalance : (user.loveBalance || 0))}
                                       </span>
                                     )}
                                   </div>
