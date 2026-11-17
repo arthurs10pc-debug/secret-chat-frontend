@@ -2885,7 +2885,11 @@ export default function App() {
     const cleanText = messageText.trim();
     if (!cleanText) return;
 
-    const targetUser = senderRole === 'parent' ? 'admin' : 'user';
+    // Automated message karma rules reward/track Dora's activity
+    // Admin (Darsh) controls ledger manually via Admin Command Center and should not receive automated instant replies
+    if (senderRole === 'parent' || senderRole === 'admin') return;
+
+    const targetUser = 'user';
     const now = new Date();
     const currentHour = now.getHours();
     const cleanLower = cleanText.toLowerCase();
@@ -2913,8 +2917,8 @@ export default function App() {
     const lastInstantKey = 'lb_last_instant_' + targetUser;
     const lastInstantTime = Number(localStorage.getItem(lastInstantKey) || 0);
     if (prevMessage && prevMessage.senderRole !== senderRole && prevMessage.timestamp) {
-      const diffMs = Date.now() - new Date(prevMessage.timestamp).getTime();
-      if (diffMs > 0 && diffMs <= 5 * 60 * 1000 && Date.now() - lastInstantTime >= 5 * 60 * 1000) {
+      const diffMs = Math.abs(Date.now() - new Date(prevMessage.timestamp).getTime());
+      if (diffMs <= 5 * 60 * 1000 && (Date.now() - lastInstantTime >= 4 * 60 * 1000)) {
         localStorage.setItem(lastInstantKey, Date.now().toString());
         handleLoveBalanceTransaction(1.00, 'credit', 'Instant Reply (Within 5 Mins)', false, targetUser);
       }
