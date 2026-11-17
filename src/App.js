@@ -496,6 +496,11 @@ export default function App() {
       item.description.includes('Announcement Read') ||
       item.description.includes('Monthly Punctuality Reward')
     )) return true;
+    // Purge any auto habit/missed penalties from before today (Nov 17, 2026 onwards)
+    if (item.id && (item.id.startsWith('habit_') || item.id.startsWith('penalty_'))) {
+      const match = (item.id + ' ' + (item.description || '')).match(/(\d{4}-\d{2}-\d{2})/);
+      if (match && match[1] < '2026-11-17') return true;
+    }
     return false;
   }, []);
 
