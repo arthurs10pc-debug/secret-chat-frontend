@@ -8369,7 +8369,7 @@ export default function App() {
                                   )}
                                   <button
                                     type="button"
-                                    onClick={() => handleDeleteCallRecording(rec.id)}
+                                    onClick={() => handleDeleteRecording(rec.id)}
                                     className="p-1.5 rounded-lg hover:bg-rose-950/80 text-gray-400 hover:text-rose-300 transition-colors cursor-pointer"
                                     title="Delete Recording"
                                   >
@@ -8467,7 +8467,7 @@ export default function App() {
                                 </div>
                                 <button
                                   type="button"
-                                  onClick={() => handleToggleFlagPending(pm._id, false)}
+                                  onClick={(e) => togglePendingFlag(e, pm)}
                                   className="text-[10px] backdrop-blur-md bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 px-2 py-1 rounded-lg font-bold shrink-0 cursor-pointer"
                                 >
                                   Mark Answered
