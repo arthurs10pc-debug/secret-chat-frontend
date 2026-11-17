@@ -10593,7 +10593,7 @@ export default function App() {
                     {/* 4 TOP SUMMARY CARDS (AVAILABLE BALANCE, TOTAL CUT POINTS, TOTAL LOVE PAYOUTS, REDEEMED WISHES) */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-sans">
                       
-                      {/* CARD 1: AVAILABLE BALANCE (BLUE) */}
+                      {/* CARD 1: AVAILABLE BALANCE (BLUE) - NEVER NEGATIVE (FLOORED AT 0) */}
                       <div className="bg-blue-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-1.5 relative overflow-hidden">
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] sm:text-xs font-bold tracking-wide">
@@ -10602,7 +10602,7 @@ export default function App() {
                           <span className="text-sm">🤝</span>
                         </div>
                         <div className="text-xl sm:text-2xl font-black font-mono">
-                          {formatLoveBalance(displayedLoveBalance)}
+                          {formatLoveBalance(Math.max(0, displayedLoveBalance))}
                         </div>
                       </div>
 
@@ -10939,14 +10939,15 @@ export default function App() {
                         <p className="text-xs text-gray-300">Exchange your earned Love Balance for sweet promises and real dates!</p>
                       </div>
                       <div className="text-right">
-                        <div className="text-[11px] text-gray-400">Your Wallet</div>
-                        <div className="text-lg sm:text-xl font-black text-emerald-400 font-mono">{formatLoveBalance(displayedLoveBalance)}</div>
+                        <div className="text-[11px] text-gray-400">Available to Spend</div>
+                        <div className="text-lg sm:text-xl font-black text-emerald-400 font-mono">{formatLoveBalance(Math.max(0, displayedLoveBalance))}</div>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                       {ROMANTIC_WISH_STORE.map((wish) => {
-                        const canAfford = displayedLoveBalance >= wish.cost;
+                        const availablePts = Math.max(0, displayedLoveBalance);
+                        const canAfford = availablePts >= wish.cost;
                         return (
                           <div key={wish.id} className="bg-[#181818] border border-[#2a2a2a] hover:border-pink-500/50 rounded-2xl p-4 flex flex-col justify-between space-y-3 shadow transition-colors">
                             <div className="space-y-1.5">
@@ -10977,7 +10978,7 @@ export default function App() {
                                 >
                                   {isPending 
                                     ? '⏳ Awaiting Partner Approval' 
-                                    : (canAfford ? ('Request Wish for ₹ ' + wish.cost.toFixed(2) + ' 💝') : ('Need ₹ ' + (wish.cost - displayedLoveBalance).toFixed(2) + ' More'))}
+                                    : (canAfford ? ('Request Wish for ₹ ' + wish.cost.toFixed(2) + ' 💝') : ('Need ₹ ' + (wish.cost - availablePts).toFixed(2) + ' More'))}
                                 </button>
                               );
                             })()}
