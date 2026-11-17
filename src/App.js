@@ -8,7 +8,7 @@ import {
   SquarePen, Image as ImageIcon, BookOpen, Clock, ToyBrick, FolderGit2, MoreHorizontal,
   Search, PanelLeft, ArrowUp, Plus, RefreshCw, Sparkles, Share,
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
-  Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown,
+  Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown, ChevronUp,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
   Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2, Heart, Coins, Award, Scale, Gift, SlidersHorizontal, Bell, BellRing, Filter, CheckCircle2, XCircle, ArrowLeft, MoreVertical, Paperclip, Camera, Briefcase, Calendar, CheckCircle, Users, UserCheck, Mail
 } from 'lucide-react';
@@ -710,10 +710,32 @@ export default function App() {
   const [slotFormPoints, setSlotFormPoints] = useState('2.0');
   const [dailyAITip, setDailyAITip] = useState('');
   const [refreshingSection, setRefreshingSection] = useState(null);
+  const [expandedAdminParts, setExpandedAdminParts] = useState({
+    part1: false,
+    part2: false,
+    part3: false,
+    part4: false
+  });
+  const toggleAdminPart = useCallback((partKey) => {
+    setExpandedAdminParts(prev => ({ ...prev, [partKey]: !prev[partKey] }));
+  }, []);
+  const toggleAllAdminParts = useCallback((expand) => {
+    setExpandedAdminParts({
+      part1: expand,
+      part2: expand,
+      part3: expand,
+      part4: expand
+    });
+  }, []);
+  const areAllAdminPartsExpanded = useMemo(() => {
+    return Object.values(expandedAdminParts).every(Boolean);
+  }, [expandedAdminParts]);
+
   const checkDailyHabitInfractionsRef = useRef(null);
 
   const handleManualSectionRefresh = useCallback((sectionName) => {
     setRefreshingSection(sectionName);
+    fetch(`${BACKEND_URL}/api/love-balance/evaluate`, { method: 'POST' }).catch(() => {});
     if (checkDailyHabitInfractionsRef.current) {
       try { checkDailyHabitInfractionsRef.current(); } catch(e) {}
     }
@@ -6291,57 +6313,68 @@ export default function App() {
           </div>
         </aside>
       ) : (
-        /* WHATSAPP FULL IMMERSIVE CHAT VIEW */
-        <aside className="fixed inset-0 z-50 w-full h-[100dvh] bg-[#0b141a] flex flex-col overflow-hidden select-none font-sans">
-          {/* WHATSAPP HEADER */}
-          <div className="h-16 bg-[#202c33] flex items-center justify-between px-3 sm:px-4 shrink-0 text-[#e9edef] shadow-md z-20 border-b border-[#2a3942]/60 relative">
+        /* WHATSAPP FULL IMMERSIVE CHAT VIEW - IOS LIQUID GLASS UI */
+        <aside className="fixed inset-0 z-50 w-full h-[100dvh] bg-[#070c10] bg-gradient-to-b from-[#0a151b] via-[#070f14] to-[#04080a] flex flex-col overflow-hidden select-none font-sans relative">
+          
+          {/* Ambient Frosted Glass Glow Spheres */}
+          <div className="absolute top-1/4 -left-20 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute bottom-1/3 -right-20 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute top-1/2 left-1/3 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
+
+          {/* IOS LIQUID GLASS WHATSAPP HEADER */}
+          <div className="h-16 backdrop-blur-2xl bg-black/45 sm:bg-[#0c181f]/65 flex items-center justify-between px-3 sm:px-4 shrink-0 text-[#e9edef] shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] z-20 border-b border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.18)] relative">
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               <button
                 type="button"
                 onClick={() => setIsWhatsAppView(false)}
-                className="text-[#aebac1] hover:text-white p-1.5 -ml-1 rounded-full hover:bg-[#374248]/50 transition-colors cursor-pointer"
+                className="backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 text-[#aebac1] hover:text-white p-2 rounded-full transition-all cursor-pointer active:scale-95 shadow-sm"
                 title="Return to Secret Chat"
               >
-                <ArrowLeft size={20} />
+                <ArrowLeft size={18} />
               </button>
 
               <div 
                 onClick={() => setIsWhatsAppView(false)}
-                className="w-10 h-10 rounded-full bg-[#128c7e]/20 border border-[#25d366]/40 flex items-center justify-center text-base font-bold text-[#e9edef] relative shrink-0 cursor-pointer shadow-inner"
+                className="w-10 h-10 rounded-full backdrop-blur-md bg-white/[0.08] hover:bg-white/[0.15] border border-emerald-400/40 flex items-center justify-center text-base font-bold text-[#e9edef] relative shrink-0 cursor-pointer shadow-md transition-all active:scale-95"
               >
                 {partnerName[0]}
                 {isPartnerOnline && (
-                  <span className="absolute bottom-0 right-0 w-3 h-3 bg-[#25d366] border-2 border-[#202c33] rounded-full animate-pulse shadow-sm" />
+                  <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-400 border-2 border-[#0c181f] rounded-full animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
                 )}
               </div>
 
               <div className="min-w-0">
-                <h3 className="text-[15px] font-semibold text-[#e9edef] tracking-tight truncate leading-tight">
-                  {partnerName}
+                <h3 className="text-[15px] font-bold text-white tracking-tight truncate leading-tight flex items-center gap-1.5">
+                  <span>{partnerName}</span>
+                  <span className="text-[9px] backdrop-blur-md bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-1.5 py-0.2 rounded-full font-mono font-semibold">
+                    IOS GLASS
+                  </span>
                 </h3>
                 <div className="text-[11.5px] font-normal leading-tight h-3.5 flex items-center">
                   {isPeerTyping ? (
-                    <span className="text-[#25d366] animate-pulse">typing...</span>
+                    <span className="text-emerald-400 animate-pulse font-medium">typing...</span>
                   ) : isPartnerOnline ? (
-                    <span className="text-[#25d366]">online</span>
-                  ) : null}
+                    <span className="text-emerald-400/90 font-medium">online</span>
+                  ) : (
+                    <span className="text-gray-400 text-[11px]">encrypted channel</span>
+                  )}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 sm:gap-3 text-[#aebac1] relative">
+            <div className="flex items-center gap-1.5 sm:gap-2.5 text-[#aebac1] relative">
               <button
                 type="button"
                 onClick={() => alert("WhatsApp Video Call feature: Secure connection established with " + partnerName + "!")}
-                className="p-2 hover:text-white hover:bg-[#374248]/40 rounded-full transition-colors cursor-pointer"
+                className="p-2 text-white/80 hover:text-white backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 rounded-full transition-all cursor-pointer active:scale-95 shadow-sm"
                 title="WhatsApp Video Call"
               >
-                <VideoIcon size={19} />
+                <VideoIcon size={17} />
               </button>
 
               {role === 'parent' ? (
                 <div
-                  className="flex items-center gap-1.5 bg-[#182229] border border-pink-500/50 text-white px-2 sm:px-2.5 py-1 rounded-xl text-xs font-mono font-bold shrink-0 shadow-sm"
+                  className="flex items-center gap-1.5 backdrop-blur-xl bg-white/[0.08] hover:bg-white/[0.12] border border-white/20 text-white px-2.5 py-1 rounded-2xl text-xs font-mono font-bold shrink-0 shadow-md transition-all"
                   title={`${activeDoraName}: 💕 Love Balance | Darsh: 👑 Love Balance (Click either to view passbook)`}
                 >
                   <button
@@ -6350,18 +6383,18 @@ export default function App() {
                     className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
                     title={`${activeDoraName}'s Available Balance`}
                   >
-                    <span className="text-[10px] text-pink-400/80 font-sans font-semibold">{activeDoraName}:</span>
+                    <span className="text-[10px] text-pink-400/90 font-sans font-semibold">{activeDoraName}:</span>
                     <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💕'}</span>
                     <span>{formatLoveBalance(doraNetBalance)}</span>
                   </button>
-                  <span className="text-[#374248]">|</span>
+                  <span className="text-white/20">|</span>
                   <button
                     type="button"
                     onClick={() => { setActiveLbTarget('admin'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
                     className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(adminNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}
                     title="Darsh's Available Balance"
                   >
-                    <span className="text-[10px] text-blue-400/80 font-sans font-semibold">Darsh:</span>
+                    <span className="text-[10px] text-blue-400/90 font-sans font-semibold">Darsh:</span>
                     <span>{Number(adminNetBalance || 0) < 0 ? '💔' : '👑'}</span>
                     <span>{formatLoveBalance(adminNetBalance)}</span>
                   </button>
@@ -6370,7 +6403,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                  className={`flex items-center gap-1 bg-[#182229] hover:bg-[#2a3942] border ${Number(doraNetBalance || 0) < 0 ? 'border-rose-500/60 text-rose-300' : 'border-pink-500/50 text-pink-300'} hover:text-white px-2 sm:px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 shadow-sm`}
+                  className={`flex items-center gap-1 backdrop-blur-xl bg-white/[0.08] hover:bg-white/[0.14] border ${Number(doraNetBalance || 0) < 0 ? 'border-rose-500/60 text-rose-300' : 'border-pink-500/50 text-pink-300'} hover:text-white px-2.5 py-1 rounded-2xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 shadow-md`}
                   title="Your Love Balance Passbook & Wish Store"
                 >
                   <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💖'}</span>
@@ -6381,40 +6414,40 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleStartAudioCall}
-                className="p-2 hover:text-[#25d366] hover:bg-[#374248]/40 rounded-full transition-colors cursor-pointer"
+                className="p-2 text-white/80 hover:text-emerald-400 backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 rounded-full transition-all cursor-pointer active:scale-95 shadow-sm"
                 title="WhatsApp Voice Call"
               >
-                <Phone size={19} />
+                <Phone size={17} />
               </button>
 
               <button
                 type="button"
                 onClick={() => setShowWpSearch(!showWpSearch)}
-                className="p-2 hover:text-white hover:bg-[#374248]/40 rounded-full transition-colors cursor-pointer"
+                className="p-2 text-white/80 hover:text-white backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 rounded-full transition-all cursor-pointer active:scale-95 shadow-sm"
                 title="Search Messages"
               >
-                <Search size={19} />
+                <Search size={17} />
               </button>
 
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setShowWpMenu(!showWpMenu)}
-                  className="p-2 hover:text-white hover:bg-[#374248]/40 rounded-full transition-colors cursor-pointer"
+                  className="p-2 text-white/80 hover:text-white backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 rounded-full transition-all cursor-pointer active:scale-95 shadow-sm"
                   title="Menu"
                 >
-                  <MoreVertical size={19} />
+                  <MoreVertical size={17} />
                 </button>
 
                 {showWpMenu && (
                   <div 
-                    className="absolute right-0 top-11 bg-[#233138] border border-[#374248] rounded-2xl shadow-2xl py-2 w-48 z-50 text-xs text-[#d1d7db] font-medium animate-in fade-in zoom-in-95 duration-150"
+                    className="absolute right-0 top-11 backdrop-blur-2xl bg-black/75 border border-white/20 rounded-2xl shadow-2xl py-2 w-48 z-50 text-xs text-gray-200 font-medium animate-in fade-in zoom-in-95 duration-150"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button 
                       type="button"
                       onClick={() => { setShowWpSearch(true); setShowWpMenu(false); }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-[#182229] transition-colors"
+                      className="w-full text-left px-4 py-2.5 hover:bg-white/10 transition-colors"
                     >
                       Search in chat
                     </button>
@@ -6422,7 +6455,7 @@ export default function App() {
                       <button 
                         type="button"
                         onClick={() => { downloadFullChatPDF(); setShowWpMenu(false); }}
-                        className="w-full text-left px-4 py-2.5 hover:bg-[#182229] transition-colors"
+                        className="w-full text-left px-4 py-2.5 hover:bg-white/10 transition-colors"
                       >
                         Export chat PDF
                       </button>
@@ -6433,15 +6466,15 @@ export default function App() {
                         setStealthMessages([]); 
                         setShowWpMenu(false); 
                       }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-[#182229] text-rose-400 transition-colors"
+                      className="w-full text-left px-4 py-2.5 hover:bg-white/10 text-rose-400 transition-colors"
                     >
                       Clear chat
                     </button>
-                    <div className="border-t border-[#374248] my-1" />
+                    <div className="border-t border-white/10 my-1" />
                     <button 
                       type="button"
                       onClick={() => { setIsWhatsAppView(false); setShowWpMenu(false); }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-[#182229] text-amber-300 font-bold transition-colors"
+                      className="w-full text-left px-4 py-2.5 hover:bg-white/10 text-amber-300 font-bold transition-colors"
                     >
                       Exit WhatsApp View
                     </button>
@@ -6452,58 +6485,58 @@ export default function App() {
               <button 
                 type="button"
                 onClick={() => setIsWhatsAppView(false)}
-                className="bg-[#182229] hover:bg-[#2a3942] text-[#e9edef] text-xs font-semibold px-2.5 py-1.5 rounded-lg cursor-pointer border border-[#374248] transition-all active:scale-95"
+                className="backdrop-blur-md bg-white/10 hover:bg-white/20 text-[#e9edef] hover:text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer border border-white/20 transition-all active:scale-95 shadow"
               >
                 Exit WP
               </button>
             </div>
           </div>
 
-          {/* SEARCH BAR IN WP VIEW */}
+          {/* SEARCH BAR IN WP VIEW - IOS GLASS */}
           {showWpSearch && (
-            <div className="bg-[#111b21] border-b border-[#2a3942] px-4 py-2 flex items-center gap-2.5 z-20">
-              <Search size={16} className="text-[#8696a0]" />
+            <div className="backdrop-blur-2xl bg-black/50 border-b border-white/10 px-4 py-2.5 flex items-center gap-2.5 z-20">
+              <Search size={16} className="text-gray-400" />
               <input 
                 type="text"
                 value={wpSearchQuery}
                 onChange={(e) => setWpSearchQuery(e.target.value)}
                 placeholder="Search messages..."
-                className="flex-1 bg-transparent text-sm text-[#e9edef] placeholder-[#8696a0] outline-none"
+                className="flex-1 bg-transparent text-sm text-white placeholder-gray-400 outline-none"
                 autoFocus
               />
               {wpSearchQuery && (
-                <button onClick={() => setWpSearchQuery('')} className="text-[#8696a0] hover:text-white">
+                <button onClick={() => setWpSearchQuery('')} className="text-gray-400 hover:text-white">
                   <X size={15} />
                 </button>
               )}
-              <button onClick={() => { setShowWpSearch(false); setWpSearchQuery(''); }} className="text-xs text-[#25d366] font-semibold">
+              <button onClick={() => { setShowWpSearch(false); setWpSearchQuery(''); }} className="text-xs text-emerald-400 font-semibold cursor-pointer">
                 Close
               </button>
             </div>
           )}
 
-          {/* INCOMING CALL BANNER AT UPPER SIDE WITH ANSWER & DECLINE */}
+          {/* INCOMING CALL BANNER - IOS GLASS */}
           {isIncomingCall && !isInAudioCall && (
-            <div className="absolute top-16 left-0 right-0 z-[99999] bg-[#202c33] border-b-2 border-emerald-500 p-3 px-5 flex items-center justify-between text-white shadow-2xl animate-in slide-in-from-top duration-300">
+            <div className="absolute top-16 left-0 right-0 z-[99999] backdrop-blur-2xl bg-black/75 border-b-2 border-emerald-400/80 p-3 px-5 flex items-center justify-between text-white shadow-2xl animate-in slide-in-from-top duration-300">
               <div className="flex items-center gap-2.5">
                 <Phone size={20} className="text-emerald-400 animate-pulse" />
                 <div>
                   <p className="text-xs font-bold text-white">Incoming Whisper Audio Call...</p>
-                  <p className="text-[10px] text-gray-400">Secure Peer-to-Peer Stream</p>
+                  <p className="text-[10px] text-gray-300">Secure Peer-to-Peer Stream</p>
                 </div>
               </div>
               <div className="flex gap-2.5">
                 <button
                   type="button"
                   onClick={handleAcceptIncomingCall}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded-xl text-xs font-bold cursor-pointer shadow active:scale-95 transition-all"
+                  className="backdrop-blur-md bg-emerald-600 hover:bg-emerald-500 border border-emerald-400/40 text-white px-4 py-1.5 rounded-xl text-xs font-bold cursor-pointer shadow-lg active:scale-95 transition-all"
                 >
                   Answer
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsIncomingCall(false)}
-                  className="bg-rose-600 hover:bg-rose-500 text-white px-4 py-1.5 rounded-xl text-xs font-bold cursor-pointer shadow active:scale-95 transition-all"
+                  className="backdrop-blur-md bg-rose-600 hover:bg-rose-500 border border-rose-400/40 text-white px-4 py-1.5 rounded-xl text-xs font-bold cursor-pointer shadow-lg active:scale-95 transition-all"
                 >
                   Decline
                 </button>
@@ -6511,15 +6544,15 @@ export default function App() {
             </div>
           )}
 
-          {/* ACTIVE WHISPER AUDIO CALL MODAL OVERLAY IN WP VIEW WITH END CALL BUTTON */}
+          {/* ACTIVE WHISPER AUDIO CALL OVERLAY - IOS GLASS */}
           {isInAudioCall && (
-            <div className="bg-[#111b21] border-b border-[#2a3942] p-3 px-4 flex flex-col gap-2 shrink-0 animate-in slide-in-from-top duration-200 shadow-xl">
+            <div className="backdrop-blur-2xl bg-black/60 border-b border-white/10 p-3 px-4 flex flex-col gap-2 shrink-0 animate-in slide-in-from-top duration-200 shadow-xl">
               <div className="flex items-center justify-between text-white">
                 <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
                   <span className="text-xs font-bold">Whisper Call Active ({formatCallTime(callDurationSec)})</span>
                 </div>
-                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono">
+                <span className="text-[10px] backdrop-blur-md bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full font-mono">
                   {isWhisperModeEnabled ? '🤫 Whisper & Noise Scrambler ON' : 'HD Call'}
                 </span>
               </div>
@@ -6529,7 +6562,7 @@ export default function App() {
                   type="button"
                   onClick={() => setIsWhisperModeEnabled(!isWhisperModeEnabled)}
                   className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                    isWhisperModeEnabled ? 'bg-emerald-600 text-white shadow-lg' : 'bg-[#2a3942] text-gray-300 hover:text-white'
+                    isWhisperModeEnabled ? 'backdrop-blur-md bg-emerald-600 text-white shadow-lg border border-emerald-400/40' : 'backdrop-blur-md bg-white/10 text-gray-200 hover:text-white border border-white/10'
                   }`}
                 >
                   <Radio size={13} />
@@ -6539,8 +6572,8 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setIsCallMuted(!isCallMuted)}
-                  className={`p-2 rounded-xl text-xs font-bold cursor-pointer transition-all ${
-                    isCallMuted ? 'bg-rose-600 text-white' : 'bg-[#2a3942] text-gray-300'
+                  className={`p-2 rounded-xl text-xs font-bold cursor-pointer transition-all backdrop-blur-md border border-white/10 ${
+                    isCallMuted ? 'bg-rose-600 text-white' : 'bg-white/10 text-gray-200'
                   }`}
                   title={isCallMuted ? "Unmute Mic" : "Mute Mic"}
                 >
@@ -6550,7 +6583,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleEndAudioCall}
-                  className="bg-rose-600 hover:bg-rose-500 text-white px-4 py-1.5 rounded-xl text-xs font-bold cursor-pointer shadow"
+                  className="backdrop-blur-md bg-rose-600 hover:bg-rose-500 border border-rose-400/40 text-white px-4 py-1.5 rounded-xl text-xs font-bold cursor-pointer shadow active:scale-95 transition-all"
                 >
                   End Call
                 </button>
@@ -6558,22 +6591,22 @@ export default function App() {
             </div>
           )}
 
-          {/* CHAT MESSAGES BODY WITH AUTHENTIC WHATSAPP DOODLE PATTERN */}
+          {/* CHAT MESSAGES BODY - IOS LIQUID GLASS CHAT BUBBLES */}
           <div 
             ref={wpChatScrollRef}
             onClick={() => { setShowWpMenu(false); setActiveReactionMsgId(null); }}
-            className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 bg-[#0b141a] bg-[radial-gradient(#1f2c34_1px,transparent_1px)] bg-[size:18px_18px]"
+            className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 bg-transparent relative z-10"
           >
-            {/* WHATSAPP DATE DIVIDER */}
+            {/* DATE DIVIDER - IOS FROSTED CAPSULE */}
             <div className="flex justify-center my-2 sticky top-1 z-10">
-              <span className="bg-[#182229] border border-[#222d34] text-[#8696a0] text-[11px] font-semibold px-3 py-1 rounded-lg shadow uppercase tracking-wide">
+              <span className="backdrop-blur-xl bg-white/[0.08] border border-white/15 text-gray-300 text-[11px] font-semibold px-3 py-1 rounded-full shadow-md uppercase tracking-wider">
                 TODAY
               </span>
             </div>
 
             {filteredWpMessages.length === 0 ? (
-              <div className="text-center text-xs text-[#8696a0] py-16 space-y-1">
-                <p className="font-semibold text-[#d1d7db]">No messages found</p>
+              <div className="text-center text-xs text-gray-400 py-16 space-y-1">
+                <p className="font-semibold text-gray-200">No messages found</p>
                 <p className="text-[11px]">Messages are end-to-end encrypted and completely private.</p>
               </div>
             ) : (
@@ -6610,14 +6643,14 @@ export default function App() {
                         setActiveReactionMsgId(activeReactionMsgId === m._id ? null : m._id);
                       }}
                       title="Swipe right to reply • Double tap for reactions"
-                      className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-3.5 py-2 shadow-sm relative cursor-pointer text-[14.5px] leading-relaxed transition-all ${
+                      className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-3.5 py-2.5 shadow-md relative cursor-pointer text-[14.5px] leading-relaxed transition-all ${
                         isMine 
-                          ? 'bg-[#005c4b] text-[#e9edef] rounded-tr-none' 
-                          : 'bg-[#202c33] text-[#e9edef] rounded-tl-none border border-[#2a3942]/60'
+                          ? 'backdrop-blur-2xl bg-gradient-to-br from-emerald-600/35 via-emerald-600/25 to-teal-700/35 border border-emerald-400/35 text-white shadow-[0_8px_25px_rgba(16,185,129,0.2)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.25)] rounded-tr-none' 
+                          : 'backdrop-blur-2xl bg-gradient-to-br from-white/[0.12] via-white/[0.08] to-white/[0.04] border border-white/20 text-[#f1f5f9] shadow-[0_8px_25px_rgba(0,0,0,0.35)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.18)] rounded-tl-none'
                       }`}
                     >
                       {hasReplyTag && (
-                        <div className="bg-black/30 border-l-2 border-[#25d366] pl-2.5 py-1 mb-1.5 text-xs text-[#25d366] italic truncate rounded">
+                        <div className="backdrop-blur-md bg-black/40 border-l-2 border-emerald-400 pl-2.5 py-1 mb-1.5 text-xs text-emerald-300 italic truncate rounded">
                           {replySnippet}
                         </div>
                       )}
@@ -6635,10 +6668,10 @@ export default function App() {
                         <p className="break-words select-text">{cleanBody}</p>
                       )}
 
-                      {/* REACTION POPUP TRAY ON DOUBLE TAP */}
+                      {/* REACTION POPUP TRAY ON DOUBLE TAP - IOS LIQUID GLASS */}
                       {isReactionOpen && (
                         <div 
-                          className="absolute -top-11 left-0 z-30 bg-[#233138] border border-[#374248] px-3 py-1.5 rounded-full shadow-2xl flex items-center gap-2 backdrop-blur-md animate-in zoom-in-95 duration-100"
+                          className="absolute -top-11 left-0 z-30 backdrop-blur-2xl bg-black/70 border border-white/25 px-3 py-1.5 rounded-full shadow-2xl flex items-center gap-2 animate-in zoom-in-95 duration-100"
                           onClick={(e) => e.stopPropagation()}
                         >
                           {["👍", "❤️", "😂", "😮", "🙏", "➕"].map((emoji, eIdx) => (
@@ -6663,13 +6696,13 @@ export default function App() {
 
                       {/* MESSAGE REACTION BADGE */}
                       {m.reaction && (
-                        <span className="absolute -bottom-2 right-2 bg-[#202c33] border border-[#374248] px-2 py-0.5 rounded-full text-xs shadow-md">
+                        <span className="absolute -bottom-2 right-2 backdrop-blur-md bg-black/70 border border-white/20 px-2 py-0.5 rounded-full text-xs shadow-lg">
                           {m.reaction}
                         </span>
                       )}
 
-                      {/* TIME, WHATSAPP DELIVERY TICKS & AWARD BUTTON */}
-                      <div className="flex items-center justify-between gap-2 mt-1 text-[11px] text-[#8696a0] select-none font-normal">
+                      {/* TIME, DELIVERY TICKS & AWARD BUTTON */}
+                      <div className="flex items-center justify-between gap-2 mt-1 text-[11px] text-gray-400 select-none font-normal">
                         {!isMine ? (
                           <div className="relative inline-flex items-center">
                             <button
@@ -6679,7 +6712,7 @@ export default function App() {
                                 setActiveAwardMsgId(activeAwardMsgId === m._id ? null : m._id);
                               }}
                               title={'Award Love Karma to ' + partnerName}
-                              className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-pink-950/70 hover:bg-pink-900 border border-pink-700/60 text-pink-300 hover:text-white cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-sm"
+                              className="px-2 py-0.5 text-[10px] font-bold rounded-full backdrop-blur-md bg-pink-500/20 hover:bg-pink-500/30 border border-pink-400/40 text-pink-300 hover:text-white cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-sm"
                             >
                               <Heart size={10} className="text-pink-400 fill-pink-400" />
                               <span>Award</span>
@@ -6687,7 +6720,7 @@ export default function App() {
 
                             {activeAwardMsgId === m._id && (
                               <div 
-                                className="absolute left-0 bottom-6 z-50 bg-[#141414] border border-pink-500/50 p-2 rounded-2xl shadow-2xl flex flex-col gap-1 w-44 text-left text-xs font-sans animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md"
+                                className="absolute left-0 bottom-6 z-50 backdrop-blur-2xl bg-black/85 border border-pink-500/50 p-2.5 rounded-2xl shadow-2xl flex flex-col gap-1 w-48 text-left text-xs font-sans animate-in fade-in zoom-in-95 duration-150"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <p className="text-[10px] text-pink-400 font-bold uppercase tracking-wider px-1">💖 Award {partnerName} Karma</p>
@@ -6744,11 +6777,11 @@ export default function App() {
                           <span>{m.timeFormatted}</span>
                           {isMine && (
                             m.isSeen && isPartnerOnline ? (
-                              <CheckCheck size={14} className="text-[#53bdeb]" title="Seen" />
+                              <CheckCheck size={14} className="text-cyan-400" title="Seen" />
                             ) : isPartnerOnline ? (
-                              <CheckCheck size={14} className="text-[#8696a0]" title="Delivered" />
+                              <CheckCheck size={14} className="text-gray-400" title="Delivered" />
                             ) : (
-                              <Check size={14} className="text-[#8696a0]" title="Sent" />
+                              <Check size={14} className="text-gray-400" title="Sent" />
                             )
                           )}
                         </div>
@@ -6762,14 +6795,14 @@ export default function App() {
           </div>
 
           {replyTarget && (
-            <div className="bg-[#1f2c34] border-t border-[#2a3942] px-4 py-2.5 flex items-center justify-between text-xs text-[#25d366]">
+            <div className="backdrop-blur-xl bg-black/60 border-t border-white/10 px-4 py-2.5 flex items-center justify-between text-xs text-emerald-400">
               <span className="truncate italic">Replying to: "{replyTarget.text}"</span>
-              <button onClick={() => setReplyTarget(null)} className="text-[#8696a0] hover:text-white cursor-pointer"><X size={15} /></button>
+              <button onClick={() => setReplyTarget(null)} className="text-gray-400 hover:text-white cursor-pointer"><X size={15} /></button>
             </div>
           )}
 
           {showMiniEmojiBar && (
-            <div className="bg-[#202c33] border-t border-[#2a3942] p-2.5 flex items-center gap-2 overflow-x-auto scrollbar-none">
+            <div className="backdrop-blur-2xl bg-black/60 border-t border-white/10 p-2.5 flex items-center gap-2 overflow-x-auto scrollbar-none">
               {QUICK_EMOJIS.map((emoji, idx) => (
                 <button
                   key={idx}
@@ -6783,23 +6816,23 @@ export default function App() {
             </div>
           )}
 
-          {/* WHATSAPP BOTTOM INPUT BAR */}
-          <form onSubmit={handleSubmit} className="bg-[#202c33] px-2.5 sm:px-4 py-2.5 flex items-center gap-2 shrink-0 border-t border-[#2a3942]/60">
+          {/* WHATSAPP BOTTOM INPUT BAR - IOS LIQUID GLASS FLOATING CAPSULE */}
+          <form onSubmit={handleSubmit} className="backdrop-blur-2xl bg-black/45 sm:bg-[#0c181f]/70 px-2.5 sm:px-4 py-2.5 flex items-center gap-2 shrink-0 border-t border-white/10 z-20 shadow-[0_-8px_32px_rgba(0,0,0,0.4)]">
             <button 
               type="button"
               onClick={() => setShowMiniEmojiBar(!showMiniEmojiBar)}
-              className="text-[#8696a0] hover:text-[#d1d7db] p-2 hover:bg-[#374248]/40 rounded-full transition-colors cursor-pointer"
+              className="backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 text-gray-300 hover:text-white p-2 rounded-full transition-all cursor-pointer active:scale-95"
               title="Emojis"
             >
-              <Smile size={22} />
+              <Smile size={20} />
             </button>
             <button 
               type="button" 
               onClick={() => fileInputRef.current && fileInputRef.current.click()}
-              className="text-[#8696a0] hover:text-[#d1d7db] p-2 hover:bg-[#374248]/40 rounded-full transition-colors cursor-pointer"
+              className="backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 text-gray-300 hover:text-white p-2 rounded-full transition-all cursor-pointer active:scale-95"
               title="Attach Photo or Document"
             >
-              <Paperclip size={21} />
+              <Paperclip size={19} />
             </button>
             <textarea 
               rows={1}
@@ -6817,29 +6850,30 @@ export default function App() {
                 }
               }}
               placeholder="Type a message..."
-              className="flex-1 bg-[#2a3942] text-[#e9edef] placeholder-[#8696a0] text-[14.5px] px-4 py-2.5 rounded-3xl outline-none resize-none max-h-28 overflow-y-auto leading-relaxed shadow-inner"
+              className="flex-1 backdrop-blur-xl bg-white/[0.08] border border-white/15 focus:border-emerald-400/50 text-[#e9edef] placeholder-gray-400 text-[14.5px] px-4 py-2.5 rounded-full outline-none resize-none max-h-28 overflow-y-auto leading-relaxed shadow-[inset_0_1px_2px_rgba(0,0,0,0.3)] transition-all"
             />
             {input.trim().length > 0 ? (
               <button 
                 type="submit" 
-                className="w-11 h-11 rounded-full bg-[#00a884] hover:bg-[#029374] active:scale-90 text-white flex items-center justify-center cursor-pointer shadow-lg transition-transform shrink-0"
+                className="w-10 h-10 rounded-full backdrop-blur-md bg-gradient-to-tr from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 border border-emerald-300/40 text-white flex items-center justify-center cursor-pointer shadow-[0_0_18px_rgba(16,185,129,0.45)] transition-all active:scale-90 shrink-0"
                 title="Send Message"
               >
-                <Send size={18} className="translate-x-0.5" />
+                <Send size={16} className="translate-x-0.5" />
               </button>
             ) : (
               <button 
                 type="button"
                 onClick={handleStartAudioCall}
-                className="w-11 h-11 rounded-full bg-[#00a884] hover:bg-[#029374] active:scale-90 text-white flex items-center justify-center cursor-pointer shadow-lg transition-transform shrink-0"
+                className="w-10 h-10 rounded-full backdrop-blur-md bg-gradient-to-tr from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 border border-emerald-300/40 text-white flex items-center justify-center cursor-pointer shadow-[0_0_18px_rgba(16,185,129,0.45)] transition-all active:scale-90 shrink-0"
                 title="Start Whisper Call"
               >
-                <Mic size={19} />
+                <Mic size={18} />
               </button>
             )}
           </form>
         </aside>
       )}
+
 
       {/* SECURITY PIN GATE MODAL FOR UPGRADE VIEW WITH INSTANT AUTO-UNLOCK & ANIMATION */}
       {/* IOS INSTALLATION HELPER GUIDE MODAL */}
@@ -7883,37 +7917,60 @@ export default function App() {
               </section>
             )}
 
-            {/* --- SEPARATE DEDICATED ADMIN DASHBOARD (ADMIN PARENT ONLY) --- */}
+                        {/* --- SEPARATE DEDICATED ADMIN DASHBOARD (ADMIN PARENT ONLY) - IOS LIQUID GLASS & COMPACT EXPANDABLE ROWS --- */}
             {viewMode === 'admin_dashboard' && role === 'parent' && (
               <section className="flex-1 overflow-y-auto px-2 sm:px-4 py-2 sm:py-3 w-full max-w-7xl mx-auto space-y-3 font-sans animate-in fade-in duration-200">
                 
-                {/* DASHBOARD HERO HEADER */}
-                <div className="bg-gradient-to-r from-[#161616] via-[#1c1813] to-[#161616] border border-amber-500/40 rounded-2xl p-3 sm:p-4 shadow-xl relative overflow-hidden">
+                {/* DASHBOARD HERO HEADER - IOS LIQUID GLASS */}
+                <div className="backdrop-blur-2xl bg-white/[0.06] dark:bg-black/35 border border-white/20 rounded-2xl sm:rounded-3xl p-3 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.22)] relative overflow-hidden">
+                  <div className="absolute -top-16 -left-16 w-44 h-44 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+                  <div className="absolute -bottom-16 -right-16 w-44 h-44 bg-pink-500/15 rounded-full blur-3xl pointer-events-none" />
+
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-black flex items-center justify-center text-xl shadow-lg border border-amber-300 font-black shrink-0">
+                      <div className="w-10 h-10 rounded-2xl backdrop-blur-xl bg-gradient-to-br from-amber-400/90 via-amber-500/80 to-amber-600/90 text-black flex items-center justify-center text-xl shadow-[0_4px_20px_rgba(245,158,11,0.3)] border border-amber-300/60 font-black shrink-0">
                         👑
                       </div>
                       <div className="text-left space-y-0.5">
                         <div className="flex items-center gap-2">
-                          <h1 className="text-base sm:text-lg font-black text-white">Admin Command Center</h1>
-                          <span className="text-[10px] bg-amber-500 text-black px-2 py-0.2 rounded-full font-bold">DARSH</span>
+                          <h1 className="text-base sm:text-lg font-black text-white tracking-tight">Admin Command Center</h1>
+                          <span className="text-[10px] backdrop-blur-md bg-amber-500/30 text-amber-300 border border-amber-400/40 px-2 py-0.2 rounded-full font-bold">DARSH</span>
                         </div>
-                        <p className="text-[11px] text-amber-300/80 font-mono">
+                        <p className="text-[11px] text-amber-200/80 font-mono">
                           Session Verified • Darsh (Superuser) • Master Access
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 flex-wrap shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => toggleAllAdminParts(!areAllAdminPartsExpanded)}
+                        className="backdrop-blur-xl bg-white/[0.08] hover:bg-white/[0.15] border border-white/20 text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 active:scale-95 shadow"
+                        title="Expand or collapse all command center modules"
+                      >
+                        {areAllAdminPartsExpanded ? (
+                          <>
+                            <ChevronUp size={13} className="text-amber-400" />
+                            <span>Collapse All</span>
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown size={13} className="text-amber-400" />
+                            <span>Expand All</span>
+                          </>
+                        )}
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => setSidebarOpen(true)}
-                        className="bg-[#242424] hover:bg-[#333] border border-[#3a3a3a] text-gray-300 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 active:scale-95 shadow md:hidden"
+                        className="backdrop-blur-xl bg-white/[0.08] hover:bg-white/[0.15] border border-white/20 text-gray-300 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 active:scale-95 shadow md:hidden"
                       >
                         <PanelLeft size={13} className="text-emerald-400" />
                         <span>Menu</span>
                       </button>
+
                       <button
                         type="button"
                         onClick={() => {
@@ -7922,650 +7979,649 @@ export default function App() {
                         }}
                         className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 active:scale-95 shadow ${
                           dailySubmissions.filter(s => s.status === 'PENDING').length > 0
-                            ? 'bg-amber-500 text-black border border-amber-300 animate-pulse'
-                            : 'bg-[#242424] hover:bg-[#333] border border-[#3a3a3a] text-emerald-300'
+                            ? 'backdrop-blur-xl bg-amber-500/80 text-black border border-amber-300 animate-pulse'
+                            : 'backdrop-blur-xl bg-white/[0.08] hover:bg-white/[0.15] border border-white/20 text-emerald-300'
                         }`}
                         title={`Review ${activeDoraName}'s Project Submissions & Hourly Tasks Proofs`}
                       >
                         <Briefcase size={13} />
                         <span>Project Submissions {dailySubmissions.filter(s => s.status === 'PENDING').length > 0 ? `(${dailySubmissions.filter(s => s.status === 'PENDING').length} PENDING)` : ''}</span>
                       </button>
+
                       <button
                         type="button"
                         onClick={() => setViewMode('real_gpt')}
-                        className="bg-[#242424] hover:bg-[#333] border border-[#3a3a3a] text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 active:scale-95 shadow"
+                        className="backdrop-blur-xl bg-white/[0.08] hover:bg-white/[0.15] border border-white/20 text-white px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 active:scale-95 shadow"
                       >
                         <span className="w-4 h-4 rounded-full bg-white text-black flex items-center justify-center p-0.5 shrink-0">
                           <ChatGPTLogo className="w-2.5 h-2.5 text-black" />
                         </span>
                         <span>← Return to Chat</span>
                       </button>
+
                       <button
                         type="button"
-                        onClick={() => window.location.reload()}
-                        className="bg-amber-500 hover:bg-amber-400 text-black p-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all shadow"
+                        onClick={() => handleManualSectionRefresh('admin_command_center')}
+                        className="backdrop-blur-xl bg-amber-500 hover:bg-amber-400 text-black p-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all shadow active:scale-90"
                         title="Reload Dashboard"
                       >
-                        <RefreshCw size={13} />
+                        <RefreshCw size={13} className={refreshingSection === 'admin_command_center' ? 'animate-spin' : ''} />
                       </button>
                     </div>
                   </div>
                 </div>
 
-                {/* 4 DISTINCT CLEAN MODULAR PARTS (FULL SCREEN FITTED 4 SQUARES) */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-3.5 text-left font-sans">
+                {/* 4 SLEEK COMPACT LINE MODULES (STACKED IOS LIQUID GLASS ACCORDION) */}
+                <div className="space-y-3 text-left font-sans">
                   
-                  {/* PART 1: LOVE BALANCE CENTRAL ENGINE (2-PART: ADMIN H & PARTNER A) */}
-                  <div className="bg-[#121212] border-2 border-pink-500/40 hover:border-pink-500/60 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-2xl flex flex-col justify-between space-y-3">
-                    <div className="space-y-2.5">
-                      
-                      {/* CARD HEADER WITH DUAL BALANCES */}
-                      <div className="flex items-center justify-between border-b border-[#222] pb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-xl bg-pink-500/10 border border-pink-500/30 flex items-center justify-center text-pink-400 font-bold text-base">
-                            💖
+                  {/* ===================== PART 1: LOVE BALANCE CENTRAL ENGINE ===================== */}
+                  <div className="backdrop-blur-2xl bg-white/[0.06] hover:bg-white/[0.08] border border-pink-500/30 hover:border-pink-500/50 rounded-2xl transition-all shadow-[0_4px_24px_rgba(0,0,0,0.25)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.18)] overflow-hidden">
+                    {/* COMPACT LINE BAR */}
+                    <div 
+                      onClick={() => toggleAdminPart('part1')}
+                      className="py-3 px-3.5 sm:px-4.5 flex items-center justify-between gap-3 cursor-pointer select-none transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 rounded-xl backdrop-blur-md bg-pink-500/20 border border-pink-400/40 flex items-center justify-center text-pink-300 text-base shrink-0 shadow-sm">
+                          💖
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs sm:text-sm font-black text-white tracking-tight">Part 1: Love Balance Engine</span>
+                            <span className="text-[9px] backdrop-blur-md bg-pink-500/20 text-pink-300 border border-pink-400/30 px-1.5 py-0.2 rounded font-mono font-bold">2-WAY</span>
                           </div>
-                          <div>
-                            <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
-                              <span>Part 1: Love Balance Engine</span>
-                              <span className="text-[9px] bg-pink-500/20 text-pink-300 border border-pink-500/30 px-1.5 py-0.2 rounded font-mono">2-WAY</span>
-                            </h3>
-                            <p className="text-[10px] text-gray-400">Control & award points for {activeDoraName} and Darsh</p>
-                          </div>
+                          <p className="text-[10px] text-gray-400 truncate hidden sm:block">Control & award points for {activeDoraName} and Darsh</p>
+                        </div>
+                      </div>
+
+                      {/* INLINE SUMMARY CHIPS & CHEVRON */}
+                      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                        <div className={`backdrop-blur-md px-2 py-0.5 rounded-xl border text-[11px] font-mono font-bold flex items-center gap-1 ${
+                          Number(doraNetBalance || 0) < 0 
+                            ? 'bg-rose-950/60 border-rose-500/50 text-rose-300' 
+                            : 'bg-white/[0.07] border-pink-500/30 text-emerald-400'
+                        }`}>
+                          <span className="text-[9px] text-pink-400 font-sans">{activeDoraName}:</span>
+                          <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💕'}</span>
+                          <span>{formatLoveBalance(doraNetBalance)}</span>
                         </div>
 
-                        {/* DUAL BALANCES DISPLAY */}
-                        <div className="flex items-center gap-1.5 text-right">
-                          <div className={`bg-[#181818] border ${Number(doraNetBalance || 0) < 0 ? 'border-rose-500/50' : 'border-pink-500/30'} px-2 py-0.5 rounded-xl`}>
-                            <div className="text-[9px] text-gray-400">{activeDoraName}</div>
-                            <div className={`text-xs sm:text-sm font-black font-mono ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                              {formatLoveBalance(doraNetBalance)}
-                            </div>
-                          </div>
-                          <div className={`bg-[#181818] border ${Number(adminNetBalance || 0) < 0 ? 'border-rose-500/50' : 'border-blue-500/30'} px-2 py-0.5 rounded-xl`}>
-                            <div className="text-[9px] text-gray-400">Darsh</div>
-                            <div className={`text-xs sm:text-sm font-black font-mono ${Number(adminNetBalance || 0) < 0 ? 'text-rose-400' : 'text-blue-400'}`}>
-                              {formatLoveBalance(adminNetBalance)}
-                            </div>
-                          </div>
+                        <div className={`backdrop-blur-md px-2 py-0.5 rounded-xl border text-[11px] font-mono font-bold flex items-center gap-1 hidden sm:flex ${
+                          Number(adminNetBalance || 0) < 0 
+                            ? 'bg-rose-950/60 border-rose-500/50 text-rose-300' 
+                            : 'bg-white/[0.07] border-blue-500/30 text-blue-400'
+                        }`}>
+                          <span className="text-[9px] text-blue-400 font-sans">Darsh:</span>
+                          <span>👑</span>
+                          <span>{formatLoveBalance(adminNetBalance)}</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleManualSectionRefresh('part1_love_balance');
+                          }}
+                          className="w-7 h-7 rounded-full backdrop-blur-md bg-white/[0.08] hover:bg-pink-600/30 border border-white/15 hover:border-pink-500 text-gray-300 hover:text-pink-300 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                          title="Refresh Love Balance"
+                        >
+                          <RefreshCw size={12} className={refreshingSection === 'part1_love_balance' ? 'animate-spin text-pink-400' : ''} />
+                        </button>
+
+                        <div className="backdrop-blur-md bg-white/[0.08] hover:bg-white/[0.14] border border-white/15 text-gray-200 px-2 sm:px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 transition-all">
+                          <span className="hidden sm:inline">{expandedAdminParts.part1 ? 'Collapse' : 'Details'}</span>
+                          {expandedAdminParts.part1 ? <ChevronUp size={13} className="text-pink-400" /> : <ChevronDown size={13} className="text-pink-400" />}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* EXPANDED DETAILS BODY - IOS LIQUID GLASS */}
+                    {expandedAdminParts.part1 && (
+                      <div className="p-3.5 sm:p-4 border-t border-white/10 space-y-3 bg-black/25 backdrop-blur-xl animate-in slide-in-from-top-2 duration-150">
+                        {/* 2 PARTS SELECTOR: PARTNER (A) VS ADMIN (H) */}
+                        <div className="flex backdrop-blur-xl bg-white/[0.06] p-1 rounded-xl border border-white/15 text-xs font-bold gap-1">
                           <button
                             type="button"
-                            onClick={() => handleManualSectionRefresh('part1_love_balance')}
-                            className="w-7 h-7 rounded-full bg-[#1e1e1e] hover:bg-pink-600/30 border border-[#333] hover:border-pink-500 text-gray-400 hover:text-pink-300 flex items-center justify-center transition-all cursor-pointer active:scale-90 shrink-0"
-                            title="Refresh Love Balance"
+                            onClick={() => setActiveLbTarget('user')}
+                            className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                              activeLbTarget === 'user' 
+                                ? 'backdrop-blur-md bg-pink-600/80 border border-pink-400/50 text-white shadow font-black' 
+                                : 'text-gray-400 hover:text-white'
+                            }`}
                           >
-                            <RefreshCw size={12} className={refreshingSection === 'part1_love_balance' ? 'animate-spin text-pink-400' : ''} />
+                            <span>💕 {activeDoraName}</span>
+                            <span className={`text-[9px] bg-black/40 px-1.5 py-0.2 rounded font-mono ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : ''}`}>
+                              {formatLoveBalance(doraNetBalance)}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveLbTarget('admin')}
+                            className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                              activeLbTarget === 'admin' 
+                                ? 'backdrop-blur-md bg-blue-600/80 border border-blue-400/50 text-white shadow font-black' 
+                                : 'text-gray-400 hover:text-white'
+                            }`}
+                          >
+                            <span>👑 Darsh</span>
+                            <span className={`text-[9px] bg-black/40 px-1.5 py-0.2 rounded font-mono ${Number(adminNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : ''}`}>
+                              {formatLoveBalance(adminNetBalance)}
+                            </span>
                           </button>
                         </div>
-                      </div>
 
-                      {/* 2 PARTS SELECTOR: PARTNER (A) VS ADMIN (H) */}
-                      <div className="flex bg-[#181818] p-1 rounded-xl border border-[#2a2a2a] text-xs font-bold gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setActiveLbTarget('user')}
-                          className={`flex-1 py-1 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                            activeLbTarget === 'user' 
-                              ? 'bg-pink-600 text-white shadow font-black' 
-                              : 'text-gray-400 hover:text-white'
-                          }`}
-                        >
-                          <span>💕 {activeDoraName}</span>
-                          <span className={`text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : ''}`}>
-                            {formatLoveBalance(doraNetBalance)}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setActiveLbTarget('admin')}
-                          className={`flex-1 py-1 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                            activeLbTarget === 'admin' 
-                              ? 'bg-blue-600 text-white shadow font-black' 
-                              : 'text-gray-400 hover:text-white'
-                          }`}
-                        >
-                          <span>👑 Darsh</span>
-                          <span className={`text-[9px] bg-black/40 px-1 py-0.2 rounded font-mono ${Number(adminNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : ''}`}>
-                            {formatLoveBalance(adminNetBalance)}
-                          </span>
-                        </button>
-                      </div>
-
-                      {/* QUICK AWARDS & DEDUCTIONS FOR CURRENT TARGET */}
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-[10px] font-semibold text-gray-300">
-                          <span className="text-emerald-400 flex items-center gap-1">
+                        {/* QUICK AWARD PRESETS */}
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">
                             ✨ Quick Awards to {activeLbTarget === 'user' ? activeDoraName : 'Darsh'} (+₹):
                           </span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleLoveBalanceTransaction(2, 'credit', 'Morning Sweet Text (Before 9 AM)', false, activeLbTarget)}
-                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
-                            title="Morning Sweet Text (+₹2.00)"
-                          >
-                            +₹2 Morning Text
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleLoveBalanceTransaction(1, 'credit', 'Instant Reply (< 5 mins)', false, activeLbTarget)}
-                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
-                            title="Instant Reply (+₹1.00)"
-                          >
-                            +₹1 Fast Reply
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleLoveBalanceTransaction(3, 'credit', 'Compliment Drop', false, activeLbTarget)}
-                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
-                            title="Compliment Drop (+₹3.00)"
-                          >
-                            +₹3 Compliment
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleLoveBalanceTransaction(5, 'credit', 'Romantic Song / Movie', false, activeLbTarget)}
-                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
-                            title="Romantic Song / Movie (+₹5.00)"
-                          >
-                            +₹5 Song/Movie
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleLoveBalanceTransaction(10, 'credit', 'Late Night Romantic Paragraph', false, activeLbTarget)}
-                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
-                            title="Late Night Romantic Paragraph (+₹10.00)"
-                          >
-                            +₹10 Paragraph
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleLoveBalanceTransaction(15, 'credit', 'Special Milestone / Anniversary', false, activeLbTarget)}
-                            className="bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
-                            title="Special Date / Milestone (+₹15.00)"
-                          >
-                            +₹15 Milestone
-                          </button>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-xs">
+                            {[
+                              { label: '+₹2 Morning Text', amount: 2, reason: 'Sweet Morning Wish' },
+                              { label: '+₹1 Fast Reply', amount: 1, reason: 'Instant Reply Under 30s' },
+                              { label: '+₹3 Compliment', amount: 3, reason: 'Cute Romantic Compliment' },
+                              { label: '+₹5 Song/Movie', amount: 5, reason: 'Recommended Good Music/Film' },
+                              { label: '+₹10 Paragraph', amount: 10, reason: 'Long Romantic Paragraph' },
+                              { label: '+₹15 Milestone', amount: 15, reason: 'Daily Relationship Milestone' },
+                            ].map((preset, pIdx) => (
+                              <button
+                                key={pIdx}
+                                type="button"
+                                onClick={() => handleLoveBalanceTransaction(preset.amount, 'credit', preset.reason, false, activeLbTarget)}
+                                className="backdrop-blur-md bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-400/30 text-emerald-300 hover:text-white py-1.5 px-2 rounded-xl text-[11px] font-semibold transition-all cursor-pointer active:scale-95 shadow-sm text-center truncate"
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
 
-                        <div className="flex items-center justify-between text-[10px] font-semibold text-gray-300 pt-0.5">
-                          <span className="text-rose-400 flex items-center gap-1">
+                        {/* QUICK DEDUCTION PRESETS */}
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider block">
                             💔 Quick Deductions from {activeLbTarget === 'user' ? activeDoraName : 'Darsh'} (-₹):
                           </span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleLoveBalanceTransaction(2, 'debit', 'Dry Replies ("Hmm", "Ok")', false, activeLbTarget)}
-                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
-                            title="Dry Reply (-₹2.00)"
-                          >
-                            -₹2 Dry Reply
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleLoveBalanceTransaction(3, 'debit', 'Seen & Ignored (>1 hr)', false, activeLbTarget)}
-                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
-                            title="Seen & Ignored (-₹3.00)"
-                          >
-                            -₹3 Seen & Left
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleLoveBalanceTransaction(3, 'debit', 'Slept without Good Night', false, activeLbTarget)}
-                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
-                            title="Slept without Good Night (-₹3.00)"
-                          >
-                            -₹3 Slept w/o GN
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleLoveBalanceTransaction(5, 'debit', 'Late Reply / Ghosting', false, activeLbTarget)}
-                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
-                            title="Late Reply (-₹5.00)"
-                          >
-                            -₹5 Late Reply
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleLoveBalanceTransaction(10, 'debit', 'Rudeness / Harsh Words', false, activeLbTarget)}
-                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
-                            title="Rudeness (-₹10.00)"
-                          >
-                            -₹10 Rude Tone
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleLoveBalanceTransaction(20, 'debit', 'Forgetting Anniversary / Date', false, activeLbTarget)}
-                            className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 py-1 px-1.5 rounded-lg text-[10px] font-semibold truncate transition-all active:scale-95 cursor-pointer text-center"
-                            title="Forgetting Date (-₹20.00)"
-                          >
-                            -₹20 Forgot Date
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* UNIFIED BALANCE ADJUSTMENT & MASTER POWER CONTROLS */}
-                      <div className="bg-[#161616] border border-amber-500/30 rounded-xl p-2.5 space-y-2">
-                        <div className="flex items-center justify-between text-[11px] font-bold text-gray-200">
-                          <span className="flex items-center gap-1.5 text-amber-300">
-                            ⚡ Balance Control for {activeLbTarget === 'user' ? activeDoraName : 'Darsh'}
-                          </span>
-                          <span className="text-[9px] text-gray-500 font-mono">Live Real-time Sync</span>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-xs">
+                            {[
+                              { label: '-₹2 Dry Reply', amount: 2, reason: 'Dry / One-word Reply' },
+                              { label: '-₹3 Seen & Left', amount: 3, reason: 'Seen & No Reply for >15m' },
+                              { label: '-₹3 Slept w/o GN', amount: 3, reason: 'Slept without saying Good Night' },
+                              { label: '-₹5 Late Reply', amount: 5, reason: 'Disappeared without informing' },
+                              { label: '-₹10 Rude Tone', amount: 10, reason: 'Cold / Argumentative Tone' },
+                              { label: '-₹20 Forgot Date', amount: 20, reason: 'Forgot Routine / Special Request' },
+                            ].map((preset, pIdx) => (
+                              <button
+                                key={pIdx}
+                                type="button"
+                                onClick={() => handleLoveBalanceTransaction(preset.amount, 'debit', preset.reason, false, activeLbTarget)}
+                                className="backdrop-blur-md bg-rose-500/10 hover:bg-rose-500/25 border border-rose-400/30 text-rose-300 hover:text-white py-1.5 px-2 rounded-xl text-[11px] font-semibold transition-all cursor-pointer active:scale-95 shadow-sm text-center truncate"
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                          <input
-                            type="number"
-                            step="0.5"
-                            min="0"
-                            value={adminLbAmount}
-                            onChange={(e) => setAdminLbAmount(e.target.value)}
-                            placeholder="Points / ₹ (e.g. 5.0)"
-                            className="bg-[#101010] border border-[#333] text-white text-xs px-2.5 py-1.5 rounded-lg outline-none focus:border-amber-400 font-mono"
-                          />
-                          <input
-                            type="text"
-                            value={adminLbReason}
-                            onChange={(e) => setAdminLbReason(e.target.value)}
-                            placeholder="Remark / Reason"
-                            className="bg-[#101010] border border-[#333] text-white text-xs px-2.5 py-1.5 rounded-lg outline-none focus:border-amber-400"
-                          />
+                        {/* MANUAL BALANCE CONTROL FORM */}
+                        <div className="backdrop-blur-md bg-white/[0.04] p-3 rounded-2xl border border-white/10 space-y-2">
+                          <div className="flex items-center justify-between text-[11px] text-gray-300 font-bold">
+                            <span>⚡ Balance Control for {activeLbTarget === 'user' ? activeDoraName : 'Darsh'}</span>
+                            <span className="text-[10px] text-emerald-400 font-mono">Live Real-time Sync</span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <input
+                              type="number"
+                              step="0.5"
+                              value={adminLbAmount}
+                              onChange={(e) => setAdminLbAmount(e.target.value)}
+                              placeholder="Points / ₹ (e.g. 5.0)"
+                              className="backdrop-blur-md bg-white/[0.06] border border-white/15 rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-400 focus:outline-none focus:border-pink-500"
+                            />
+                            <input
+                              type="text"
+                              value={adminLbReason}
+                              onChange={(e) => setAdminLbReason(e.target.value)}
+                              placeholder="Remark / Reason"
+                              className="backdrop-blur-md bg-white/[0.06] border border-white/15 rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-400 focus:outline-none focus:border-pink-500"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!adminLbAmount) return;
+                                handleLoveBalanceTransaction(parseFloat(adminLbAmount), 'credit', adminLbReason || 'Admin Manual Credit', false, activeLbTarget);
+                                setAdminLbAmount('');
+                                setAdminLbReason('');
+                              }}
+                              className="backdrop-blur-md bg-emerald-600/80 hover:bg-emerald-500 border border-emerald-400/40 text-white text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow text-center"
+                            >
+                              + Credit (+₹)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!adminLbAmount) return;
+                                handleLoveBalanceTransaction(parseFloat(adminLbAmount), 'debit', adminLbReason || 'Admin Manual Deduction', false, activeLbTarget);
+                                setAdminLbAmount('');
+                                setAdminLbReason('');
+                              }}
+                              className="backdrop-blur-md bg-rose-600/80 hover:bg-rose-500 border border-rose-400/40 text-white text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow text-center"
+                            >
+                              - Deduct (-₹)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!adminLbAmount) {
+                                  alert(`Please enter the exact balance amount in the points box for ${activeLbTarget === 'user' ? activeDoraName : 'Darsh'}.`);
+                                  return;
+                                }
+                                handleAdminOverrideBalance(activeLbTarget, adminLbAmount);
+                                setAdminLbAmount('');
+                                setAdminLbReason('');
+                              }}
+                              className="backdrop-blur-md bg-amber-600/80 hover:bg-amber-500 border border-amber-400/40 text-black text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow text-center"
+                              title="Set exact balance directly"
+                            >
+                              Force Set Exact
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSendLoveNudge(activeLbTarget)}
+                              className="backdrop-blur-md bg-white/10 hover:bg-white/20 border border-white/20 text-pink-300 text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 text-center truncate"
+                              title="Send instant love alert / ping"
+                            >
+                              🔔 Nudge
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenClearModal(activeLbTarget)}
+                              className="backdrop-blur-md bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-300 text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 text-center flex items-center justify-center gap-1 col-span-2 sm:col-span-1"
+                              title="Clear all transaction history and reset points"
+                            >
+                              <Trash2 size={12} />
+                              <span>Clear All</span>
+                            </button>
+                          </div>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-0.5">
+                        {/* PASSBOOK & WISH STORE LAUNCHERS */}
+                        <div className="flex gap-2 pt-2 border-t border-white/10">
                           <button
                             type="button"
-                            onClick={() => {
-                              if (!adminLbAmount) return;
-                              handleLoveBalanceTransaction(parseFloat(adminLbAmount), 'credit', adminLbReason || 'Admin Sweet Reward', false, activeLbTarget);
-                              setAdminLbAmount('');
-                              setAdminLbReason('');
-                            }}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 rounded-lg cursor-pointer shadow active:scale-95 transition-all text-center"
+                            onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                            className="flex-1 backdrop-blur-md bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
                           >
-                            + Credit (+₹)
+                            <Coins size={13} className="text-amber-400" />
+                            <span>Open Passbook</span>
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              if (!adminLbAmount) return;
-                              handleLoveBalanceTransaction(parseFloat(adminLbAmount), 'debit', adminLbReason || 'Admin Karma Deduction', false, activeLbTarget);
-                              setAdminLbAmount('');
-                              setAdminLbReason('');
-                            }}
-                            className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold py-1.5 rounded-lg cursor-pointer shadow active:scale-95 transition-all text-center"
+                            onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('redeem'); }}
+                            className="flex-1 backdrop-blur-md bg-gradient-to-r from-pink-600/80 to-rose-600/80 hover:from-pink-500 hover:to-rose-500 border border-pink-400/40 text-white text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
                           >
-                            - Deduct (-₹)
+                            <Gift size={13} />
+                            <span>Wish Store</span>
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              if (!adminLbAmount) {
-                                alert(`Please enter the exact balance amount in the points box for ${activeLbTarget === 'user' ? activeDoraName : 'Darsh'}.`);
-                                return;
-                              }
-                              handleAdminOverrideBalance(activeLbTarget, adminLbAmount);
-                              setAdminLbAmount('');
-                              setAdminLbReason('');
-                            }}
-                            className="bg-amber-600 hover:bg-amber-500 text-black text-xs font-bold py-1.5 rounded-lg cursor-pointer transition-all active:scale-95 shadow text-center"
-                            title="Set exact balance directly"
+                            onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('rules'); }}
+                            className="backdrop-blur-md bg-white/10 hover:bg-white/20 border border-white/20 text-gray-300 text-xs font-bold px-3 py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow"
+                            title="Love Balance Policy"
                           >
-                            Force Set Exact
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSendLoveNudge(activeLbTarget)}
-                            className="bg-[#242424] hover:bg-[#303030] border border-[#3e3e3e] text-pink-300 text-xs font-bold py-1.5 rounded-lg cursor-pointer transition-all active:scale-95 text-center truncate"
-                            title="Send instant love alert / ping"
-                          >
-                            🔔 Nudge
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenClearModal(activeLbTarget)}
-                            className="bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-300 text-xs font-bold py-1.5 rounded-lg cursor-pointer transition-all active:scale-95 text-center flex items-center justify-center gap-1 col-span-2 sm:col-span-1"
-                            title="Clear all transaction history and reset points"
-                          >
-                            <Trash2 size={12} />
-                            <span>Clear All</span>
+                            📖
                           </button>
                         </div>
                       </div>
-
-                    </div>
-
-                    {/* PASSBOOK & WISH STORE LAUNCHERS */}
-                    <div className="flex gap-1.5 pt-2 border-t border-[#222]">
-                      <button
-                        type="button"
-                        onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                        className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-white text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
-                      >
-                        <Coins size={13} className="text-amber-400" />
-                        <span>Open Passbook</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('redeem'); }}
-                        className="flex-1 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
-                      >
-                        <Gift size={13} />
-                        <span>Wish Store</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('rules'); }}
-                        className="bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-gray-300 text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow"
-                        title="Love Balance Policy"
-                      >
-                        📖
-                      </button>
-                    </div>
+                    )}
                   </div>
 
-                  {/* PART 2: CALL RECORDINGS VAULT & AUDIO HUB */}
-                  <div className="bg-[#121212] border-2 border-rose-500/40 hover:border-rose-500/60 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-2xl flex flex-col justify-between space-y-3">
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between border-b border-[#222] pb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 font-bold text-base">
-                            <Disc size={16} className="animate-spin" style={{ animationDuration: '4s' }} />
-                          </div>
-                          <div>
-                            <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
-                              <span>Part 2: Call Recordings Vault</span>
-                              <span className="text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-1.5 py-0.2 rounded font-mono">
-                                {adminRecordingsList.length} STORED
-                              </span>
-                            </h3>
-                            <p className="text-[10px] text-gray-400">Mixed dual-channel HD recordings with 24h retention</p>
-                          </div>
+                  {/* ===================== PART 2: CALL RECORDINGS VAULT ===================== */}
+                  <div className="backdrop-blur-2xl bg-white/[0.06] hover:bg-white/[0.08] border border-rose-500/30 hover:border-rose-500/50 rounded-2xl transition-all shadow-[0_4px_24px_rgba(0,0,0,0.25)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.18)] overflow-hidden">
+                    {/* COMPACT LINE BAR */}
+                    <div 
+                      onClick={() => toggleAdminPart('part2')}
+                      className="py-3 px-3.5 sm:px-4.5 flex items-center justify-between gap-3 cursor-pointer select-none transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 rounded-xl backdrop-blur-md bg-rose-500/20 border border-rose-400/40 flex items-center justify-center text-rose-300 text-base shrink-0 shadow-sm">
+                          <Disc size={16} className="animate-spin text-rose-400" style={{ animationDuration: '4s' }} />
                         </div>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleManualSectionRefresh('part2_recordings')}
-                            className="w-7 h-7 rounded-full bg-[#1e1e1e] hover:bg-rose-600/30 border border-[#333] hover:border-rose-500 text-gray-400 hover:text-rose-300 flex items-center justify-center transition-all cursor-pointer active:scale-90"
-                            title="Refresh Recordings"
-                          >
-                            <RefreshCw size={12} className={refreshingSection === 'part2_recordings' ? 'animate-spin text-rose-400' : ''} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleStartAudioCall}
-                            className="bg-rose-950 hover:bg-rose-900 border border-rose-600/60 text-rose-300 px-2.5 py-1 rounded-xl text-xs font-bold cursor-pointer transition-all shadow flex items-center gap-1 active:scale-95"
-                          >
-                            <Phone size={11} />
-                            <span>Call Now</span>
-                          </button>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs sm:text-sm font-black text-white tracking-tight">Part 2: Call Recordings Vault</span>
+                            <span className="text-[9px] backdrop-blur-md bg-rose-500/20 text-rose-300 border border-rose-400/30 px-1.5 py-0.2 rounded font-mono font-bold">
+                              {adminRecordingsList.length} STORED
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-gray-400 truncate hidden sm:block">Mixed dual-channel HD recordings with 24h retention</p>
                         </div>
                       </div>
 
-                      {/* RECORDINGS LIST PREVIEW */}
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between text-[10px] font-semibold text-gray-400">
+                      {/* INLINE SUMMARY CHIPS & CHEVRON */}
+                      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                        <span className="backdrop-blur-md bg-white/[0.07] border border-rose-500/30 text-rose-300 px-2 py-0.5 rounded-xl text-[11px] font-mono font-bold hidden sm:inline">
+                          ⏱️ 24h Vault Active
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartAudioCall();
+                          }}
+                          className="backdrop-blur-md bg-rose-600 hover:bg-rose-500 border border-rose-400/40 text-white text-xs font-bold px-2.5 py-1 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center gap-1"
+                        >
+                          <Phone size={11} />
+                          <span>Call Now</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleManualSectionRefresh('part2_recordings');
+                          }}
+                          className="w-7 h-7 rounded-full backdrop-blur-md bg-white/[0.08] hover:bg-rose-600/30 border border-white/15 hover:border-rose-500 text-gray-300 hover:text-rose-300 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                          title="Refresh Recordings"
+                        >
+                          <RefreshCw size={12} className={refreshingSection === 'part2_recordings' ? 'animate-spin text-rose-400' : ''} />
+                        </button>
+
+                        <div className="backdrop-blur-md bg-white/[0.08] hover:bg-white/[0.14] border border-white/15 text-gray-200 px-2 sm:px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 transition-all">
+                          <span className="hidden sm:inline">{expandedAdminParts.part2 ? 'Collapse' : 'Details'}</span>
+                          {expandedAdminParts.part2 ? <ChevronUp size={13} className="text-rose-400" /> : <ChevronDown size={13} className="text-rose-400" />}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* EXPANDED DETAILS BODY */}
+                    {expandedAdminParts.part2 && (
+                      <div className="p-3.5 sm:p-4 border-t border-white/10 space-y-3 bg-black/25 backdrop-blur-xl animate-in slide-in-from-top-2 duration-150">
+                        <div className="flex items-center justify-between text-[11px] text-gray-400">
                           <span>Recent Audio Recordings:</span>
-                          <span className="text-[9px] text-gray-500">Auto-expires after 24h</span>
+                          <span className="font-mono text-rose-400">Auto-expires after 24h</span>
                         </div>
 
-                        <div className="max-h-52 overflow-y-auto space-y-1.5 scrollbar-none pr-1">
+                        <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
                           {adminRecordingsList.length === 0 ? (
-                            <div className="bg-[#181818] border border-[#262626] rounded-xl p-4 text-center text-xs text-gray-500 space-y-1">
-                              <p>No call recordings stored in vault yet.</p>
-                              <p className="text-[10px] text-gray-600">Start an encrypted whisper call to automatically record and preserve audio.</p>
+                            <div className="text-center py-6 backdrop-blur-md bg-white/[0.02] rounded-xl border border-dashed border-white/10">
+                              <p className="text-xs text-gray-400 font-medium">No call recordings stored in vault yet.</p>
+                              <p className="text-[10px] text-gray-400 mt-0.5">Start an encrypted whisper call to automatically record and preserve audio.</p>
                             </div>
                           ) : (
-                            adminRecordingsList.slice(0, 4).map((rec) => (
-                              <div key={rec.id} className="bg-[#181818] border border-[#2a2a2a] p-2.5 rounded-xl flex items-center justify-between gap-2">
-                                <div className="space-y-0.5 min-w-0">
-                                  <p className="text-xs font-bold text-gray-200 truncate">{rec.title || 'Voice Call Recording'}</p>
-                                  <p className="text-[10px] text-gray-400 font-mono">
-                                    {rec.duration || '0:00'} • {new Date(rec.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                  </p>
+                            adminRecordingsList.map((rec, rIdx) => (
+                              <div key={rIdx} className="backdrop-blur-md bg-white/[0.05] border border-white/10 hover:border-rose-500/40 p-2.5 rounded-xl flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-bold text-white truncate">Call #{rIdx + 1}</span>
+                                    <span className="text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-1 rounded font-mono">
+                                      {rec.durationFormatted || 'Encrypted'}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-gray-400 font-mono truncate">{rec.timestampFormatted || '24h retention'}</p>
                                 </div>
                                 <div className="flex items-center gap-1.5 shrink-0">
                                   {rec.audioUrl && (
-                                    <audio controls src={rec.audioUrl} className="h-6 w-24 sm:w-32 outline-none" />
+                                    <audio src={rec.audioUrl} controls className="h-7 w-36 sm:w-48" />
                                   )}
                                   <button
                                     type="button"
-                                    onClick={() => handleDeleteRecording(rec.id)}
-                                    className="text-gray-500 hover:text-rose-400 p-1 cursor-pointer rounded-lg hover:bg-[#252525] transition-colors"
+                                    onClick={() => handleDeleteCallRecording(rec.id)}
+                                    className="p-1.5 rounded-lg hover:bg-rose-950/80 text-gray-400 hover:text-rose-300 transition-colors cursor-pointer"
                                     title="Delete Recording"
                                   >
-                                    <Trash2 size={12} />
+                                    <Trash2 size={13} />
                                   </button>
                                 </div>
                               </div>
                             ))
                           )}
                         </div>
-                      </div>
-                    </div>
 
-                    {/* VAULT MODAL ACTION */}
-                    <div className="pt-2 border-t border-[#222]">
-                      <button
-                        type="button"
-                        onClick={() => setShowAdminRecordingsModal(true)}
-                        className="w-full bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-200 text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
-                      >
-                        <Disc size={13} className="text-rose-400 animate-spin" />
-                        <span>Open Dedicated Audio Vault ({adminRecordingsList.length})</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* PART 3: ANSWER PENDING & 7:20 PM PDF AUTO-EXPORT */}
-                  <div className="bg-[#121212] border-2 border-amber-500/40 hover:border-amber-500/60 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-2xl flex flex-col justify-between space-y-3">
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between border-b border-[#222] pb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-base">
-                            <AlertCircle size={16} />
-                          </div>
-                          <div>
-                            <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
-                              <span>Part 3: Answer Pending & PDF</span>
-                              <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.2 rounded font-mono">
-                                {pendingMessages.length} PENDING
-                              </span>
-                            </h3>
-                            <p className="text-[10px] text-gray-400">Flagged questions & 7:20 PM daily auto-export scheduler</p>
-                          </div>
-                        </div>
-                        <div className="text-right flex items-center gap-1.5 justify-end">
+                        {/* VAULT MODAL ACTION */}
+                        <div className="pt-2 border-t border-white/10">
                           <button
                             type="button"
-                            onClick={() => handleManualSectionRefresh('part3_pending')}
-                            className="w-7 h-7 rounded-full bg-[#1e1e1e] hover:bg-amber-600/30 border border-[#333] hover:border-amber-500 text-gray-400 hover:text-amber-300 flex items-center justify-center transition-all cursor-pointer active:scale-90"
-                            title="Refresh Pending Questions"
+                            onClick={() => setShowAdminRecordingsModal(true)}
+                            className="w-full backdrop-blur-md bg-rose-950/80 hover:bg-rose-900 border border-rose-700/60 text-rose-200 text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
                           >
-                            <RefreshCw size={12} className={refreshingSection === 'part3_pending' ? 'animate-spin text-amber-400' : ''} />
+                            <Disc size={13} className="text-rose-400 animate-spin" />
+                            <span>Open Dedicated Audio Vault ({adminRecordingsList.length})</span>
                           </button>
-                          <div>
-                            <div className="text-[9px] text-gray-400">Daily Export In</div>
-                            <div className="text-xs sm:text-sm font-black text-amber-400 font-mono flex items-center gap-1 justify-end">
-                              <Timer size={11} className="animate-spin" />
-                              <span>{countdownStr}</span>
-                            </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ===================== PART 3: ANSWER PENDING & PDF ===================== */}
+                  <div className="backdrop-blur-2xl bg-white/[0.06] hover:bg-white/[0.08] border border-amber-500/30 hover:border-amber-500/50 rounded-2xl transition-all shadow-[0_4px_24px_rgba(0,0,0,0.25)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.18)] overflow-hidden">
+                    {/* COMPACT LINE BAR */}
+                    <div 
+                      onClick={() => toggleAdminPart('part3')}
+                      className="py-3 px-3.5 sm:px-4.5 flex items-center justify-between gap-3 cursor-pointer select-none transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 rounded-xl backdrop-blur-md bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300 text-base shrink-0 shadow-sm">
+                          <AlertCircle size={16} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs sm:text-sm font-black text-white tracking-tight">Part 3: Answer Pending & PDF</span>
+                            <span className="text-[9px] backdrop-blur-md bg-amber-500/20 text-amber-300 border border-amber-400/30 px-1.5 py-0.2 rounded font-mono font-bold">
+                              {pendingMessages.length} PENDING
+                            </span>
                           </div>
+                          <p className="text-[10px] text-gray-400 truncate hidden sm:block">Flagged questions & 7:20 PM daily auto-export scheduler</p>
                         </div>
                       </div>
 
-                      {/* PENDING LIST PREVIEW */}
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between text-[10px] font-semibold text-gray-400">
-                          <span>Flagged Questions ({pendingMessages.length}):</span>
-                          <span className="text-[9px] text-emerald-400">Auto-downloads at 7:20 PM</span>
+                      {/* INLINE SUMMARY CHIPS & CHEVRON */}
+                      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                        <div className="backdrop-blur-md bg-white/[0.07] border border-amber-500/30 px-2 py-0.5 rounded-xl text-[11px] font-mono text-amber-300 font-bold flex items-center gap-1 hidden sm:flex">
+                          <Clock size={11} />
+                          <span>7:20 PM ({countdownStr})</span>
                         </div>
 
-                        <div className="max-h-52 overflow-y-auto space-y-1.5 scrollbar-none pr-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleManualSectionRefresh('part3_pending');
+                          }}
+                          className="w-7 h-7 rounded-full backdrop-blur-md bg-white/[0.08] hover:bg-amber-600/30 border border-white/15 hover:border-amber-500 text-gray-300 hover:text-amber-300 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                          title="Refresh Pending Messages"
+                        >
+                          <RefreshCw size={12} className={refreshingSection === 'part3_pending' ? 'animate-spin text-amber-400' : ''} />
+                        </button>
+
+                        <div className="backdrop-blur-md bg-white/[0.08] hover:bg-white/[0.14] border border-white/15 text-gray-200 px-2 sm:px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 transition-all">
+                          <span className="hidden sm:inline">{expandedAdminParts.part3 ? 'Collapse' : 'Details'}</span>
+                          {expandedAdminParts.part3 ? <ChevronUp size={13} className="text-amber-400" /> : <ChevronDown size={13} className="text-amber-400" />}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* EXPANDED DETAILS BODY */}
+                    {expandedAdminParts.part3 && (
+                      <div className="p-3.5 sm:p-4 border-t border-white/10 space-y-3 bg-black/25 backdrop-blur-xl animate-in slide-in-from-top-2 duration-150">
+                        <div className="flex items-center justify-between text-[11px] text-gray-400">
+                          <span>Flagged Questions ({pendingMessages.length}):</span>
+                          <span className="font-mono text-amber-400">Auto-downloads at 7:20 PM</span>
+                        </div>
+
+                        <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
                           {pendingMessages.length === 0 ? (
-                            <div className="bg-[#181818] border border-[#262626] rounded-xl p-4 text-center text-xs text-gray-500 space-y-1">
-                              <p>All questions answered! Zero pending flags.</p>
-                              <p className="text-[10px] text-gray-600">Flag important questions in secret chat to highlight and review here.</p>
+                            <div className="text-center py-6 backdrop-blur-md bg-white/[0.02] rounded-xl border border-dashed border-white/10">
+                              <p className="text-xs text-emerald-400 font-bold">All questions answered! Zero pending flags.</p>
+                              <p className="text-[10px] text-gray-400 mt-0.5">Flag important questions in secret chat to highlight and review here.</p>
                             </div>
                           ) : (
-                            pendingMessages.slice(0, 4).map((msg) => (
-                              <div key={msg._id} className="bg-[#181818] border border-[#2a2a2a] p-2.5 rounded-xl flex items-center justify-between gap-2">
-                                <div className="space-y-0.5 min-w-0">
-                                  <p className="text-xs font-semibold text-gray-200 truncate">{msg.text}</p>
-                                  <p className="text-[10px] text-gray-400 font-mono">
-                                    By {msg.senderRole === 'parent' ? 'Darsh' : 'Dora'} • {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                  </p>
+                            pendingMessages.map((pm, pIdx) => (
+                              <div key={pIdx} className="backdrop-blur-md bg-white/[0.05] border border-amber-500/30 p-2.5 rounded-xl flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-xs text-white font-medium break-words">{pm.text}</p>
+                                  <span className="text-[10px] text-gray-400 font-mono">{pm.timeFormatted || 'Flagged message'}</span>
                                 </div>
                                 <button
                                   type="button"
-                                  onClick={(e) => togglePendingFlag(e, msg)}
-                                  className="bg-emerald-950 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-lg cursor-pointer transition-all active:scale-95 shrink-0"
+                                  onClick={() => handleToggleFlagPending(pm._id, false)}
+                                  className="text-[10px] backdrop-blur-md bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 px-2 py-1 rounded-lg font-bold shrink-0 cursor-pointer"
                                 >
-                                  Resolve
+                                  Mark Answered
                                 </button>
                               </div>
                             ))
                           )}
                         </div>
-                      </div>
-                    </div>
 
-                    {/* PDF EXPORT ACTION BUTTONS */}
-                    <div className="flex gap-1.5 pt-2 border-t border-[#222]">
-                      <button
-                        type="button"
-                        onClick={downloadFullChatPDF}
-                        className="flex-1 bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-white text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1"
-                      >
-                        <Download size={13} className="text-amber-400" />
-                        <span>Instant Full Chat PDF</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={downloadPendingPDF}
-                        className="flex-1 bg-amber-600 hover:bg-amber-500 text-black text-xs font-bold py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1"
-                      >
-                        <FileDown size={13} />
-                        <span>Export Pending PDF</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowPendingModal(true)}
-                        className="bg-[#1f1f1f] hover:bg-[#2a2a2a] border border-[#3a3a3a] text-gray-300 text-xs font-bold px-2.5 py-1.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow"
-                        title="View All Pending Questions"
-                      >
-                        🔍
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* PART 4: CONNECTED GMAIL ACCOUNTS & ACTIVE SESSIONS DIRECTORY */}
-                  <div id="admin-part-4-gmail-sessions" className="bg-[#121212] border-2 border-cyan-500/40 hover:border-cyan-500/60 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 shadow-2xl flex flex-col justify-between space-y-3 font-sans">
-                    <div className="space-y-3">
-                      {/* HEADER */}
-                      <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-bold text-base shadow-inner">
-                            <Users size={16} />
-                          </div>
-                          <div>
-                            <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
-                              <span>Part 4: Connected Gmail Accounts & Active Sessions</span>
-                              <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-1.5 py-0.2 rounded font-mono font-bold">
-                                GMAIL DIRECTORY
-                              </span>
-                            </h3>
-                            <p className="text-[10px] text-gray-400">Live directory of all logged-in Gmail IDs & active user sessions</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
+                        {/* EXPORT ACTIONS */}
+                        <div className="flex gap-2 pt-2 border-t border-white/10">
                           <button
                             type="button"
-                            onClick={() => handleManualSectionRefresh('part4_users')}
-                            className="w-7 h-7 rounded-full bg-[#1e1e1e] hover:bg-cyan-600/30 border border-[#333] hover:border-cyan-500 text-gray-400 hover:text-cyan-300 flex items-center justify-center transition-all cursor-pointer active:scale-90"
-                            title="Refresh Gmail Users Directory"
+                            onClick={downloadFullChatPDF}
+                            className="flex-1 backdrop-blur-md bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1.5"
                           >
-                            <RefreshCw size={12} className={refreshingSection === 'part4_users' ? 'animate-spin text-cyan-400' : ''} />
+                            <Download size={13} className="text-amber-400" />
+                            <span>Instant Full Chat PDF</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={downloadPendingPDF}
+                            className="flex-1 backdrop-blur-md bg-amber-600/80 hover:bg-amber-500 border border-amber-400/40 text-black text-xs font-bold py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow flex items-center justify-center gap-1"
+                          >
+                            <FileDown size={13} />
+                            <span>Export Pending PDF</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowPendingModal(true)}
+                            className="backdrop-blur-md bg-white/10 hover:bg-white/20 border border-white/20 text-gray-300 text-xs font-bold px-3 py-2 rounded-xl cursor-pointer transition-all active:scale-95 shadow"
+                            title="View All Pending Questions"
+                          >
+                            🔍
                           </button>
                         </div>
                       </div>
+                    )}
+                  </div>
 
-                      {/* TOP SUMMARY STATS */}
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="bg-[#181818] border border-[#262626] p-2 rounded-xl text-center">
-                          <div className="text-[9px] text-gray-400 font-medium">Live Online</div>
-                          <div className="text-xs sm:text-sm font-black text-emerald-400 font-mono flex items-center justify-center gap-1 mt-0.5">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
-                            <span>{usersDirectory.onlineCount || 1} active</span>
-                          </div>
+                  {/* ===================== PART 4: CONNECTED GMAIL ACCOUNTS DIRECTORY ===================== */}
+                  <div className="backdrop-blur-2xl bg-white/[0.06] hover:bg-white/[0.08] border border-cyan-500/30 hover:border-cyan-500/50 rounded-2xl transition-all shadow-[0_4px_24px_rgba(0,0,0,0.25)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.18)] overflow-hidden">
+                    {/* COMPACT LINE BAR */}
+                    <div 
+                      onClick={() => toggleAdminPart('part4')}
+                      className="py-3 px-3.5 sm:px-4.5 flex items-center justify-between gap-3 cursor-pointer select-none transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 rounded-xl backdrop-blur-md bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-300 text-base shrink-0 shadow-sm">
+                          <Users size={16} />
                         </div>
-                        <div className="bg-[#181818] border border-[#262626] p-2 rounded-xl text-center">
-                          <div className="text-[9px] text-gray-400 font-medium">Total Accounts</div>
-                          <div className="text-xs sm:text-sm font-black text-cyan-400 font-mono mt-0.5">
-                            {usersDirectory.totalCount || displayUsers.length} Gmails
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs sm:text-sm font-black text-white tracking-tight">Part 4: Connected Accounts Directory</span>
+                            <span className="text-[9px] backdrop-blur-md bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 px-1.5 py-0.2 rounded font-mono font-bold">
+                              GMAIL DIRECTORY
+                            </span>
                           </div>
-                        </div>
-                        <div className="bg-[#181818] border border-[#262626] p-2 rounded-xl text-center">
-                          <div className="text-[9px] text-gray-400 font-medium">Admin ID</div>
-                          <div className="text-[11px] font-bold text-amber-400 truncate mt-0.5" title="arthurs10pc@gmail.com">
-                            arthurs10pc
-                          </div>
+                          <p className="text-[10px] text-gray-400 truncate hidden sm:block">Live directory of all logged-in Gmail IDs & active user sessions</p>
                         </div>
                       </div>
 
-                      {/* USERS LIST / CARDS */}
-                      <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                        {displayUsers.map((user, idx) => (
-                          <div 
-                            key={user.email || idx}
-                            className={`p-2.5 rounded-xl border transition-all ${
-                              user.isOnline 
-                                ? 'bg-[#151c19] border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.1)]' 
-                                : 'bg-[#181818] border-[#2a2a2a]'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-2">
+                      {/* INLINE SUMMARY CHIPS & CHEVRON */}
+                      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                        <span className="backdrop-blur-md bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 px-2 py-0.5 rounded-xl text-[11px] font-mono font-bold flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                          <span>{(usersDirectory?.users || []).filter(u => u.isOnline).length} Active</span>
+                        </span>
+
+                        <span className="backdrop-blur-md bg-white/[0.07] border border-cyan-500/30 text-cyan-300 px-2 py-0.5 rounded-xl text-[11px] font-mono font-bold hidden sm:inline">
+                          {(usersDirectory?.users || []).length} Accounts
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleManualSectionRefresh('part4_users');
+                          }}
+                          className="w-7 h-7 rounded-full backdrop-blur-md bg-white/[0.08] hover:bg-cyan-600/30 border border-white/15 hover:border-cyan-500 text-gray-300 hover:text-cyan-300 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                          title="Refresh Connected Accounts"
+                        >
+                          <RefreshCw size={12} className={refreshingSection === 'part4_users' ? 'animate-spin text-cyan-400' : ''} />
+                        </button>
+
+                        <div className="backdrop-blur-md bg-white/[0.08] hover:bg-white/[0.14] border border-white/15 text-gray-200 px-2 sm:px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 transition-all">
+                          <span className="hidden sm:inline">{expandedAdminParts.part4 ? 'Collapse' : 'Details'}</span>
+                          {expandedAdminParts.part4 ? <ChevronUp size={13} className="text-cyan-400" /> : <ChevronDown size={13} className="text-cyan-400" />}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* EXPANDED DETAILS BODY */}
+                    {expandedAdminParts.part4 && (
+                      <div className="p-3.5 sm:p-4 border-t border-white/10 space-y-3 bg-black/25 backdrop-blur-xl animate-in slide-in-from-top-2 duration-150">
+                        {/* QUICK STATS CARDS */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="backdrop-blur-md bg-white/[0.04] border border-emerald-500/30 rounded-xl p-2 text-center">
+                            <div className="text-[10px] text-gray-400">Live Online</div>
+                            <div className="text-sm font-black text-emerald-400 font-mono">
+                              {(usersDirectory?.users || []).filter(u => u.isOnline).length} active
+                            </div>
+                          </div>
+                          <div className="backdrop-blur-md bg-white/[0.04] border border-cyan-500/30 rounded-xl p-2 text-center">
+                            <div className="text-[10px] text-gray-400">Total Accounts</div>
+                            <div className="text-sm font-black text-cyan-400 font-mono">
+                              {(usersDirectory?.users || []).length} Gmails
+                            </div>
+                          </div>
+                          <div className="backdrop-blur-md bg-white/[0.04] border border-amber-500/30 rounded-xl p-2 text-center">
+                            <div className="text-[10px] text-gray-400">Admin ID</div>
+                            <div className="text-xs font-black text-amber-300 font-mono truncate">
+                              arthurs10pc
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* USERS LIST */}
+                        <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                          {(usersDirectory?.users || []).map((user, uIdx) => (
+                            <div key={user.email || uIdx} className="backdrop-blur-md bg-white/[0.05] border border-white/10 hover:border-cyan-500/40 p-2.5 rounded-xl flex items-center justify-between gap-2 transition-all">
                               <div className="flex items-center gap-2.5 min-w-0">
-                                {/* Avatar with status dot */}
-                                <div className="relative shrink-0">
-                                  <div className={`w-8 h-8 rounded-full border flex items-center justify-center text-xs font-bold overflow-hidden ${
-                                    user.isAdmin 
-                                      ? 'bg-gradient-to-br from-amber-500 to-yellow-600 border-amber-400 text-black font-black shadow' 
-                                      : 'bg-[#1e293b] border-pink-500/40 text-white shadow'
-                                  }`}>
+                                <div className="relative">
+                                  <div className="w-8 h-8 rounded-full backdrop-blur-md bg-white/10 border border-white/20 flex items-center justify-center text-xs font-bold text-white shrink-0">
                                     {user.picture ? (
-                                      <img src={user.picture} alt="" className="w-full h-full object-cover" />
+                                      <img src={user.picture} alt="" className="w-full h-full rounded-full object-cover" />
                                     ) : (
                                       user.isAdmin ? '👑' : 'A'
                                     )}
                                   </div>
                                   <span 
-                                    className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#121212] ${
+                                    className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-black ${
                                       user.isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'
                                     }`}
                                     title={user.isOnline ? 'Live Online' : 'Offline'}
                                   />
                                 </div>
 
-                                {/* Name & Email */}
                                 <div className="min-w-0 text-left">
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="text-xs font-bold text-white truncate">
                                       {user.name}
                                     </span>
                                     {user.isAdmin ? (
-                                      <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1 rounded font-mono font-bold">
+                                      <span className="text-[9px] backdrop-blur-md bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 rounded font-mono font-bold">
                                         ADMIN
                                       </span>
                                     ) : (
-                                      <span className="text-[9px] bg-pink-500/20 text-pink-300 border border-pink-500/40 px-1 rounded font-mono font-bold">
+                                      <span className="text-[9px] backdrop-blur-md bg-pink-500/20 text-pink-300 border border-pink-500/40 px-1.5 rounded font-mono font-bold">
                                         USER
                                       </span>
                                     )}
                                     {!user.isAdmin && (
-                                      <span className={`text-[9px] border px-1.5 py-0.2 rounded font-mono font-bold ${
+                                      <span className={`text-[9px] border px-1.5 py-0.2 rounded font-mono font-bold backdrop-blur-md ${
                                         Number(user.isDora ? doraNetBalance : (user.loveBalance || 0)) < 0 
                                           ? 'bg-rose-950/80 text-rose-300 border-rose-500/50' 
                                           : 'bg-pink-950/60 text-pink-300 border border-pink-500/40'
@@ -8582,93 +8638,74 @@ export default function App() {
                                 </div>
                               </div>
 
-                              {/* Status, Dora Toggle & Session Badge */}
-                              <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
-                                <div className="flex items-center gap-1.5">
-                                  {user.isOnline ? (
-                                    <span className="inline-flex items-center gap-1 text-[9px] text-emerald-300 bg-emerald-950/80 border border-emerald-500/50 px-2 py-0.5 rounded-full font-bold shadow-sm">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                                      <span>Online</span>
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 text-[9px] text-gray-400 bg-[#222] border border-[#333] px-1.5 py-0.2 rounded-full font-mono">
-                                      Offline
-                                    </span>
-                                  )}
-
-                                  {/* MAKE A DORA SELECTION / TOGGLE ACTION */}
-                                  {!user.isAdmin && (
-                                    <>
-                                      {user.isDora ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleSetDora(user.email, false)}
-                                          className="text-[9px] bg-pink-500/20 hover:bg-rose-950 border border-pink-500/50 hover:border-rose-500 text-pink-300 hover:text-rose-300 px-2 py-0.5 rounded-full font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm active:scale-95"
-                                          title="Click to Revoke Dora Role"
-                                        >
-                                          <span>💖 Active Dora</span>
-                                          <span className="text-xs text-rose-400 font-bold">×</span>
-                                        </button>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleSetDora(user.email, true)}
-                                          className="text-[9px] bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white px-2.5 py-0.5 rounded-full font-bold shadow-md transition-all cursor-pointer flex items-center gap-1 active:scale-95"
-                                          title="Grant Dora Role (unlocks /dora secret chat & WP view)"
-                                        >
-                                          <span>✨ Make a Dora</span>
-                                        </button>
-                                      )}
-
-                                      {/* DELETE GMAIL ACCOUNT PERMANENTLY */}
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {!user.isAdmin && (
+                                  <>
+                                    {user.isDora ? (
                                       <button
                                         type="button"
-                                        onClick={() => handleDeleteUser(user.email)}
-                                        className="text-[9px] bg-rose-950/40 hover:bg-rose-900 border border-rose-500/30 hover:border-rose-400 text-rose-400 hover:text-white px-2 py-0.5 rounded-full font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm active:scale-95"
-                                        title={`Permanently delete ${user.email} from database`}
+                                        onClick={() => handleSetDora(user.email, false)}
+                                        className="text-[9px] backdrop-blur-md bg-pink-500/20 hover:bg-rose-950 border border-pink-500/50 hover:border-rose-500 text-pink-300 hover:text-rose-300 px-2 py-0.5 rounded-full font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm active:scale-95"
+                                        title="Click to Revoke Dora Role"
                                       >
-                                        <Trash2 size={10} className="shrink-0" />
-                                        <span>Delete</span>
+                                        <span>💖 Active Dora</span>
+                                        <span className="text-xs text-rose-400 font-bold">×</span>
                                       </button>
-                                    </>
-                                  )}
-                                </div>
-                                <div className="text-[9px] text-gray-500 font-mono">
-                                  {user.isOnline ? 'Active Now' : (user.lastLogin ? new Date(user.lastLogin).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Saved')}
-                                </div>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSetDora(user.email, true)}
+                                        className="text-[9px] backdrop-blur-md bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white px-2.5 py-0.5 rounded-full font-bold shadow-md transition-all cursor-pointer flex items-center gap-1 active:scale-95"
+                                        title="Grant Dora Role (unlocks /dora secret chat & WP view)"
+                                      >
+                                        <span>✨ Make a Dora</span>
+                                      </button>
+                                    )}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteUser(user.email)}
+                                      className="text-[9px] backdrop-blur-md bg-rose-950/40 hover:bg-rose-900 border border-rose-500/30 hover:border-rose-400 text-rose-400 hover:text-white px-2 py-0.5 rounded-full font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm active:scale-95"
+                                      title={`Permanently delete ${user.email} from database`}
+                                    >
+                                      <Trash2 size={10} className="shrink-0" />
+                                      <span>Delete</span>
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                          ))}
+                        </div>
 
-                    {/* FOOTER ACTIONS */}
-                    <div className="flex items-center justify-between pt-2 border-t border-[#222] text-[10px] text-gray-400">
-                      <span className="flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
-                        <span>Real-time OAuth Directory</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleManualSectionRefresh('part4_users')}
-                        className="text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer transition-colors active:scale-95"
-                      >
-                        Sync Users ➔
-                      </button>
-                    </div>
+                        {/* FOOTER ACTIONS */}
+                        <div className="flex items-center justify-between pt-2 border-t border-white/10 text-[10px] text-gray-400">
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                            <span>Real-time OAuth Directory</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleManualSectionRefresh('part4_users')}
+                            className="text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer transition-colors active:scale-95"
+                          >
+                            Sync Users ➔
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* PROJECT SUBMISSIONS & HOURLY TASKS QUICK ACCESS LINK */}
-                  <div className="lg:col-span-2 bg-[#121212] border border-[#2a2a2a] hover:border-emerald-500/50 p-3 sm:p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 transition-all shadow-lg">
+                  <div className="backdrop-blur-2xl bg-white/[0.06] border border-white/15 hover:border-emerald-500/50 p-3 sm:p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 transition-all shadow-[0_4px_24px_rgba(0,0,0,0.25)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.18)]">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-base shrink-0">
+                      <div className="w-9 h-9 rounded-xl backdrop-blur-md bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold text-base shrink-0 shadow-sm">
                         <Briefcase size={17} />
                       </div>
                       <div className="text-left">
                         <div className="flex items-center gap-2">
                           <h4 className="text-xs sm:text-sm font-bold text-white">Daily Projects & Hourly Routine Engine</h4>
-                          <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.2 rounded font-mono font-bold">
+                          <span className="text-[9px] backdrop-blur-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.2 rounded font-mono font-bold">
                             DEDICATED SECTION
                           </span>
                         </div>
@@ -8681,7 +8718,7 @@ export default function App() {
                         setDailyAdminTab('review');
                         setViewMode('daily_projects');
                       }}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
+                      className="backdrop-blur-md bg-emerald-600 hover:bg-emerald-500 border border-emerald-400/40 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
                     >
                       <span>Open Project Submissions</span>
                       <span>➔</span>
@@ -8693,7 +8730,8 @@ export default function App() {
               </section>
             )}
 
-            {/* --- DARSH ADMIN DEDICATED PROJECT SUBMISSION & HOURLY REPORT SCREEN --- */}
+
+{/* --- DARSH ADMIN DEDICATED PROJECT SUBMISSION & HOURLY REPORT SCREEN --- */}
             {viewMode === 'daily_projects' && role === 'parent' && (
               <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-5xl w-full mx-auto space-y-4 scrollbar-none font-sans animate-in fade-in duration-150">
                 {/* ADMIN APPROVAL HERO HEADER */}
