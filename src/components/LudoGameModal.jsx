@@ -602,236 +602,221 @@ export default function LudoGameModal({
           </div>
         )}
 
-        {/* --- AUTHENTIC 3-BAND STANDARD LUDO BOARD (BULLETPROOF GEOMETRY) --- */}
-        <div className="w-full aspect-square bg-[#0b0f19] border-4 border-amber-500/90 rounded-3xl p-1.5 shadow-[0_15px_40px_rgba(0,0,0,0.9)] flex flex-col justify-between select-none relative overflow-hidden">
+        {/* --- AUTHENTIC 3x3 MACRO GRID STANDARD LUDO BOARD (BULLETPROOF GEOMETRY) --- */}
+        <div className="w-full aspect-square bg-[#0b0f19] border-4 border-amber-500/90 rounded-3xl p-1.5 shadow-[0_15px_40px_rgba(0,0,0,0.9)] grid grid-cols-[2fr_1fr_2fr] grid-rows-[2fr_1fr_2fr] gap-1 select-none relative overflow-hidden">
           
-          {/* BAND 1: TOP BAND (HEIGHT 40%) -> RED YARD (40%) | TOP ARM (20%) | GREEN YARD (40%) */}
-          <div className="h-[40%] flex justify-between gap-1 w-full">
-            
-            {/* 1A. RED YARD (DARSH) */}
-            <div className={`w-[40%] h-full bg-gradient-to-br from-red-600 via-rose-600 to-red-700 rounded-2xl p-1.5 border-2 border-red-800 shadow-md flex flex-col justify-between ${
-              turn === 'H' ? 'ring-2 ring-red-400 shadow-red-900/50' : ''
-            }`}>
-              <div className="flex items-center justify-between text-[10px] font-black text-white px-1">
-                <span>RED YARD</span>
-                <span>👑 Darsh</span>
-              </div>
-              <div className="bg-white/95 rounded-xl p-1 h-[78%] grid grid-cols-2 gap-1 place-items-center shadow-inner">
-                {[0, 1, 2, 3].map((tIdx) => {
-                  const inYard = tokens.H[tIdx] === -1;
-                  const isMovable = movableTokens.includes(tIdx) && turn === 'H';
-                  return (
-                    <div
-                      key={`H_yard_${tIdx}`}
-                      onClick={() => {
-                        if (isMovable && isMyTurn) executeMove('H', tIdx, diceVal);
-                      }}
-                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-dashed border-red-300 flex items-center justify-center transition-all ${
-                        inYard ? 'bg-red-50' : 'bg-gray-100 opacity-25'
-                      } ${isMovable ? 'cursor-pointer scale-115 ring-4 ring-amber-400 animate-bounce z-20' : ''}`}
-                    >
-                      {inYard && (
-                        <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-br from-red-500 to-red-700 text-white text-[9px] font-black flex items-center justify-center shadow-md border-2 border-white">
-                          H{tIdx + 1}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+          {/* CELL 1 (Top-Left): RED YARD (DARSH) */}
+          <div className={`w-full h-full bg-gradient-to-br from-red-600 via-rose-600 to-red-700 rounded-2xl p-1.5 border-2 border-red-800 shadow-md flex flex-col justify-between ${
+            turn === 'H' ? 'ring-2 ring-red-400 shadow-red-900/50' : ''
+          }`}>
+            <div className="flex items-center justify-between text-[10px] font-black text-white px-1">
+              <span>RED YARD</span>
+              <span>👑 Darsh</span>
             </div>
-
-            {/* 1B. TOP ARM (3 COLS x 6 ROWS) */}
-            <div className="w-[20%] h-full bg-slate-100 rounded-xl border border-slate-300 p-0.5 grid grid-cols-3 grid-rows-6">
-              {/* Row 0 */}
-              {renderTile(10, '10')}
-              {renderTile(11, '11')}
-              {renderTile(12, '12')}
-              {/* Row 1 */}
-              {renderTile(9, '9', true)}
-              {renderRunwayTile('A', 1, 'bg-emerald-500')}
-              {renderTile(13, '13', true, 'bg-emerald-200', <span className="text-[8px] font-black text-emerald-800">⬇</span>)}
-              {/* Row 2 */}
-              {renderTile(8, '8')}
-              {renderRunwayTile('A', 2, 'bg-emerald-500')}
-              {renderTile(14, '14')}
-              {/* Row 3 */}
-              {renderTile(7, '7')}
-              {renderRunwayTile('A', 3, 'bg-emerald-500')}
-              {renderTile(15, '15')}
-              {/* Row 4 */}
-              {renderTile(6, '6')}
-              {renderRunwayTile('A', 4, 'bg-emerald-500')}
-              {renderTile(16, '16')}
-              {/* Row 5 */}
-              {renderTile(5, '5')}
-              {renderRunwayTile('A', 5, 'bg-emerald-500')}
-              {renderTile(17, '17')}
+            <div className="bg-white/95 rounded-xl p-1 h-[78%] grid grid-cols-2 gap-1 place-items-center shadow-inner">
+              {[0, 1, 2, 3].map((tIdx) => {
+                const inYard = tokens.H[tIdx] === -1;
+                const isMovable = movableTokens.includes(tIdx) && turn === 'H';
+                return (
+                  <div
+                    key={`H_yard_${tIdx}`}
+                    onClick={() => {
+                      if (isMovable && isMyTurn) executeMove('H', tIdx, diceVal);
+                    }}
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-dashed border-red-300 flex items-center justify-center transition-all ${
+                      inYard ? 'bg-red-50' : 'bg-gray-100 opacity-25'
+                    } ${isMovable ? 'cursor-pointer scale-115 ring-4 ring-amber-400 animate-bounce z-20' : ''}`}
+                  >
+                    {inYard && (
+                      <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-br from-red-500 to-red-700 text-white text-[9px] font-black flex items-center justify-center shadow-md border-2 border-white">
+                        H{tIdx + 1}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-
-            {/* 1C. GREEN YARD (DORA) */}
-            <div className={`w-[40%] h-full bg-gradient-to-br from-emerald-600 via-teal-600 to-emerald-700 rounded-2xl p-1.5 border-2 border-emerald-800 shadow-md flex flex-col justify-between ${
-              turn === 'A' ? 'ring-2 ring-emerald-400 shadow-emerald-900/50' : ''
-            }`}>
-              <div className="flex items-center justify-between text-[10px] font-black text-white px-1">
-                <span>GREEN YARD</span>
-                <span>💕 {activeDoraName}</span>
-              </div>
-              <div className="bg-white/95 rounded-xl p-1 h-[78%] grid grid-cols-2 gap-1 place-items-center shadow-inner">
-                {[0, 1, 2, 3].map((tIdx) => {
-                  const inYard = tokens.A[tIdx] === -1;
-                  const isMovable = movableTokens.includes(tIdx) && turn === 'A';
-                  return (
-                    <div
-                      key={`A_yard_${tIdx}`}
-                      onClick={() => {
-                        if (isMovable && isMyTurn) executeMove('A', tIdx, diceVal);
-                      }}
-                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-dashed border-emerald-300 flex items-center justify-center transition-all ${
-                        inYard ? 'bg-emerald-50' : 'bg-gray-100 opacity-25'
-                      } ${isMovable ? 'cursor-pointer scale-115 ring-4 ring-amber-400 animate-bounce z-20' : ''}`}
-                    >
-                      {inYard && (
-                        <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-[9px] font-black flex items-center justify-center shadow-md border-2 border-white">
-                          A{tIdx + 1}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
           </div>
 
-          {/* BAND 2: MIDDLE BAND (HEIGHT 20%) -> LEFT ARM (40%) | CENTER HOME (20%) | RIGHT ARM (40%) */}
-          <div className="h-[20%] flex justify-between gap-1 w-full my-0.5">
-            
-            {/* 2A. LEFT ARM (6 COLS x 3 ROWS) */}
-            <div className="w-[40%] h-full bg-slate-100 rounded-xl border border-slate-300 p-0.5 grid grid-cols-6 grid-rows-3">
-              {/* Row 0 */}
-              {renderTile(51, '51')}
-              {renderTile(0, '0', true, 'bg-red-200', <span className="text-[8px] font-black text-red-800">➔</span>)}
-              {renderTile(1, '1')}
-              {renderTile(2, '2')}
-              {renderTile(3, '3')}
-              {renderTile(4, '4')}
-              {/* Row 1 */}
-              {renderTile(50, '50')}
-              {renderRunwayTile('H', 1, 'bg-red-500')}
-              {renderRunwayTile('H', 2, 'bg-red-500')}
-              {renderRunwayTile('H', 3, 'bg-red-500')}
-              {renderRunwayTile('H', 4, 'bg-red-500')}
-              {renderRunwayTile('H', 5, 'bg-red-500')}
-              {/* Row 2 */}
-              {renderTile(49, '49')}
-              {renderTile(48, '48', true)}
-              {renderTile(47, '47')}
-              {renderTile(46, '46')}
-              {renderTile(45, '45')}
-              {renderTile(44, '44')}
-            </div>
-
-            {/* 2B. CENTER HOME (3x3 EQUIVALENT) */}
-            <div className="w-[20%] h-full bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 rounded-xl border-2 border-amber-600 shadow-inner flex flex-col items-center justify-center relative overflow-hidden">
-              <span className="text-xl sm:text-2xl animate-bounce">👑</span>
-              <span className="text-[7px] font-black text-amber-950 uppercase tracking-tight">HOME</span>
-              
-              {/* Render Home Pawns */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="flex flex-wrap gap-0.5 justify-center max-w-[90%]">
-                  {tokens.H.filter(p => p === 56).map((_, i) => (
-                    <span key={`h_home_${i}`} className="w-3.5 h-3.5 rounded-full bg-red-600 border border-white text-[7px] text-white font-bold flex items-center justify-center">
-                      H
-                    </span>
-                  ))}
-                  {tokens.A.filter(p => p === 56).map((_, i) => (
-                    <span key={`a_home_${i}`} className="w-3.5 h-3.5 rounded-full bg-emerald-600 border border-white text-[7px] text-white font-bold flex items-center justify-center">
-                      A
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* 2C. RIGHT ARM (6 COLS x 3 ROWS) */}
-            <div className="w-[40%] h-full bg-slate-100 rounded-xl border border-slate-300 p-0.5 grid grid-cols-6 grid-rows-3">
-              {/* Row 0 */}
-              {renderTile(18, '18')}
-              {renderTile(19, '19')}
-              {renderTile(20, '20')}
-              {renderTile(21, '21')}
-              {renderTile(22, '22', true)}
-              {renderTile(23, '23')}
-              {/* Row 1 */}
-              <div className="border-[0.5px] border-slate-300 bg-amber-400 flex items-center justify-center text-[7px] text-white font-bold">⬅</div>
-              <div className="border-[0.5px] border-slate-300 bg-amber-400 flex items-center justify-center text-[7px] text-white font-bold">⬅</div>
-              <div className="border-[0.5px] border-slate-300 bg-amber-400 flex items-center justify-center text-[7px] text-white font-bold">⬅</div>
-              <div className="border-[0.5px] border-slate-300 bg-amber-400 flex items-center justify-center text-[7px] text-white font-bold">⬅</div>
-              <div className="border-[0.5px] border-slate-300 bg-amber-400 flex items-center justify-center text-[7px] text-white font-bold">⬅</div>
-              {renderTile(24, '24')}
-              {/* Row 2 */}
-              {renderTile(30, '30')}
-              {renderTile(29, '29')}
-              {renderTile(28, '28')}
-              {renderTile(27, '27')}
-              {renderTile(26, '26', true, 'bg-amber-100', <span className="text-[8px] font-black text-amber-800">⬅</span>)}
-              {renderTile(25, '25')}
-            </div>
-
+          {/* CELL 2 (Top-Middle): TOP ARM (3 COLS x 6 ROWS) */}
+          <div className="w-full h-full bg-slate-100 rounded-xl border border-slate-300 p-0.5 grid grid-cols-3 grid-rows-6">
+            {/* Row 0 */}
+            {renderTile(10, '10')}
+            {renderTile(11, '11')}
+            {renderTile(12, '12')}
+            {/* Row 1 */}
+            {renderTile(9, '9', true)}
+            {renderRunwayTile('A', 1, 'bg-emerald-500')}
+            {renderTile(13, '13', true, 'bg-emerald-200', <span className="text-[8px] font-black text-emerald-800">⬇</span>)}
+            {/* Row 2 */}
+            {renderTile(8, '8')}
+            {renderRunwayTile('A', 2, 'bg-emerald-500')}
+            {renderTile(14, '14')}
+            {/* Row 3 */}
+            {renderTile(7, '7')}
+            {renderRunwayTile('A', 3, 'bg-emerald-500')}
+            {renderTile(15, '15')}
+            {/* Row 4 */}
+            {renderTile(6, '6')}
+            {renderRunwayTile('A', 4, 'bg-emerald-500')}
+            {renderTile(16, '16')}
+            {/* Row 5 */}
+            {renderTile(5, '5')}
+            {renderRunwayTile('A', 5, 'bg-emerald-500')}
+            {renderTile(17, '17')}
           </div>
 
-          {/* BAND 3: BOTTOM BAND (HEIGHT 40%) -> BLUE YARD (40%) | BOTTOM ARM (20%) | YELLOW YARD (40%) */}
-          <div className="h-[40%] flex justify-between gap-1 w-full">
+          {/* CELL 3 (Top-Right): GREEN YARD (DORA) */}
+          <div className={`w-full h-full bg-gradient-to-br from-emerald-600 via-teal-600 to-emerald-700 rounded-2xl p-1.5 border-2 border-emerald-800 shadow-md flex flex-col justify-between ${
+            turn === 'A' ? 'ring-2 ring-emerald-400 shadow-emerald-900/50' : ''
+          }`}>
+            <div className="flex items-center justify-between text-[10px] font-black text-white px-1">
+              <span>GREEN YARD</span>
+              <span>💕 {activeDoraName}</span>
+            </div>
+            <div className="bg-white/95 rounded-xl p-1 h-[78%] grid grid-cols-2 gap-1 place-items-center shadow-inner">
+              {[0, 1, 2, 3].map((tIdx) => {
+                const inYard = tokens.A[tIdx] === -1;
+                const isMovable = movableTokens.includes(tIdx) && turn === 'A';
+                return (
+                  <div
+                    key={`A_yard_${tIdx}`}
+                    onClick={() => {
+                      if (isMovable && isMyTurn) executeMove('A', tIdx, diceVal);
+                    }}
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-dashed border-emerald-300 flex items-center justify-center transition-all ${
+                      inYard ? 'bg-emerald-50' : 'bg-gray-100 opacity-25'
+                    } ${isMovable ? 'cursor-pointer scale-115 ring-4 ring-amber-400 animate-bounce z-20' : ''}`}
+                  >
+                    {inYard && (
+                      <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-[9px] font-black flex items-center justify-center shadow-md border-2 border-white">
+                        A{tIdx + 1}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* CELL 4 (Middle-Left): LEFT ARM (6 COLS x 3 ROWS) */}
+          <div className="w-full h-full bg-slate-100 rounded-xl border border-slate-300 p-0.5 grid grid-cols-6 grid-rows-3">
+            {/* Row 0 */}
+            {renderTile(51, '51')}
+            {renderTile(0, '0', true, 'bg-red-200', <span className="text-[8px] font-black text-red-800">➔</span>)}
+            {renderTile(1, '1')}
+            {renderTile(2, '2')}
+            {renderTile(3, '3')}
+            {renderTile(4, '4')}
+            {/* Row 1 */}
+            {renderTile(50, '50')}
+            {renderRunwayTile('H', 1, 'bg-red-500')}
+            {renderRunwayTile('H', 2, 'bg-red-500')}
+            {renderRunwayTile('H', 3, 'bg-red-500')}
+            {renderRunwayTile('H', 4, 'bg-red-500')}
+            {renderRunwayTile('H', 5, 'bg-red-500')}
+            {/* Row 2 */}
+            {renderTile(49, '49')}
+            {renderTile(48, '48', true)}
+            {renderTile(47, '47')}
+            {renderTile(46, '46')}
+            {renderTile(45, '45')}
+            {renderTile(44, '44')}
+          </div>
+
+          {/* CELL 5 (Center): CENTER HOME (20% x 20%) */}
+          <div className="w-full h-full bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 rounded-xl border-2 border-amber-600 shadow-inner flex flex-col items-center justify-center relative overflow-hidden">
+            <span className="text-xl sm:text-2xl animate-bounce">👑</span>
+            <span className="text-[7px] font-black text-amber-950 uppercase tracking-tight">HOME</span>
             
-            {/* 3A. BLUE YARD (CLASSIC DECORATIVE) */}
-            <div className="w-[40%] h-full bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-1.5 border-2 border-blue-800 shadow-md flex flex-col justify-between opacity-85">
-              <span className="text-[10px] font-black text-white px-1">BLUE YARD</span>
-              <div className="bg-white/95 rounded-xl p-1 h-[78%] grid grid-cols-2 gap-1 place-items-center">
-                {[0, 1, 2, 3].map(i => (
-                  <div key={i} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-dashed border-blue-300 bg-blue-50" />
+            {/* Render Home Pawns */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="flex flex-wrap gap-0.5 justify-center max-w-[90%]">
+                {tokens.H.filter(p => p === 56).map((_, i) => (
+                  <span key={`h_home_${i}`} className="w-3.5 h-3.5 rounded-full bg-red-600 border border-white text-[7px] text-white font-bold flex items-center justify-center">
+                    H
+                  </span>
+                ))}
+                {tokens.A.filter(p => p === 56).map((_, i) => (
+                  <span key={`a_home_${i}`} className="w-3.5 h-3.5 rounded-full bg-emerald-600 border border-white text-[7px] text-white font-bold flex items-center justify-center">
+                    A
+                  </span>
                 ))}
               </div>
             </div>
+          </div>
 
-            {/* 3B. BOTTOM ARM (3 COLS x 6 ROWS) */}
-            <div className="w-[20%] h-full bg-slate-100 rounded-xl border border-slate-300 p-0.5 grid grid-cols-3 grid-rows-6">
-              {/* Row 0 */}
-              {renderTile(43, '43')}
-              <div className="border-[0.5px] border-slate-300 bg-blue-500 flex items-center justify-center text-[8px] text-white font-bold">⬆</div>
-              {renderTile(31, '31')}
-              {/* Row 1 */}
-              {renderTile(42, '42')}
-              <div className="border-[0.5px] border-slate-300 bg-blue-500 flex items-center justify-center text-[8px] text-white font-bold">⬆</div>
-              {renderTile(32, '32')}
-              {/* Row 2 */}
-              {renderTile(41, '41')}
-              <div className="border-[0.5px] border-slate-300 bg-blue-500 flex items-center justify-center text-[8px] text-white font-bold">⬆</div>
-              {renderTile(33, '33')}
-              {/* Row 3 */}
-              {renderTile(40, '40')}
-              <div className="border-[0.5px] border-slate-300 bg-blue-500 flex items-center justify-center text-[8px] text-white font-bold">⬆</div>
-              {renderTile(34, '34')}
-              {/* Row 4 */}
-              {renderTile(39, '39', true, 'bg-blue-100', <span className="text-[8px] font-black text-blue-800">⬆</span>)}
-              <div className="border-[0.5px] border-slate-300 bg-blue-500 flex items-center justify-center text-[8px] text-white font-bold">⬆</div>
-              {renderTile(35, '35', true)}
-              {/* Row 5 */}
-              {renderTile(38, '38')}
-              {renderTile(37, '37')}
-              {renderTile(36, '36')}
+          {/* CELL 6 (Middle-Right): RIGHT ARM (6 COLS x 3 ROWS) */}
+          <div className="w-full h-full bg-slate-100 rounded-xl border border-slate-300 p-0.5 grid grid-cols-6 grid-rows-3">
+            {/* Row 0 */}
+            {renderTile(18, '18')}
+            {renderTile(19, '19')}
+            {renderTile(20, '20')}
+            {renderTile(21, '21')}
+            {renderTile(22, '22', true)}
+            {renderTile(23, '23')}
+            {/* Row 1 */}
+            <div className="border-[0.5px] border-slate-300 bg-amber-400 flex items-center justify-center text-[7px] text-white font-bold">⬅</div>
+            <div className="border-[0.5px] border-slate-300 bg-amber-400 flex items-center justify-center text-[7px] text-white font-bold">⬅</div>
+            <div className="border-[0.5px] border-slate-300 bg-amber-400 flex items-center justify-center text-[7px] text-white font-bold">⬅</div>
+            <div className="border-[0.5px] border-slate-300 bg-amber-400 flex items-center justify-center text-[7px] text-white font-bold">⬅</div>
+            <div className="border-[0.5px] border-slate-300 bg-amber-400 flex items-center justify-center text-[7px] text-white font-bold">⬅</div>
+            {renderTile(24, '24')}
+            {/* Row 2 */}
+            {renderTile(30, '30')}
+            {renderTile(29, '29')}
+            {renderTile(28, '28')}
+            {renderTile(27, '27')}
+            {renderTile(26, '26', true, 'bg-amber-100', <span className="text-[8px] font-black text-amber-800">⬅</span>)}
+            {renderTile(25, '25')}
+          </div>
+
+          {/* CELL 7 (Bottom-Left): BLUE YARD (CLASSIC DECORATIVE) */}
+          <div className="w-full h-full bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-1.5 border-2 border-blue-800 shadow-md flex flex-col justify-between opacity-85">
+            <span className="text-[10px] font-black text-white px-1">BLUE YARD</span>
+            <div className="bg-white/95 rounded-xl p-1 h-[78%] grid grid-cols-2 gap-1 place-items-center">
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-dashed border-blue-300 bg-blue-50" />
+              ))}
             </div>
+          </div>
 
-            {/* 3C. YELLOW YARD (CLASSIC DECORATIVE) */}
-            <div className="w-[40%] h-full bg-gradient-to-br from-amber-500 to-yellow-600 rounded-2xl p-1.5 border-2 border-amber-800 shadow-md flex flex-col justify-between opacity-85">
-              <span className="text-[10px] font-black text-amber-950 px-1">YELLOW YARD</span>
-              <div className="bg-white/95 rounded-xl p-1 h-[78%] grid grid-cols-2 gap-1 place-items-center">
-                {[0, 1, 2, 3].map(i => (
-                  <div key={i} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-dashed border-amber-300 bg-amber-50" />
-                ))}
-              </div>
+          {/* CELL 8 (Bottom-Middle): BOTTOM ARM (3 COLS x 6 ROWS) */}
+          <div className="w-full h-full bg-slate-100 rounded-xl border border-slate-300 p-0.5 grid grid-cols-3 grid-rows-6">
+            {/* Row 0 */}
+            {renderTile(43, '43')}
+            <div className="border-[0.5px] border-slate-300 bg-blue-500 flex items-center justify-center text-[8px] text-white font-bold">⬆</div>
+            {renderTile(31, '31')}
+            {/* Row 1 */}
+            {renderTile(42, '42')}
+            <div className="border-[0.5px] border-slate-300 bg-blue-500 flex items-center justify-center text-[8px] text-white font-bold">⬆</div>
+            {renderTile(32, '32')}
+            {/* Row 2 */}
+            {renderTile(41, '41')}
+            <div className="border-[0.5px] border-slate-300 bg-blue-500 flex items-center justify-center text-[8px] text-white font-bold">⬆</div>
+            {renderTile(33, '33')}
+            {/* Row 3 */}
+            {renderTile(40, '40')}
+            <div className="border-[0.5px] border-slate-300 bg-blue-500 flex items-center justify-center text-[8px] text-white font-bold">⬆</div>
+            {renderTile(34, '34')}
+            {/* Row 4 */}
+            {renderTile(39, '39', true, 'bg-blue-100', <span className="text-[8px] font-black text-blue-800">⬆</span>)}
+            <div className="border-[0.5px] border-slate-300 bg-blue-500 flex items-center justify-center text-[8px] text-white font-bold">⬆</div>
+            {renderTile(35, '35', true)}
+            {/* Row 5 */}
+            {renderTile(38, '38')}
+            {renderTile(37, '37')}
+            {renderTile(36, '36')}
+          </div>
+
+          {/* CELL 9 (Bottom-Right): YELLOW YARD (CLASSIC DECORATIVE) */}
+          <div className="w-full h-full bg-gradient-to-br from-amber-500 to-yellow-600 rounded-2xl p-1.5 border-2 border-amber-800 shadow-md flex flex-col justify-between opacity-85">
+            <span className="text-[10px] font-black text-amber-950 px-1">YELLOW YARD</span>
+            <div className="bg-white/95 rounded-xl p-1 h-[78%] grid grid-cols-2 gap-1 place-items-center">
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-dashed border-amber-300 bg-amber-50" />
+              ))}
             </div>
-
           </div>
 
         </div>

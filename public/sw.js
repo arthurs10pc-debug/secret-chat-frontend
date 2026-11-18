@@ -1,8 +1,7 @@
-// Progressive Web App Service Worker with Push Notifications & Offline Caching
-const CACHE_NAME = 'stealth-chat-v2';
+// Progressive Web App Service Worker with Push Notifications & Live Update Cache Busting
+const CACHE_NAME = 'stealth-chat-v3';
 const STATIC_ASSETS = [
   '/',
-  '/index.html',
   '/manifest.json',
   '/favicon.ico',
   '/logo192.png',
@@ -10,11 +9,6 @@ const STATIC_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch(() => {});
-    })
-  );
   self.skipWaiting();
 });
 
@@ -22,13 +16,13 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        keys.map((key) => caches.delete(key))
       );
     }).then(() => self.clients.claim())
   );
 });
 
-// Network-first fetch handler for PWA installability
+// Network-first live fetch handler - Never trap navigation in stale caches
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   
@@ -37,6 +31,16 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/socket.io/')) return;
 
+  // Navigation requests (HTML) ALWAYS go to network directly so new builds load instantly
+  if (event.request.mode === 'navigate' || event.request.headers.get('accept')?.includes('text/html')) {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-cache' })
+        .catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
+  // JS/CSS assets: Network first, fallback to cache
   event.respondWith(
     fetch(event.request)
       .then((response) => {
@@ -48,14 +52,7 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() => {
-        return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) return cachedResponse;
-          if (event.request.headers.get('accept')?.includes('text/html')) {
-            return caches.match('/index.html');
-          }
-        });
-      })
+      .catch(() => caches.match(event.request))
   );
 });
 
