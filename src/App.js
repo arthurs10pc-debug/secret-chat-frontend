@@ -7810,6 +7810,18 @@ export default function App() {
                                       {m.mediaOpened ? <Eye size={12} className="text-emerald-400" /> : <EyeOff size={12} className="text-amber-400 animate-pulse" />}
                                       <span>{m.mediaOpened ? '[Opened: binary_raw]' : '[View Once: payload_locked]'}</span>
                                     </button>
+                                  ) : cleanBody && cleanBody.includes('[GAME_CHALLENGE:') ? (
+                                    <button 
+                                      type="button" 
+                                      onClick={() => {
+                                        if (cleanBody.includes('ludo')) setShowLudoModal(true);
+                                        else setShowCoupleMiniGameModal(true);
+                                      }}
+                                      className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 text-black font-black px-2.5 py-1 rounded-lg text-xs cursor-pointer shadow hover:from-amber-400 hover:to-yellow-400 active:scale-95 transition-all"
+                                    >
+                                      <span>{cleanBody.includes('ludo') ? '🎲 Join Ludo Royale' : '⚔️ Join Tic-Tac-Toe'}</span>
+                                      <span className="text-[10px] bg-black/20 px-1.5 py-0.2 rounded font-mono font-bold">PLAY</span>
+                                    </button>
                                   ) : (
                                     <span className="text-[#ce9178] break-all">{`"${cleanBody}"`}</span>
                                   )}

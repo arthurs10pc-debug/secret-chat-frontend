@@ -41,40 +41,66 @@ export default function CoupleMiniGameModal({
     return null;
   };
 
+  // Request live server state whenever modal opens or socket reconnects
   useEffect(() => {
     const socket = socketRef?.current;
-    if (!socket) return;
+    if (!socket || !isOpen) return;
 
-    const handleGameBroadcast = (data) => {
-      if (!data) return;
-      if (data.type === 'MOVE') {
-        setBoard(data.board);
-        setTurn(data.turn);
-        if (data.betAmount) setBetAmount(data.betAmount);
-        if (data.winner) {
-          setWinner(data.winner);
-          setGameStatus('WON');
-          setScores(prev => ({ ...prev, [data.winner]: prev[data.winner] + 1 }));
-          if (data.winner === mySymbol) {
-            try { confetti({ particleCount: 80, spread: 70 }); } catch (e) {}
-          }
-        } else if (data.isDraw) {
-          setGameStatus('DRAW');
-        }
-      } else if (data.type === 'RESET') {
-        setBoard(Array(9).fill(null));
-        setTurn(data.turn || 'H');
+    socket.emit('couple_game_get_state', { gameId: 'tictactoe' });
+
+    const handleStateSync = ({ gameId, state }) => {
+      if (gameId !== 'tictactoe' || !state) return;
+      if (state.board) setBoard(state.board);
+      if (state.turn) setTurn(state.turn);
+      if (state.betAmount !== undefined) setBetAmount(state.betAmount);
+      if (state.scores) setScores(state.scores);
+      if (state.winner) {
+        setWinner(state.winner);
+        setGameStatus('WON');
+      } else if (state.isDraw) {
+        setGameStatus('DRAW');
+      } else {
         setWinner(null);
         setGameStatus('PLAYING');
-        if (data.betAmount) setBetAmount(data.betAmount);
       }
     };
 
+    const handleGameBroadcast = (data) => {
+      if (!data || data.gameId !== 'tictactoe') return;
+      const state = data.state || data;
+      if (state.board) setBoard(state.board);
+      if (state.turn) setTurn(state.turn);
+      if (state.betAmount !== undefined) setBetAmount(state.betAmount);
+      if (state.scores) setScores(state.scores);
+
+      if (state.winner) {
+        setWinner(state.winner);
+        setGameStatus('WON');
+        if (state.winner === mySymbol) {
+          try { confetti({ particleCount: 80, spread: 70 }); } catch (e) {}
+        }
+      } else if (state.isDraw) {
+        setWinner(null);
+        setGameStatus('DRAW');
+      } else if (data.type === 'RESET') {
+        setBoard(Array(9).fill(null));
+        setTurn('H');
+        setWinner(null);
+        setGameStatus('PLAYING');
+      } else {
+        setWinner(null);
+        setGameStatus('PLAYING');
+      }
+    };
+
+    socket.on('couple_game_state_sync', handleStateSync);
     socket.on('couple_game_broadcast', handleGameBroadcast);
+
     return () => {
+      socket.off('couple_game_state_sync', handleStateSync);
       socket.off('couple_game_broadcast', handleGameBroadcast);
     };
-  }, [socketRef, mySymbol]);
+  }, [socketRef, isOpen, mySymbol]);
 
   const handleSquareClick = (index) => {
     if (board[index] || gameStatus !== 'PLAYING') return;
@@ -128,6 +154,18 @@ export default function CoupleMiniGameModal({
           turn: nextTurn
         });
       }
+    }
+  };
+
+  const handleSelectBet = (amt) => {
+    if (gameStatus !== 'PLAYING' || board.some(s => s !== null)) return;
+    setBetAmount(amt);
+    if (socketRef?.current) {
+      socketRef.current.emit('couple_game_action', {
+        type: 'BET_CHANGE',
+        gameId: 'tictactoe',
+        betAmount: amt
+      });
     }
   };
 
@@ -210,7 +248,7 @@ export default function CoupleMiniGameModal({
             <button
               type="button"
               disabled={gameStatus !== 'PLAYING' || board.some(s => s !== null)}
-              onClick={() => setBetAmount(2.0)}
+              onClick={() => handleSelectBet(2.0)}
               className={`px-2 py-0.5 rounded-lg border font-mono transition-all ${
                 betAmount === 2.0
                   ? 'bg-amber-500 text-black border-amber-400 font-black shadow'
@@ -222,7 +260,7 @@ export default function CoupleMiniGameModal({
             <button
               type="button"
               disabled={gameStatus !== 'PLAYING' || board.some(s => s !== null)}
-              onClick={() => setBetAmount(5.0)}
+              onClick={() => handleSelectBet(5.0)}
               className={`px-2 py-0.5 rounded-lg border font-mono transition-all ${
                 betAmount === 5.0
                   ? 'bg-amber-500 text-black border-amber-400 font-black shadow'
