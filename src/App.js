@@ -13,140 +13,35 @@ import {
   Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2, Heart, Coins, Award, Scale, Gift, SlidersHorizontal, Bell, BellRing, Filter, CheckCircle2, XCircle, ArrowLeft, MoreVertical, Paperclip, Camera, Briefcase, Calendar, CheckCircle, Users, UserCheck, Mail
 } from 'lucide-react';
 
-const SOCKET_URL = "https://secret-chat-backend-07d0.onrender.com";
-const BACKEND_URL = SOCKET_URL;
-const SECRET_KEY = "StealthMasterKey99";
-const GLOBAL_ROOM = "stealth_master_room";
+import {
+  SOCKET_URL,
+  BACKEND_URL,
+  SECRET_KEY,
+  GLOBAL_ROOM,
+  getLocalDateString,
+  PUBLIC_VAPID_KEY,
+  QUICK_EMOJIS,
+  HOVER_REACTIONS,
+  ROMANTIC_REGEX,
+  ARCADE_GAMES,
+  DEFAULT_DAILY_SLOTS,
+  DEFAULT_RECENT_CHATS,
+  DEFAULT_LOVE_LEDGER,
+  ROMANTIC_WISH_STORE,
+  LOVE_EARNING_RULES,
+  LOVE_DEDUCTION_RULES,
+  cleanOriginalText,
+  extractYouTubeId
+} from './constants';
 
-const getLocalDateString = (d = new Date()) => {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const PUBLIC_VAPID_KEY = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-8vMeAtA5cHmDkJ0d8Q9cW4vG0mJ5M3Q5lK0P8vWq6X5LwG0J7j6W0Yg';
-
-const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "🙏", "👌", "💯", "🤫", "✨"];
-const HOVER_REACTIONS = ["👍", "❤️", "🥰", "😆", "😮", "😢", "➕"];
-const ROMANTIC_REGEX = /[\u2764\u2665\u2763\u2765\u2661\uD83D\uDC93-\uD83D\uDC9F\uD83E\uDDE1\uD83E\uDD0D\uD83E\uDD0E\uD83E\uDEF6\uD83D\uDE18\uD83E\uDD70\uD83D\uDE0D\uD83D\uDC8B\uD83E\uDE75-\uD83E\uDE77\uD83D\uDC8F\uD83D\uDC91\uD83C\uDF39\uD83D\uDC90\uD83E\uDD17]|<3|:heart:|\bdil\b|\bpyaar\b|\blove\b/iu;
-
-const ARCADE_GAMES = [
-  { id: 'ludo', name: 'Ludo (Royal Clash)', desc: '2-Player Real-Time Multiplayer Board Game with Colorful Tokens & Animated 3D Dice' }
-];
-
-const DEFAULT_DAILY_SLOTS = [
-  { id: 'slot_1', title: 'Morning Workout (10 Squats / Stretch)', timeRange: '08:00 - 09:00', tag: 'Workout', rewardPoints: 2.0, order: 1, isActive: true },
-  { id: 'slot_2', title: 'Healthy Detox Juice / Morning Drink', timeRange: '09:00 - 10:00', tag: 'Juice', rewardPoints: 1.5, order: 2, isActive: true },
-  { id: 'slot_3', title: 'Heavy Breakfast (High-Calorie Meal Plate)', timeRange: '10:00 - 11:00', tag: 'Breakfast', rewardPoints: 2.5, order: 3, isActive: true },
-  { id: 'slot_4', title: 'Lunch Check-in & Care Update', timeRange: '01:00 - 02:00', tag: 'Lunch', rewardPoints: 2.0, order: 4, isActive: true },
-  { id: 'slot_5', title: 'Hydration Milestone (Water Intake)', timeRange: '03:30 - 04:30', tag: 'Water', rewardPoints: 1.0, order: 5, isActive: true },
-  { id: 'slot_6', title: 'Evening Tea & Healthy Snack', timeRange: '05:00 - 05:30', tag: 'Tea', rewardPoints: 1.0, order: 6, isActive: true },
-  { id: 'slot_7', title: 'High-Protein Dinner Plate', timeRange: '08:30 - 09:30', tag: 'Dinner', rewardPoints: 2.0, order: 7, isActive: true },
-  { id: 'slot_8', title: 'Google Fit 8,000 Steps Screenshot', timeRange: '10:00 - 10:30', tag: 'Steps', rewardPoints: 3.0, order: 8, isActive: true },
-  { id: 'slot_9', title: 'Night Skin Care Routine & Glow Check', timeRange: '10:30 - 11:00', tag: 'Skincare', rewardPoints: 2.0, order: 9, isActive: true }
-];
-
-const DEFAULT_RECENT_CHATS = [
-  "GMB Review Reply",
-  "Prashant chotalia",
-  "Shiva Pradakshina Meaning",
-  "Generate random code",
-  "Free Movie Watch Together",
-  "Clinic Content Writing",
-  "Write Kidney Article",
-  "KidneyCure TOPIC",
-  "Pest Control in Ahmedabad",
-  "Blog Topics ( Pest Control )",
-  "MTech Semester Dates",
-  "Free Couple Watch Apps",
-  "Tablet as Second Screen",
-  "Bike Comparison Suggestion",
-  "Punjabi Thali Search"
-];
-
-const DEFAULT_LOVE_LEDGER = [];
-
-const ROMANTIC_WISH_STORE = [
-  {
-    id: 'wish_voicenote',
-    title: 'Voice Note on Demand',
-    cost: 20.00,
-    icon: '🎙️',
-    description: 'A personalized cute voice note with sweet romantic nicknames and compliments on demand.'
-  },
-  {
-    id: 'wish_icecream',
-    title: 'Ice Cream / Dessert Treat',
-    cost: 40.00,
-    icon: '🍦',
-    description: 'Guaranteed favorite ice cream flavor or dessert delivered or enjoyed together.'
-  },
-  {
-    id: 'wish_movie',
-    title: 'Codex Cinema Movie Choice',
-    cost: 75.00,
-    icon: '🎬',
-    description: 'Full sovereign pick of the next romantic movie or show to stream synchronized together.'
-  },
-  {
-    id: 'wish_custom',
-    title: 'Custom Romantic Wish',
-    cost: 120.00,
-    icon: '✨',
-    description: 'Any personal cute favor, romantic request, or surprise granted without hesitation.'
-  },
-  {
-    id: 'wish_dinner',
-    title: 'Candlelight Dinner Date',
-    cost: 250.00,
-    icon: '🥂',
-    description: 'A fully planned and organized romantic dinner date with VIP royal couple treatment.'
-  }
-];
-
-const LOVE_EARNING_RULES = [
-  { sno: 1, task: 'Daily Morning Sweet Text', criteria: 'Send sweet Good Morning message before 9:00 AM', reward: '+2.00' },
-  { sno: 2, task: 'Instant Reply', criteria: 'Reply within 5 minutes of incoming message', reward: '+1.00' },
-  { sno: 3, task: 'Compliment Drop', criteria: 'Spontaneous, genuine romantic compliment during conversation', reward: '+3.00' },
-  { sno: 4, task: 'Meal Check-in', criteria: 'Caring "Had food?" reminder sent before 2:00 PM / 9:00 PM', reward: '+2.00' },
-  { sno: 5, task: 'Virtual Hug / Kiss Emoji', criteria: 'Sharing cute romantic emojis, stickers, or kisses in chat', reward: '+1.00' },
-  { sno: 6, task: 'Romantic Song / Movie Suggestion', criteria: 'Suggesting a quality romantic track or movie to enjoy together', reward: '+5.00' },
-  { sno: 7, task: 'Late Night Romantic Paragraph', criteria: 'Writing a heartfelt, emotional paragraph at night before bed', reward: '+10.00' },
-  { sno: 8, task: '100% Weekend Availability', criteria: 'Spending dedicated quality time without gaps on weekends', reward: '+10.00' },
-  { sno: 9, task: 'Anniversary / Milestone Reminder', criteria: 'Remembering and wishing special date or anniversary in advance', reward: '+15.00' },
-  { sno: 10, task: 'Apology without Ego', criteria: 'Promptly apologizing with love and zero ego after misunderstanding', reward: '+5.00' },
-  { sno: 11, task: 'Surprise Cute Selfie', criteria: 'Sending a spontaneous smile or cute picture', reward: '+3.00' },
-  { sno: 12, task: 'Patient Listening', criteria: 'Listening to full story/rant with empathy without interrupting', reward: '+5.00' },
-  { sno: 13, task: 'Future Date Planning', criteria: 'Suggesting and planning a fun upcoming date idea together', reward: '+8.00' }
-];
-
-const LOVE_DEDUCTION_RULES = [
-  { sno: 1, infraction: 'Seen & Ignored (Left on Read)', criteria: 'Message seen but left unreplied for more than 1 hour', penalty: '-3.00' },
-  { sno: 2, infraction: 'Late Reply / Ghosting', criteria: 'Disappearing for hours without giving prior heads-up', penalty: '-5.00' },
-  { sno: 3, infraction: 'Dry Replies ("Hmm", "Ok", "K")', criteria: 'Replying with dry 1-word answers to long sweet messages', penalty: '-2.00' },
-  { sno: 4, infraction: 'Fighting / Rudeness', criteria: 'Using harsh tone, anger, or unromantic rudeness in chat', penalty: '-10.00' },
-  { sno: 5, infraction: 'Forgetting Special Dates', criteria: 'Forgetting important anniversaries, milestones, or birthdays', penalty: '-20.00' },
-  { sno: 6, infraction: 'Sleeping Without "Good Night"', criteria: 'Falling asleep without wishing sweet Good Night', penalty: '-3.00' },
-  { sno: 7, infraction: 'Broken Romantic Promise', criteria: 'Cancelling a promised call or romantic activity without reason', penalty: '-8.00' }
-];
-
-const cleanOriginalText = (raw) => {
-  if (!raw) return "";
-  let cleaned = raw;
-  while (cleaned.includes('[⤴') || cleaned.startsWith('⤴')) {
-    cleaned = cleaned.replace(/^\[⤴\s*[AH]:\s*"[^"]*"\s*\]\s*/g, '');
-    cleaned = cleaned.replace(/^⤴\s*[AH]:\s*"[^"]*"\s*/g, '');
-  }
-  return cleaned.trim();
-};
-
-const extractYouTubeId = (url) => {
-  if (!url) return null;
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=[&?]?|v=)([^#&?]*).*/;
-  const match = url.match(regExp);
-  return (match && match[2].length === 11) ? match[2] : null;
-};
+import PassbookModal from './components/PassbookModal';
+import WishApprovalModal from './components/WishApprovalModal';
+import ClearConfirmModal from './components/ClearConfirmModal';
+import AnswerPendingModal from './components/AnswerPendingModal';
+import RoutineSlotModal from './components/RoutineSlotModal';
+import ImagePreviewModal from './components/ImagePreviewModal';
+import DarshAssistantBot from './components/DarshAssistantBot';
+import StealthAlertBubble from './components/StealthAlertBubble';
 
 const getEmbedUrl = (server, imdbId) => {
   const cleanId = imdbId.trim();
@@ -10406,1188 +10301,105 @@ export default function App() {
           </div>
         )}
 
-        {/* --- LOVE BALANCE MASTER MODAL (PASSBOOK, WISH STORE, REDEEMED WISHES, RULES) --- */}
-        {showLoveBalanceModal && (
-          <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
-            <div className="bg-[#121212] border border-emerald-500/40 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden font-sans text-left">
-              
-              {/* MODAL HEADER */}
-              <div className="p-4 sm:p-5 border-b border-[#222] flex items-center justify-between bg-[#161616]">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xl">
-                    ₹
-                  </div>
-                  <div>
-                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                      <span>Love Balance</span>
-                      <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full border ${
-                        displayedLoveBalance < 0 
-                          ? 'bg-rose-950/60 text-rose-300 border-rose-800' 
-                          : 'bg-emerald-950/60 text-emerald-400 border-emerald-800/80'
-                      }`}>
-                        {formatLoveBalance(displayedLoveBalance)}
-                      </span>
-                    </h2>
-                    {isParentAdmin ? (
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <button
-                          type="button"
-                          onClick={() => setActiveLbTarget('user')}
-                          className={`text-[11px] font-bold px-2.5 py-0.5 rounded-lg border transition-all cursor-pointer ${
-                            activeLbTarget === 'user'
-                              ? 'bg-pink-600 text-white border-pink-400 shadow'
-                              : 'bg-[#222] text-gray-400 border-[#333] hover:text-white'
-                          }`}
-                        >
-                          💕 {activeDoraName} ({formatLoveBalance(doraNetBalance)})
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setActiveLbTarget('admin')}
-                          className={`text-[11px] font-bold px-2.5 py-0.5 rounded-lg border transition-all cursor-pointer ${
-                            activeLbTarget === 'admin'
-                              ? 'bg-blue-600 text-white border-blue-400 shadow'
-                              : 'bg-[#222] text-gray-400 border-[#333] hover:text-white'
-                          }`}
-                        >
-                          👑 Darsh ({formatLoveBalance(adminNetBalance)})
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-pink-300 mt-0.5">{activeDoraName}'s Romantic Passbook & Wish Store</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* TAB BUTTONS & CLOSE */}
-                <div className="flex items-center gap-2">
-                  <div className="hidden sm:flex bg-[#1f1f1f] border border-[#2e2e2e] p-1 rounded-xl text-xs font-semibold gap-1">
-                    <button
-                      onClick={() => setLoveModalTab('passbook')}
-                      className={'px-3 py-1.5 rounded-lg transition-all cursor-pointer ' + (
-                        loveModalTab === 'passbook' ? 'bg-blue-600 text-white shadow font-bold' : 'text-gray-400 hover:text-white'
-                      )}
-                    >
-                      Passbook Ledger
-                    </button>
-                    <button
-                      onClick={() => setLoveModalTab('redeem')}
-                      className={'px-3 py-1.5 rounded-lg transition-all cursor-pointer ' + (
-                        loveModalTab === 'redeem' ? 'bg-pink-600 text-white shadow font-bold' : 'text-gray-400 hover:text-white'
-                      )}
-                    >
-                      Wish Store
-                    </button>
-                    <button
-                      onClick={() => setLoveModalTab('claimed')}
-                      className={'px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ' + (
-                        loveModalTab === 'claimed' ? 'bg-amber-600 text-white shadow font-bold' : 'text-gray-400 hover:text-white'
-                      )}
-                    >
-                      <span>Redeemed Wishes</span>
-                      <span className="text-[10px] bg-black/40 px-1.5 py-0.2 rounded font-mono font-bold">
-                        {redeemedWishesList.length}
-                      </span>
-                    </button>
-                    <button
-                      onClick={() => setLoveModalTab('rules')}
-                      className={'px-3 py-1.5 rounded-lg transition-all cursor-pointer ' + (
-                        loveModalTab === 'rules' ? 'bg-emerald-600 text-white shadow font-bold' : 'text-gray-400 hover:text-white'
-                      )}
-                    >
-                      Love Policy
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleManualSectionRefresh('passbook_modal')}
-                    className="w-8 h-8 rounded-full bg-[#1e1e1e] hover:bg-emerald-600/30 border border-[#333] hover:border-emerald-500 text-gray-400 hover:text-emerald-400 flex items-center justify-center transition-all cursor-pointer active:scale-90"
-                    title="Force Refresh & Sync with Server"
-                  >
-                    <RefreshCw size={14} className={refreshingSection === 'passbook_modal' ? 'animate-spin text-emerald-400' : ''} />
-                  </button>
-
-                  <button
-                    onClick={() => setShowLoveBalanceModal(false)}
-                    className="text-gray-400 hover:text-white p-2 rounded-xl hover:bg-[#222] transition-colors cursor-pointer"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-              </div>
-
-              {/* MOBILE TAB BAR */}
-              <div className="sm:hidden grid grid-cols-4 bg-[#161616] border-b border-[#222] p-1.5 text-[11px] font-semibold gap-1 text-center">
-                <button
-                  onClick={() => setLoveModalTab('passbook')}
-                  className={'py-1.5 rounded-lg transition-all cursor-pointer ' + (
-                    loveModalTab === 'passbook' ? 'bg-blue-600 text-white font-bold' : 'text-gray-400'
-                  )}
-                >
-                  Passbook
-                </button>
-                <button
-                  onClick={() => setLoveModalTab('redeem')}
-                  className={'py-1.5 rounded-lg transition-all cursor-pointer ' + (
-                    loveModalTab === 'redeem' ? 'bg-pink-600 text-white font-bold' : 'text-gray-400'
-                  )}
-                >
-                  Wishes
-                </button>
-                <button
-                  onClick={() => setLoveModalTab('claimed')}
-                  className={'py-1.5 rounded-lg transition-all cursor-pointer ' + (
-                    loveModalTab === 'claimed' ? 'bg-amber-600 text-white font-bold' : 'text-gray-400'
-                  )}
-                >
-                  Redeemed ({redeemedWishesList.length})
-                </button>
-                <button
-                  onClick={() => setLoveModalTab('rules')}
-                  className={'py-1.5 rounded-lg transition-all cursor-pointer ' + (
-                    loveModalTab === 'rules' ? 'bg-emerald-600 text-white font-bold' : 'text-gray-400'
-                  )}
-                >
-                  Policy
-                </button>
-              </div>
-
-              {/* MODAL BODY (SCROLLABLE) */}
-              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 scrollbar-thin">
-                
-                {/* TAB 1: PASSBOOK LEDGER */}
-                {loveModalTab === 'passbook' && (
-                  <div className="space-y-4">
-                    
-                    {/* DARSH ADMIN SELECTOR: SWITCH BETWEEN DORA AND DARSH PASSBOOK (NEVER SHOWN TO DORA) */}
-                    {isParentAdmin && (
-                      <div className="flex bg-[#1a1a1a] p-1 rounded-xl border border-[#2d2d2d] text-xs font-bold gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setActiveLbTarget('user')}
-                          className={'flex-1 py-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ' + (
-                            activeLbTarget === 'user' 
-                              ? 'bg-pink-600 text-white shadow font-black' 
-                              : 'text-gray-400 hover:text-white'
-                          )}
-                        >
-                          <span>💕 {activeDoraName}</span>
-                          <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono">{formatLoveBalance(doraNetBalance)}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setActiveLbTarget('admin')}
-                          className={'flex-1 py-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ' + (
-                            activeLbTarget === 'admin' 
-                              ? 'bg-blue-600 text-white shadow font-black' 
-                              : 'text-gray-400 hover:text-white'
-                          )}
-                        >
-                          <span>👑 Darsh</span>
-                          <span className="text-[10px] bg-black/40 px-1.5 py-0.5 rounded font-mono">{formatLoveBalance(adminNetBalance)}</span>
-                        </button>
-                      </div>
-                    )}
-
-                    {/* 4 TOP SUMMARY CARDS (AVAILABLE BALANCE, TOTAL CUT POINTS, TOTAL LOVE PAYOUTS, REDEEMED WISHES) */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-sans">
-                      
-                      {/* CARD 1: AVAILABLE BALANCE (BLUE) - NEVER NEGATIVE (FLOORED AT 0) */}
-                      <div className="bg-blue-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-1.5 relative overflow-hidden">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">
-                            {isParentAdmin ? (activeLbTarget === 'admin' ? "Darsh's Available" : `${activeDoraName}'s Available`) : "Available Balance"}
-                          </span>
-                          <span className="text-sm">🤝</span>
-                        </div>
-                        <div className="text-xl sm:text-2xl font-black font-mono">
-                          {formatLoveBalance(Math.max(0, displayedLoveBalance))}
-                        </div>
-                      </div>
-
-                      {/* CARD 2: TOTAL CUT POINTS (RED) */}
-                      <div className="bg-rose-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-1.5 relative overflow-hidden">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">Total Cut Points</span>
-                          <span className="text-sm">⚖️</span>
-                        </div>
-                        <div className="text-xl sm:text-2xl font-black font-mono">
-                          -₹ {cutPointsTotal.toFixed(2)}
-                        </div>
-                      </div>
-
-                      {/* CARD 3: TOTAL LOVE PAYOUTS (GREEN) */}
-                      <div className="bg-emerald-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-1.5 relative overflow-hidden">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">Total Love Payouts</span>
-                          <span className="text-sm">💰</span>
-                        </div>
-                        <div className="text-xl sm:text-2xl font-black font-mono">
-                          ₹ {payoutsTotal.toFixed(2)}
-                        </div>
-                      </div>
-
-                      {/* CARD 4: REDEEMED WISHES (AMBER) */}
-                      <div className="bg-amber-600 text-white p-3 sm:p-4 rounded-2xl shadow-lg flex flex-col justify-between space-y-1.5 relative overflow-hidden">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] sm:text-xs font-bold tracking-wide">Redeemed Wishes</span>
-                          <span className="text-sm">🎁</span>
-                        </div>
-                        <div className="text-xl sm:text-2xl font-black font-mono">
-                          ₹ {redeemedWishesTotal.toFixed(2)}
-                        </div>
-                      </div>
-
-                    </div>
-
-                    {/* PENDING APPROVAL REQUESTS BANNER */}
-                    {(() => {
-                      const myRole = role === 'parent' ? 'admin' : 'user';
-                      const incomingPendingReqs = wishRequests.filter(r => r.status === 'PENDING' && r.requesterRole !== myRole);
-                      const myPendingReqs = wishRequests.filter(r => r.status === 'PENDING' && r.requesterRole === myRole);
-                      if (incomingPendingReqs.length === 0 && myPendingReqs.length === 0) return null;
-                      return (
-                        <div className="bg-[#181818] border border-amber-500/30 rounded-2xl p-3 sm:p-4 space-y-2">
-                          {incomingPendingReqs.map(req => (
-                            <div key={req.id} className="bg-pink-950/50 border border-pink-500/60 p-3 rounded-xl flex items-center justify-between gap-2 shadow-lg animate-pulse">
-                              <div className="flex items-center gap-2.5">
-                                <span className="text-2xl">{req.wishIcon || '🎁'}</span>
-                                <div>
-                                  <h5 className="text-xs font-bold text-white flex items-center gap-1.5">
-                                    <span>{req.requesterName} requested: {req.wishTitle}</span>
-                                    <span className="text-[10px] text-amber-300 font-mono font-bold bg-black/40 px-1.5 py-0.2 rounded">₹ {req.wishCost.toFixed(2)}</span>
-                                  </h5>
-                                  <p className="text-[10px] text-pink-300">Awaiting your approval to grant wish & deduct points</p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => handleApproveWishRequest(req)}
-                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer shadow active:scale-95"
-                                >
-                                  Approve & Grant 💝
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeclineWishRequest(req)}
-                                  className="bg-[#242424] hover:bg-[#333] text-gray-300 text-xs px-2.5 py-1.5 rounded-lg cursor-pointer border border-[#3a3a3a]"
-                                >
-                                  Decline
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-
-                          {myPendingReqs.map(req => (
-                            <div key={req.id} className="bg-amber-950/40 border border-amber-500/40 p-2.5 rounded-xl flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xl">{req.wishIcon || '🎁'}</span>
-                                <span className="text-xs font-bold text-amber-200">
-                                  Requested: {req.wishTitle} (₹ {req.wishCost.toFixed(2)})
-                                </span>
-                              </div>
-                              <span className="text-[10px] font-bold text-amber-300 bg-amber-900/60 border border-amber-700 px-2 py-0.5 rounded-full animate-pulse">
-                                ⏳ Awaiting {req.targetName}\'s Approval
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()}
-
-
-                    {/* ACTION ROW: ONLY REDEEM WISH BUTTON */}
-                    <div className="flex items-center justify-between bg-[#181818] border border-[#282828] p-3 rounded-2xl">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
-                        <span className="text-xs sm:text-sm font-bold text-white">Love Balance Passbook</span>
-                        <span className="text-[10px] text-gray-500 font-mono hidden sm:inline">({visibleLoveLedger.length} Records)</span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {role === 'parent' && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenClearModal(activeLbTarget)}
-                            className="bg-rose-950/70 hover:bg-rose-900 border border-rose-700/60 text-rose-300 text-xs font-bold px-3 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5"
-                            title="Clear passbook ledger history"
-                          >
-                            <Trash2 size={13} />
-                            <span>Clear All</span>
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setLoveModalTab('claimed')}
-                          className="bg-[#242424] hover:bg-[#2e2e2e] text-amber-300 text-xs font-bold px-3 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5 border border-amber-500/30"
-                        >
-                          <span>🎁 Redeemed ({redeemedWishesList.length})</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setLoveModalTab('redeem')}
-                          className="bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5"
-                        >
-                          <Gift size={14} />
-                          <span>Redeem Wish</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* CORPORATE ERP FILTER TOOLBAR (INSPIRED BY NEXUS ERP KARMA POINT REFERENCE) */}
-                    <div className="bg-[#181818] border border-[#282828] p-3 sm:p-4 rounded-2xl space-y-3">
-                      <div className="flex items-center justify-between pb-1 border-b border-[#262626]">
-                        <span className="text-xs font-bold text-gray-300 flex items-center gap-1.5 uppercase tracking-wider font-mono">
-                          <Filter size={13} className="text-blue-400" />
-                          <span>Passbook Filters & Search</span>
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {(loveSourceFilter !== 'All' || loveStatusFilter !== 'All' || loveDateFrom || loveDateTo) && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setLoveSourceFilter('All');
-                                setLoveStatusFilter('All');
-                                setLoveDateFrom('');
-                                setLoveDateTo('');
-                              }}
-                              className="text-[11px] text-rose-400 hover:text-rose-300 font-semibold cursor-pointer underline transition-all"
-                            >
-                              Reset Filters
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleManualSectionRefresh('passbook_refresh')}
-                            className="w-7 h-7 rounded-full bg-[#202020] hover:bg-blue-600/30 border border-[#333] hover:border-blue-500 text-gray-400 hover:text-blue-400 flex items-center justify-center transition-all cursor-pointer active:scale-90"
-                            title="Refresh Passbook Real-Time Data"
-                          >
-                            <RefreshCw size={12} className={refreshingSection === 'passbook_refresh' ? 'animate-spin text-blue-400' : ''} />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
-                        {/* 1. SOURCE CATEGORY FILTER */}
-                        <div>
-                          <label className="text-[10px] uppercase font-mono text-gray-400 block mb-1">Source Category</label>
-                          <select
-                            value={loveSourceFilter}
-                            onChange={(e) => setLoveSourceFilter(e.target.value)}
-                            className="w-full bg-[#121212] border border-[#333] hover:border-gray-500 rounded-xl px-2.5 py-1.5 text-gray-200 text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
-                          >
-                            <option value="All">All Sources</option>
-                            <option value="routine">Hourly Routine Tasks</option>
-                            <option value="morning">Morning Sweet Text / Greeting</option>
-                            <option value="night">Good Night Wish</option>
-                            <option value="sweet">Sweet Reactions / Gestures</option>
-                            <option value="adjustment">Admin Manual Adjustment</option>
-                            <option value="redeem">Redeemed Wishes</option>
-                          </select>
-                        </div>
-
-                        {/* 2. DATE FROM */}
-                        <div>
-                          <label className="text-[10px] uppercase font-mono text-gray-400 block mb-1">Date From</label>
-                          <input
-                            type="date"
-                            value={loveDateFrom}
-                            onChange={(e) => setLoveDateFrom(e.target.value)}
-                            className="w-full bg-[#121212] border border-[#333] hover:border-gray-500 rounded-xl px-2.5 py-1.5 text-gray-200 text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
-                          />
-                        </div>
-
-                        {/* 3. DATE TO */}
-                        <div>
-                          <label className="text-[10px] uppercase font-mono text-gray-400 block mb-1">Date To</label>
-                          <input
-                            type="date"
-                            value={loveDateTo}
-                            onChange={(e) => setLoveDateTo(e.target.value)}
-                            className="w-full bg-[#121212] border border-[#333] hover:border-gray-500 rounded-xl px-2.5 py-1.5 text-gray-200 text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
-                          />
-                        </div>
-
-                        {/* 4. STATUS FILTER */}
-                        <div>
-                          <label className="text-[10px] uppercase font-mono text-gray-400 block mb-1">Status</label>
-                          <select
-                            value={loveStatusFilter}
-                            onChange={(e) => setLoveStatusFilter(e.target.value)}
-                            className="w-full bg-[#121212] border border-[#333] hover:border-gray-500 rounded-xl px-2.5 py-1.5 text-gray-200 text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
-                          >
-                            <option value="All">All Statuses</option>
-                            <option value="Confirmed">Confirmed (Credit)</option>
-                            <option value="Deducted">Deducted (Debit)</option>
-                            <option value="Redeemed">Redeemed (Wish)</option>
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* PASSBOOK DATA TABLE (STRICTLY ISOLATED: DORA NEVER SEES DARSH'S RECORDS) */}
-                    <div className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs font-sans min-w-[650px]">
-                          <thead className="bg-[#121212] text-gray-400 uppercase text-[10px] font-mono border-b border-[#262626]">
-                            <tr>
-                              <th className="py-2.5 px-3">SL</th>
-                              <th className="py-2.5 px-3">Description</th>
-                              <th className="py-2.5 px-3">Earned At</th>
-                              <th className="py-2.5 px-3">Expire Date</th>
-                              <th className="py-2.5 px-3">Points</th>
-                              <th className="py-2.5 px-3">Remarks</th>
-                              <th className="py-2.5 px-3 text-right">Status</th>
-                              {isParentAdmin && <th className="py-2.5 px-3 text-center w-10">Action</th>}
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-[#242424] text-gray-300">
-                            {visibleLoveLedger
-                              .filter(e => {
-                                if (!e) return false;
-                                if (loveSourceFilter !== 'All') {
-                                  const desc = (e.description || '').toLowerCase();
-                                  if (loveSourceFilter === 'routine' && !desc.includes('routine') && !desc.includes('approved task')) return false;
-                                  if (loveSourceFilter === 'morning' && !desc.includes('morning')) return false;
-                                  if (loveSourceFilter === 'night' && !desc.includes('good night') && !desc.includes('night')) return false;
-                                  if (loveSourceFilter === 'sweet' && !desc.includes('gesture') && !desc.includes('compliment') && !desc.includes('heart') && !desc.includes('reply') && !desc.includes('reaction')) return false;
-                                  if (loveSourceFilter === 'adjustment' && !desc.includes('adjustment')) return false;
-                                  if (loveSourceFilter === 'redeem' && e.type !== 'redeem' && e.status !== 'Redeemed') return false;
-                                }
-                                if (loveStatusFilter !== 'All' && e.status !== loveStatusFilter) return false;
-                                if (loveDateFrom || loveDateTo) {
-                                  const rawEarned = e.earnedAt || '';
-                                  let entryDateStr = '';
-                                  if (rawEarned.includes('/')) {
-                                    const parts = rawEarned.split(',')[0].split('/').map(p => p.trim());
-                                    if (parts.length === 3) {
-                                      entryDateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-                                    }
-                                  } else if (rawEarned.includes('-')) {
-                                    entryDateStr = rawEarned.split('T')[0].split(',')[0].trim();
-                                  }
-                                  if (entryDateStr) {
-                                    if (loveDateFrom && entryDateStr < loveDateFrom) return false;
-                                    if (loveDateTo && entryDateStr > loveDateTo) return false;
-                                  }
-                                }
-                                return true;
-                              })
-                              .map((row, idx) => (
-                                <tr key={row.id || idx} className="hover:bg-[#202020] transition-colors">
-                                  <td className="py-2.5 px-3 font-mono text-gray-400">{row.sl || idx + 1}</td>
-                                  <td className="py-2.5 px-3 font-bold text-white">
-                                    {!isParentAdmin ? row.description.replace(/^\[Dora\]\s*/i, '') : row.description}
-                                  </td>
-                                  <td className="py-2.5 px-3 font-mono text-[11px] text-gray-400">{row.earnedAt}</td>
-                                  <td className="py-2.5 px-3 font-mono text-[11px] text-gray-400">{row.expireDate || '—'}</td>
-                                  <td className="py-2.5 px-3 font-mono font-bold">
-                                    <span className={'px-2 py-0.5 rounded-full text-[11px] ' + (
-                                      row.points > 0 
-                                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                                        : (row.status === 'Redeemed'
-                                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                                            : 'bg-rose-500/20 text-rose-400 border border-rose-500/30')
-                                    )}>
-                                      {row.points > 0 ? '+' + row.points.toFixed(2) : row.points.toFixed(2)}
-                                    </span>
-                                  </td>
-                                  <td className="py-2.5 px-3 text-gray-400 text-[11px] max-w-[200px] truncate" title={row.remarks}>
-                                    {row.remarks || '—'}
-                                  </td>
-                                  <td className="py-2.5 px-3 text-right">
-                                    <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (
-                                      row.status === 'Confirmed' 
-                                        ? 'bg-emerald-600 text-white' 
-                                        : (row.status === 'Redeemed' ? 'bg-amber-600 text-white' : 'bg-rose-600 text-white')
-                                    )}>
-                                      {row.status}
-                                    </span>
-                                  </td>
-                                  {isParentAdmin && (
-                                    <td className="py-2.5 px-3 text-center">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteTransaction(row.id)}
-                                        className="p-1 text-gray-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg cursor-pointer transition-all"
-                                        title="Delete this transaction permanently"
-                                      >
-                                        <Trash2 size={13} />
-                                      </button>
-                                    </td>
-                                  )}
-                                </tr>
-                              ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* TAB 2: REDEEM WISH STORE */}
-                {loveModalTab === 'redeem' && (
-                  <div className="space-y-4">
-                    <div className="bg-gradient-to-r from-pink-950/40 via-purple-950/40 to-pink-950/40 border border-pink-500/30 rounded-2xl p-4 sm:p-5 flex items-center justify-between">
-                      <div className="space-y-1">
-                        <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
-                          <span>Romantic Wish Store</span>
-                          <span className="text-xs bg-pink-500/20 text-pink-300 border border-pink-500/40 px-2 py-0.5 rounded-full">INSTANT CLAIM</span>
-                        </h3>
-                        <p className="text-xs text-gray-300">Exchange your earned Love Balance for sweet promises and real dates!</p>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[11px] text-gray-400">Available to Spend</div>
-                        <div className="text-lg sm:text-xl font-black text-emerald-400 font-mono">{formatLoveBalance(Math.max(0, displayedLoveBalance))}</div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                      {ROMANTIC_WISH_STORE.map((wish) => {
-                        const availablePts = Math.max(0, displayedLoveBalance);
-                        const canAfford = availablePts >= wish.cost;
-                        return (
-                          <div key={wish.id} className="bg-[#181818] border border-[#2a2a2a] hover:border-pink-500/50 rounded-2xl p-4 flex flex-col justify-between space-y-3 shadow transition-colors">
-                            <div className="space-y-1.5">
-                              <div className="flex items-center justify-between">
-                                <span className="text-2xl">{wish.icon}</span>
-                                <span className="text-sm font-mono font-black text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 rounded-xl">
-                                  ₹ {wish.cost.toFixed(2)}
-                                </span>
-                              </div>
-                              <h4 className="text-sm font-bold text-white">{wish.title}</h4>
-                              <p className="text-xs text-gray-400 leading-relaxed">{wish.description}</p>
-                            </div>
-
-                            {(() => {
-                              const requesterRole = isParentAdmin ? (activeLbTarget === 'admin' ? 'admin' : 'user') : 'user';
-                              const isPending = wishRequests.some(r => r.wishId === wish.id && r.status === 'PENDING' && r.requesterRole === requesterRole);
-                              return (
-                                <button
-                                  type="button"
-                                  onClick={() => handleInitiateWishRequest(wish)}
-                                  className={'w-full py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow active:scale-95 ' + (
-                                    isPending
-                                      ? 'bg-amber-600 text-white animate-pulse border border-amber-400'
-                                      : (canAfford 
-                                          ? 'bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white' 
-                                          : 'bg-zinc-800 text-gray-500 cursor-not-allowed border border-[#333]')
-                                  )}
-                                >
-                                  {isPending 
-                                    ? '⏳ Awaiting Partner Approval' 
-                                    : (canAfford ? ('Request Wish for ₹ ' + wish.cost.toFixed(2) + ' 💝') : ('Need ₹ ' + (wish.cost - availablePts).toFixed(2) + ' More'))}
-                                </button>
-                              );
-                            })()}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* TAB 3: REDEEMED WISHES VAULT & TIMELINE */}
-                {loveModalTab === 'claimed' && (
-                  <div className="space-y-4">
-                    {/* INCOMING PENDING REQUESTS IN TAB 3 */}
-                    {(() => {
-                      const myRole = role === 'parent' ? 'admin' : 'user';
-                      const incomingPendingReqs = wishRequests.filter(r => r.status === 'PENDING' && r.requesterRole !== myRole);
-                      const myPendingReqs = wishRequests.filter(r => r.status === 'PENDING' && r.requesterRole === myRole);
-                      if (incomingPendingReqs.length === 0 && myPendingReqs.length === 0) return null;
-                      return (
-                        <div className="space-y-2">
-                          {incomingPendingReqs.map(req => (
-                            <div key={req.id} className="bg-gradient-to-r from-pink-950/60 to-purple-950/60 border-2 border-pink-500/70 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl">
-                              <div className="flex items-center gap-3">
-                                <span className="text-3xl p-2 bg-black/40 rounded-xl">{req.wishIcon || '🎁'}</span>
-                                <div className="text-left space-y-0.5">
-                                  <div className="flex items-center gap-2">
-                                    <h4 className="text-sm font-black text-white">{req.requesterName} wants: {req.wishTitle}</h4>
-                                    <span className="text-xs font-mono font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.2 rounded-lg">₹ {req.wishCost.toFixed(2)}</span>
-                                  </div>
-                                  <p className="text-xs text-gray-300">{req.wishDesc}</p>
-                                  <p className="text-[10px] text-gray-500 font-mono">Requested: {req.requestedAt}</p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 w-full sm:w-auto">
-                                <button
-                                  type="button"
-                                  onClick={() => handleApproveWishRequest(req)}
-                                  className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all"
-                                >
-                                  Approve & Grant 💝
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeclineWishRequest(req)}
-                                  className="bg-[#242424] hover:bg-[#333] text-gray-300 text-xs px-3 py-2 rounded-xl cursor-pointer border border-[#3a3a3a]"
-                                >
-                                  Decline
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-
-                          {myPendingReqs.map(req => (
-                            <div key={req.id} className="bg-amber-950/30 border border-amber-500/40 p-3 rounded-2xl flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2.5">
-                                <span className="text-2xl">{req.wishIcon || '🎁'}</span>
-                                <div className="text-left">
-                                  <h5 className="text-xs font-bold text-white">Your Request: {req.wishTitle}</h5>
-                                  <span className="text-[10px] text-gray-400 font-mono">₹ {req.wishCost.toFixed(2)} • {req.requestedAt}</span>
-                                </div>
-                              </div>
-                              <span className="text-xs font-bold text-amber-300 bg-amber-950/60 border border-amber-600/60 px-3 py-1 rounded-full animate-pulse">
-                                ⏳ Waiting for {req.targetName}\'s Approval
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                    <div className="bg-gradient-to-r from-amber-950/40 via-orange-950/40 to-amber-950/40 border border-amber-500/30 rounded-2xl p-4 sm:p-5 flex items-center justify-between">
-                      <div className="space-y-1">
-                        <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
-                          <span>Redeemed Wishes & Promises</span>
-                          <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-mono font-bold">
-                            {redeemedWishesList.length} TOTAL
-                          </span>
-                        </h3>
-                        <p className="text-xs text-gray-300">Track and fulfill all romantic wishes redeemed with Love Balance.</p>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[11px] text-gray-400">Total Spent</div>
-                        <div className="text-lg sm:text-xl font-black text-amber-400 font-mono">₹ {redeemedWishesTotal.toFixed(2)}</div>
-                      </div>
-                    </div>
-
-                    {redeemedWishesList.length === 0 ? (
-                      <div className="bg-[#181818] border border-[#282828] rounded-2xl p-8 text-center space-y-3">
-                        <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-3xl mx-auto">
-                          🎁
-                        </div>
-                        <h4 className="text-base font-bold text-white">No Wishes Redeemed Yet</h4>
-                        <p className="text-xs text-gray-400 max-w-md mx-auto leading-relaxed">
-                          You haven't claimed any romantic wishes yet. Save up your Love Balance and treat yourself in the Wish Store!
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => setLoveModalTab('redeem')}
-                          className="bg-gradient-to-r from-pink-600 to-rose-600 text-white text-xs font-bold px-5 py-2.5 rounded-xl cursor-pointer shadow active:scale-95 transition-all inline-flex items-center gap-2"
-                        >
-                          <Gift size={15} />
-                          <span>Go to Wish Store</span>
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                        {redeemedWishesList.map((rw, idx) => (
-                          <div key={rw.id || idx} className="bg-[#181818] border border-[#2a2a2a] hover:border-amber-500/50 rounded-2xl p-4 flex flex-col justify-between space-y-3 shadow transition-colors">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex items-center gap-3">
-                                <span className="text-3xl p-2 bg-[#222] rounded-2xl border border-[#333] shrink-0">{rw.wishIcon || '🎁'}</span>
-                                <div className="space-y-0.5">
-                                  <h4 className="text-sm font-black text-white">
-                                    {rw.wishTitle || rw.description.replace(/^\[(Dora|Darsh)\]\s*Redeemed:\s*/i, '').replace(/^Redeemed:\s*/i, '')}
-                                  </h4>
-                                  <div className="text-[11px] text-gray-400 font-mono">Redeemed: {rw.earnedAt}</div>
-                                  <div className="text-[10px] text-gray-500">Remarks: {rw.remarks}</div>
-                                </div>
-                              </div>
-                              <span className="text-sm font-mono font-black text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-xl shrink-0">
-                                ₹ {Math.abs(rw.points).toFixed(2)}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center justify-between pt-2 border-t border-[#252525]">
-                              <span className={'text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5 ' + (
-                                rw.fulfillmentStatus === 'Fulfilled'
-                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse'
-                              )}>
-                                {rw.fulfillmentStatus === 'Fulfilled' ? '✅ Granted & Fulfilled' : '⏳ Date / Reward Pending'}
-                              </span>
-
-                              {isParentAdmin && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleWishFulfillment(rw.id)}
-                                  className="text-xs font-bold bg-[#262626] hover:bg-[#333] text-white px-3 py-1.5 rounded-xl border border-[#3d3d3d] cursor-pointer transition-all active:scale-95"
-                                  title="Toggle fulfillment status"
-                                >
-                                  {rw.fulfillmentStatus === 'Fulfilled' ? 'Mark Pending ⏳' : 'Mark Fulfilled ✅'}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* TAB 4: RULES ENGINE GUIDE (ALL IN ENGLISH) */}
-                {loveModalTab === 'rules' && (
-                  <div className="space-y-5">
-                    {/* INTRO HERO */}
-                    <div className="bg-gradient-to-r from-blue-950/40 via-indigo-950/40 to-blue-950/40 border border-blue-500/30 rounded-2xl p-4 sm:p-5 space-y-2">
-                      <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                        <span>Love Balance Policy</span>
-                      </h3>
-
-                    </div>
-
-                    {/* REWARD EARNING RULES */}
-                    <div className="space-y-3">
-                      <h4 className="text-sm font-black text-emerald-400 flex items-center gap-2">
-                        <span>✨ Love Balance Earning Rules</span>
-                      </h4>
-                      <div className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden">
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left text-xs font-sans min-w-[550px]">
-                            <thead className="bg-[#121212] text-gray-400 uppercase text-[10px] font-mono border-b border-[#262626]">
-                              <tr>
-                                <th className="py-2.5 px-3 w-12">S.NO</th>
-                                <th className="py-2.5 px-3">GESTURE / TASK TYPE</th>
-                                <th className="py-2.5 px-3">CRITERIA</th>
-                                <th className="py-2.5 px-3 text-right">REWARD POINTS</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-[#242424] text-gray-300">
-                              {LOVE_EARNING_RULES.map((rule) => (
-                                <tr key={rule.sno} className="hover:bg-[#202020] transition-colors">
-                                  <td className="py-2.5 px-3 font-mono text-gray-400">{rule.sno}</td>
-                                  <td className="py-2.5 px-3 font-bold text-white">{rule.task}</td>
-                                  <td className="py-2.5 px-3 text-gray-400 text-xs">{rule.criteria}</td>
-                                  <td className="py-2.5 px-3 text-right">
-                                    <span className="bg-blue-600 text-white font-mono font-bold px-2.5 py-0.5 rounded-full text-xs shadow-sm">
-                                      {rule.reward}
-                                    </span>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* DEDUCTION RULES */}
-                    <div className="space-y-3 pt-2">
-                      <h4 className="text-sm font-black text-rose-400 flex items-center gap-2">
-                        <span>💔 Love Balance Deductions</span>
-                      </h4>
-                      <div className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden">
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left text-xs font-sans min-w-[550px]">
-                            <thead className="bg-[#121212] text-gray-400 uppercase text-[10px] font-mono border-b border-[#262626]">
-                              <tr>
-                                <th className="py-2.5 px-3 w-12">S.NO</th>
-                                <th className="py-2.5 px-3">DEDUCTION TYPE</th>
-                                <th className="py-2.5 px-3">CRITERIA</th>
-                                <th className="py-2.5 px-3 text-right">DEDUCTION POINTS</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-[#242424] text-gray-300">
-                              {LOVE_DEDUCTION_RULES.map((rule) => (
-                                <tr key={rule.sno} className="hover:bg-[#202020] transition-colors">
-                                  <td className="py-2.5 px-3 font-mono text-gray-400">{rule.sno}</td>
-                                  <td className="py-2.5 px-3 font-bold text-rose-200">{rule.infraction}</td>
-                                  <td className="py-2.5 px-3 text-gray-400 text-xs">{rule.criteria}</td>
-                                  <td className="py-2.5 px-3 text-right">
-                                    <span className="bg-rose-600 text-white font-mono font-bold px-2.5 py-0.5 rounded-full text-xs shadow-sm">
-                                      {rule.penalty}
-                                    </span>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-
-                  </div>
-                )}
-
-              </div>
-
-            </div>
-          </div>
-        )}
+        {/* MODULAR COMPONENTS: PASSBOOK & WISH STORE */}
+        <PassbookModal
+          showLoveBalanceModal={showLoveBalanceModal}
+          setShowLoveBalanceModal={setShowLoveBalanceModal}
+          displayedLoveBalance={displayedLoveBalance}
+          formatLoveBalance={formatLoveBalance}
+          isParentAdmin={isParentAdmin}
+          activeLbTarget={activeLbTarget}
+          setActiveLbTarget={setActiveLbTarget}
+          activeDoraName={activeDoraName}
+          doraNetBalance={doraNetBalance}
+          adminNetBalance={adminNetBalance}
+          loveModalTab={loveModalTab}
+          setLoveModalTab={setLoveModalTab}
+          redeemedWishesList={redeemedWishesList}
+          handleManualSectionRefresh={handleManualSectionRefresh}
+          refreshingSection={refreshingSection}
+          cutPointsTotal={cutPointsTotal}
+          payoutsTotal={payoutsTotal}
+          redeemedWishesTotal={redeemedWishesTotal}
+          role={role}
+          wishRequests={wishRequests}
+          handleApproveWishRequest={handleApproveWishRequest}
+          handleDeclineWishRequest={handleDeclineWishRequest}
+          visibleLoveLedger={visibleLoveLedger}
+          handleOpenClearModal={handleOpenClearModal}
+          loveSourceFilter={loveSourceFilter}
+          setLoveSourceFilter={setLoveSourceFilter}
+          loveStatusFilter={loveStatusFilter}
+          setLoveStatusFilter={setLoveStatusFilter}
+          loveDateFrom={loveDateFrom}
+          setLoveDateFrom={setLoveDateFrom}
+          loveDateTo={loveDateTo}
+          setLoveDateTo={setLoveDateTo}
+          handleDeleteTransaction={handleDeleteTransaction}
+          handleInitiateWishRequest={handleInitiateWishRequest}
+          handleToggleWishFulfillment={handleToggleWishFulfillment}
+        />
 
         {/* INCOMING WISH REQUEST APPROVAL POPUP */}
-        {activeWishApprovalModal && (
-          <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-200 font-sans">
-            <div className="bg-[#141414] border-2 border-pink-500/70 rounded-3xl max-w-md w-full p-6 text-center space-y-4 shadow-2xl relative">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-pink-500/20 to-purple-500/20 border border-pink-500/40 text-4xl flex items-center justify-center mx-auto shadow-inner">
-                {activeWishApprovalModal.wishIcon || '🎁'}
-              </div>
+        <WishApprovalModal
+          activeWishApprovalModal={activeWishApprovalModal}
+          handleApproveWishRequest={handleApproveWishRequest}
+          handleDeclineWishRequest={handleDeclineWishRequest}
+        />
 
-              <div className="space-y-1">
-                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-pink-400 bg-pink-950/60 border border-pink-700/60 px-3 py-1 rounded-full">
-                  Incoming Wish Request 💖
-                </span>
-                <h3 className="text-lg font-black text-white pt-1">
-                  {activeWishApprovalModal.requesterName} wants to redeem:
-                </h3>
-                <h4 className="text-base font-bold text-amber-300">
-                  {activeWishApprovalModal.wishTitle}
-                </h4>
-                <p className="text-xs text-gray-400 max-w-xs mx-auto">
-                  {activeWishApprovalModal.wishDesc}
-                </p>
-                <div className="pt-2">
-                  <span className="text-sm font-black font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-3 py-1 rounded-xl">
-                    Cost: ₹ {Number(activeWishApprovalModal.wishCost || 0).toFixed(2)}
-                  </span>
-                </div>
-              </div>
+        {/* ANSWER PENDING MODAL */}
+        <AnswerPendingModal
+          showPendingModal={showPendingModal}
+          setShowPendingModal={setShowPendingModal}
+          pendingMessages={pendingMessages}
+          downloadPendingPDF={downloadPendingPDF}
+          togglePendingFlag={togglePendingFlag}
+        />
 
-              <p className="text-[11px] text-gray-400">
-                Approving will deduct ₹ {Number(activeWishApprovalModal.wishCost || 0).toFixed(2)} from {activeWishApprovalModal.requesterName}'s Love Balance and grant the wish!
-              </p>
+        {/* STEALTH ALERT BUBBLE */}
+        <StealthAlertBubble
+          incomingAlert={incomingAlert}
+          handleBubbleDismiss={handleBubbleDismiss}
+          bubbleDimensions={bubbleDimensions}
+          bubbleFontSize={bubbleFontSize}
+        />
 
-              <div className="flex gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => handleApproveWishRequest(activeWishApprovalModal)}
-                  className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-2.5 rounded-xl cursor-pointer shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5 text-xs"
-                >
-                  <Check size={16} />
-                  <span>Approve & Grant 💝</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDeclineWishRequest(activeWishApprovalModal)}
-                  className="bg-[#222] hover:bg-[#2c2c2c] text-gray-400 hover:text-white font-bold px-4 py-2.5 rounded-xl cursor-pointer border border-[#333] transition-all text-xs"
-                >
-                  Decline
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showPendingModal && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-[#171717] border border-[#2e2e2e] rounded-2xl w-full max-w-lg p-5 shadow-2xl space-y-4 font-sans">
-              <div className="flex items-center justify-between border-b border-[#262626] pb-3">
-                <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
-                  <AlertCircle size={18} />
-                  <span>Answer Pending ({pendingMessages.length})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={downloadPendingPDF}
-                    title="Export to PDF"
-                    className="text-gray-400 hover:text-amber-400 p-1 cursor-pointer"
-                  >
-                    <Download size={16} />
-                  </button>
-                  <button onClick={() => setShowPendingModal(false)} className="text-gray-400 hover:text-white cursor-pointer">
-                    <X size={18} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="max-h-72 overflow-y-auto space-y-2 pr-1 scrollbar-none">
-                {pendingMessages.length === 0 ? (
-                  <div className="text-center text-xs text-gray-500 py-8">
-                    No pending questions bookmarked.
-                  </div>
-                ) : (
-                  pendingMessages.map((m, idx) => (
-                    <div key={idx} className="bg-[#212121] border border-[#2d2d2d] p-3 rounded-xl flex items-start justify-between gap-3">
-                      <div className="space-y-1 text-xs">
-                        <div className="flex items-center gap-2 text-[11px] text-gray-400 font-mono">
-                          <span className="text-blue-400">{m.senderRole === 'user' ? 'A' : 'H'}</span>
-                          <span>•</span>
-                          <span>{m.timeFormatted}</span>
-                        </div>
-                        <p className="text-gray-200 font-mono select-text line-clamp-3 break-words">
-                          {m.isMedia ? "[Encrypted Photo]" : cleanOriginalText(m.text)}
-                        </p>
-                      </div>
-                      <button 
-                        onClick={(e) => togglePendingFlag(e, m)}
-                        className="bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-300 text-xs px-2.5 py-1.5 rounded-lg cursor-pointer flex items-center gap-1 shrink-0"
-                      >
-                        <Check size={13} /> Done
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {incomingAlert && (
-          <div 
-            onClick={handleBubbleDismiss}
-            className={`absolute bottom-20 right-6 ${bubbleDimensions} rounded-full cursor-pointer z-50 flex items-center justify-center p-3 text-center transition-all duration-300 transform active:scale-95 animate-bounce shadow-2xl backdrop-blur-md overflow-hidden`}
-            style={{
-              background: 'radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.1) 60%, rgba(255, 255, 255, 0.25) 100%)',
-              border: '1px solid rgba(255, 255, 255, 0.6)',
-              boxShadow: '0 8px 32px 0 rgba(255, 255, 255, 0.2), inset 0 2px 10px 0 rgba(255, 255, 255, 0.7), inset 0 -4px 10px 0 rgba(0, 0, 0, 0.2)'
-            }}
-          >
-            <div className="absolute top-3 left-4 w-5 h-2.5 bg-white/80 rounded-full blur-[0.5px] transform -rotate-45 pointer-events-none" />
-            <p className={`${bubbleFontSize} font-medium text-white tracking-tight drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)] px-1 overflow-y-auto max-h-[85%] select-none scrollbar-none break-words`}>
-              {incomingAlert.text}
-            </p>
-          </div>
-        )}
-
-        {role === 'parent' && (
-          <div className="absolute bottom-16 right-4 sm:bottom-6 sm:right-6 z-40">
-            <button 
-              onClick={() => setIsBotOpen(!isBotOpen)}
-              className="bg-[#212121] hover:bg-[#2c2c2c] border border-[#333] p-3.5 rounded-full shadow-2xl text-emerald-400 cursor-pointer active:scale-90 transition-transform"
-            >
-              <Bot size={20} />
-            </button>
-
-            {isBotOpen && (
-              <div className="absolute bottom-14 right-0 w-80 max-w-[90vw] bg-[#121212] border border-[#282828] rounded-2xl p-4 shadow-2xl space-y-3 font-sans animate-in zoom-in-95 duration-150">
-                <div className="flex justify-between items-center text-xs font-semibold text-white pb-1 border-b border-[#222]">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setBotTab('instant')}
-                      className={`px-2 py-0.5 rounded ${botTab === 'instant' ? 'bg-[#252525] text-emerald-400' : 'text-gray-400'}`}
-                    >
-                      Instant Alert
-                    </button>
-                    <button
-                      onClick={() => setBotTab('schedule')}
-                      className={`px-2 py-0.5 rounded ${botTab === 'schedule' ? 'bg-[#252525] text-amber-400' : 'text-gray-400'}`}
-                    >
-                      Schedule
-                    </button>
-                  </div>
-                  <button onClick={() => setIsBotOpen(false)} className="text-gray-400 hover:text-white p-1"><X size={15} /></button>
-                </div>
-
-                {botTab === 'instant' ? (
-                  <div className="space-y-2.5">
-                    <textarea 
-                      rows={3}
-                      value={customMsg}
-                      onChange={(e) => setCustomMsg(e.target.value)}
-                      placeholder="Type instant bubble message..."
-                      className="w-full bg-[#1e1e1e] text-xs p-2.5 rounded-lg outline-none border border-[#333] text-white resize-none"
-                    />
-                    <button 
-                      onClick={() => {
-                        if (customMsg && socketRef.current) {
-                          socketRef.current.emit('send_assistant_alert', { room: GLOBAL_ROOM, text: customMsg });
-                          setCustomMsg('');
-                          setIsBotOpen(false);
-                        }
-                      }}
-                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs py-2.5 rounded-lg font-medium cursor-pointer transition-colors"
-                    >
-                      Broadcast Now
-                    </button>
-                  </div>
-                ) : (
-                  <form onSubmit={handleScheduleAlertSubmit} className="space-y-2.5 text-xs text-left">
-                    <textarea 
-                      rows={2}
-                      required
-                      value={schedMsg}
-                      onChange={(e) => setSchedMsg(e.target.value)}
-                      placeholder="Message for bubble alarm..."
-                      className="w-full bg-[#1e1e1e] text-xs p-2.5 rounded-lg outline-none border border-[#333] text-white resize-none"
-                    />
-
-                    <div>
-                      <label className="text-[10px] text-gray-400 block mb-1">Time Slot 1 (Required)</label>
-                      <input 
-                        type="datetime-local" 
-                        required
-                        value={schedTime1}
-                        onChange={(e) => setSchedTime1(e.target.value)}
-                        className="w-full bg-[#1e1e1e] border border-[#333] text-white p-2 rounded text-xs outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] text-gray-400 block mb-1">Time Slot 2 (Optional Second Alarm)</label>
-                      <input 
-                        type="datetime-local" 
-                        value={schedTime2}
-                        onChange={(e) => setSchedTime2(e.target.value)}
-                        className="w-full bg-[#1e1e1e] border border-[#333] text-white p-2 rounded text-xs outline-none"
-                      />
-                    </div>
-
-                    <button 
-                      type="submit"
-                      className="w-full bg-amber-600 hover:bg-amber-500 text-black font-bold text-xs py-2.5 rounded-lg cursor-pointer"
-                    >
-                      Schedule Alert
-                    </button>
-                  </form>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+        {/* DARSH ASSISTANT BOT */}
+        <DarshAssistantBot
+          role={role}
+          isBotOpen={isBotOpen}
+          setIsBotOpen={setIsBotOpen}
+          botTab={botTab}
+          setBotTab={setBotTab}
+          customMsg={customMsg}
+          setCustomMsg={setCustomMsg}
+          socketRef={socketRef}
+          schedMsg={schedMsg}
+          setSchedMsg={setSchedMsg}
+          schedTime1={schedTime1}
+          setSchedTime1={setSchedTime1}
+          schedTime2={schedTime2}
+          setSchedTime2={setSchedTime2}
+          handleScheduleAlertSubmit={handleScheduleAlertSubmit}
+        />
 
       </main>
-    
-        {/* IN-APP CONFIRMATION POPUP FOR CLEAR ALL (MATCHING APP COLOR THEME) */}
-        {showClearConfirmModal && (
-          <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-[#141414] border-2 border-rose-500/60 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-left font-sans animate-in zoom-in-95 duration-200">
-              <div className="flex items-center justify-between border-b border-[#262626] pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center border border-rose-500/40">
-                    <Trash2 size={18} />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-white">Clear Love Balance & Passbook</h3>
-                    <p className="text-[10px] text-gray-400 font-mono">Delete passbook & reset points</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setShowClearConfirmModal(false)}
-                  className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-[#222] cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
 
-              {/* TARGET SELECTOR PILLS */}
-              <div className="space-y-1.5">
-                <p className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">Select Target to Clear:</p>
-                <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#0d0d0d] rounded-xl border border-[#222]">
-                  <button
-                    type="button"
-                    onClick={() => setClearModalTarget('user')}
-                    className={'py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ' + (
-                      clearModalTarget === 'user' 
-                        ? 'bg-rose-600 text-white shadow-md' 
-                        : 'text-gray-400 hover:text-white'
-                    )}
-                  >
-                    Dora (User)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setClearModalTarget('admin')}
-                    className={'py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ' + (
-                      clearModalTarget === 'admin' 
-                        ? 'bg-amber-600 text-black shadow-md' 
-                        : 'text-gray-400 hover:text-white'
-                    )}
-                  >
-                    Darsh (Admin)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setClearModalTarget('both')}
-                    className={'py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ' + (
-                      clearModalTarget === 'both' 
-                        ? 'bg-red-700 text-white shadow-md' 
-                        : 'text-gray-400 hover:text-white'
-                    )}
-                  >
-                    Both (All)
-                  </button>
-                </div>
-              </div>
+        {/* CLEAR ALL CONFIRMATION POPUP */}
+        <ClearConfirmModal
+          showClearConfirmModal={showClearConfirmModal}
+          setShowClearConfirmModal={setShowClearConfirmModal}
+          clearModalTarget={clearModalTarget}
+          setClearModalTarget={setClearModalTarget}
+          activeDoraName={activeDoraName}
+          handleConfirmClearLedger={handleConfirmClearLedger}
+        />
 
-              {/* SUMMARY DETAIL CARD */}
-              <div className="bg-rose-950/30 border border-rose-500/40 rounded-2xl p-3.5 space-y-1.5 text-xs">
-                <p className="font-bold text-rose-300 flex items-center gap-1.5">
-                  <AlertTriangle size={14} className="text-rose-400 shrink-0" />
-                  <span>Target: <strong className="text-white underline">{clearModalTarget === 'user' ? activeDoraName : (clearModalTarget === 'admin' ? 'Darsh' : `Both ${activeDoraName} & Darsh`)}</strong></span>
-                </p>
-                <p className="text-[11px] text-gray-300 leading-relaxed">
-                  {clearModalTarget === 'user' 
-                    ? `${activeDoraName}'s Love Balance will be reset to ₹0.00 and all her passbook entries will be deleted. Darsh's points will remain intact.`
-                    : (clearModalTarget === 'admin'
-                      ? "Darsh's Love Balance will be reset to ₹0.00 and all his passbook entries will be deleted. Dora's points will remain intact."
-                      : `Both ${activeDoraName} and Darsh will have their Love Balance reset to ₹0.00 and the entire passbook history will be cleared.`)
-                  }
-                </p>
-              </div>
-
-              {/* ACTION BUTTONS */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowClearConfirmModal(false)}
-                  className="bg-[#222] hover:bg-[#2c2c2c] text-gray-300 text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 text-center"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmClearLedger}
-                  className="bg-gradient-to-r from-rose-700 via-rose-600 to-red-600 hover:from-rose-600 hover:to-red-500 text-white text-xs font-black py-2.5 rounded-xl cursor-pointer transition-all active:scale-95 shadow-lg shadow-rose-950/60 flex items-center justify-center gap-1.5"
-                >
-                  <Trash2 size={13} />
-                  <span>Yes, Clear Now</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* FULL IMAGE PROOF PREVIEW & DOWNLOAD MODAL */}
-        {dailyPreviewModalImg && (
-          <div 
-            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-3 sm:p-6 animate-in fade-in duration-150 font-sans"
-            onClick={() => setDailyPreviewModalImg(null)}
-          >
-            <div 
-              className="relative max-w-2xl w-full bg-[#141414] border border-[#333] rounded-3xl p-3 sm:p-4 shadow-2xl flex flex-col max-h-[90vh]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between pb-3 border-b border-[#222]">
-                <div className="flex items-center gap-2">
-                  <span className="text-base font-bold text-white flex items-center gap-1.5">
-                    <span>📸</span>
-                    <span>Task Proof Photo</span>
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <a
-                    href={dailyPreviewModalImg}
-                    download={`task_proof_${Date.now()}.jpg`}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow active:scale-95 transition-all cursor-pointer"
-                    title="Download Photo"
-                  >
-                    <Download size={14} />
-                    <span>Download</span>
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => setDailyPreviewModalImg(null)}
-                    className="text-gray-400 hover:text-white p-1 rounded-xl cursor-pointer"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-              </div>
-              <div className="flex-1 overflow-auto flex items-center justify-center py-4">
-                <img 
-                  src={dailyPreviewModalImg} 
-                  alt="Proof" 
-                  className="max-h-[70vh] w-auto max-w-full rounded-2xl object-contain shadow-lg"
-                />
-              </div>
-            </div>
-          </div>
-        )}
+        {/* FULL IMAGE PROOF PREVIEW MODAL */}
+        <ImagePreviewModal
+          dailyPreviewModalImg={dailyPreviewModalImg}
+          setDailyPreviewModalImg={setDailyPreviewModalImg}
+        />
 
         {/* ADMIN REAL-TIME TASK NOTIFICATION TOAST BANNER */}
         {dailyAdminToast && (role === 'parent' || role === 'admin') && (
@@ -11624,108 +10436,20 @@ export default function App() {
         )}
 
         {/* ADD / EDIT ROUTINE SLOT MODAL (FOR DARSH) */}
-        {showAddSlotModal && (
-          <div 
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150 font-sans"
-            onClick={handleCancelSlotModal}
-          >
-            <div 
-              className="bg-[#171717] border border-[#2e2e2e] rounded-3xl p-4 sm:p-5 w-full max-w-md shadow-2xl space-y-3.5"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
-                <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                  <Briefcase size={16} className="text-blue-400" />
-                  <span>{editingSlotId ? 'Edit Routine Slot' : 'Add New Routine Slot'}</span>
-                </h3>
-                <button
-                  type="button"
-                  onClick={handleCancelSlotModal}
-                  className="text-gray-400 hover:text-white p-1 rounded-xl cursor-pointer"
-                  title="Close Modal"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div className="space-y-2.5 text-xs">
-                <div>
-                  <label className="text-gray-300 font-semibold block mb-1">Slot Title:</label>
-                  <input
-                    type="text"
-                    value={slotFormTitle}
-                    onChange={(e) => setSlotFormTitle(e.target.value)}
-                    placeholder="e.g. Morning Workout (10 Squats)"
-                    className="w-full bg-[#101010] border border-[#333] text-white p-2 rounded-xl outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-gray-300 font-semibold block mb-1">Time Range (e.g. 08:00 - 09:00):</label>
-                  <input
-                    type="text"
-                    value={slotFormTimeRange}
-                    onChange={(e) => setSlotFormTimeRange(e.target.value)}
-                    placeholder="e.g. 08:00 - 09:00"
-                    className="w-full bg-[#101010] border border-[#333] text-white p-2 rounded-xl outline-none focus:border-blue-500 font-mono"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-gray-300 font-semibold block mb-1">Category / Tag:</label>
-                    <select
-                      value={slotFormTag}
-                      onChange={(e) => setSlotFormTag(e.target.value)}
-                      className="w-full bg-[#101010] border border-[#333] text-white p-2 rounded-xl outline-none focus:border-blue-500"
-                    >
-                      <option value="Workout">Workout</option>
-                      <option value="Juice">Juice</option>
-                      <option value="Breakfast">Breakfast</option>
-                      <option value="Lunch">Lunch</option>
-                      <option value="Water">Water</option>
-                      <option value="Tea">Tea</option>
-                      <option value="Dinner">Dinner</option>
-                      <option value="Steps">Steps</option>
-                      <option value="Skincare">Skincare</option>
-                      <option value="Task">Task</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-gray-300 font-semibold block mb-1">Reward Points (₹):</label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0.5"
-                      value={slotFormPoints}
-                      onChange={(e) => setSlotFormPoints(e.target.value)}
-                      placeholder="2.0"
-                      className="w-full bg-[#101010] border border-[#333] text-white p-2 rounded-xl outline-none focus:border-blue-500 font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#222]">
-                <button
-                  type="button"
-                  onClick={handleCancelSlotModal}
-                  className="bg-[#222] hover:bg-[#2c2c2c] text-gray-300 text-xs font-bold py-2.5 rounded-xl cursor-pointer transition-all active:scale-95"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveSlotForm}
-                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer shadow active:scale-95 transition-all"
-                >
-                  {editingSlotId ? 'Save Changes' : 'Create Slot'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <RoutineSlotModal
+          showAddSlotModal={showAddSlotModal}
+          handleCancelSlotModal={handleCancelSlotModal}
+          editingSlotId={editingSlotId}
+          slotFormTitle={slotFormTitle}
+          setSlotFormTitle={setSlotFormTitle}
+          slotFormTimeRange={slotFormTimeRange}
+          setSlotFormTimeRange={setSlotFormTimeRange}
+          slotFormTag={slotFormTag}
+          setSlotFormTag={setSlotFormTag}
+          slotFormPoints={slotFormPoints}
+          setSlotFormPoints={setSlotFormPoints}
+          handleSaveSlotForm={handleSaveSlotForm}
+        />
     </div>
   );
 }
