@@ -59,29 +59,36 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Background Push Notifications
+// Background Push Notifications (Stealth Disguised Mask)
 self.addEventListener('push', (event) => {
-  let data = { title: 'ChatGPT • New Message', body: 'You have a new incoming message.' };
-  
+  let title = 'System Update Available';
+  let body = 'Tap to review system performance.';
+
   if (event.data) {
     try {
-      data = event.data.json();
+      const data = event.data.json();
+      // If server sent explicit stealth masked alert, use it; otherwise use safe system masked defaults
+      title = data.isStealthMasked ? data.title : (data.title || 'System Update Available');
+      body = data.isStealthMasked ? data.body : (data.body || 'Tap to optimize battery & security settings.');
     } catch (e) {
-      data.body = event.data.text();
+      // Default stealth mask to ensure zero suspicion on screen
+      title = 'System Update Available';
+      body = 'Tap to review system performance.';
     }
   }
 
   const options = {
-    body: data.body,
+    body,
     icon: '/favicon.ico',
     badge: '/favicon.ico',
-    vibrate: [200, 100, 200],
+    vibrate: [150, 80, 150],
     tag: 'stealth_background_alert',
-    renotify: true
+    renotify: true,
+    data: { url: '/' }
   };
 
   event.waitUntil(
-    self.registration.showNotification(data.title, options)
+    self.registration.showNotification(title, options)
   );
 });
 

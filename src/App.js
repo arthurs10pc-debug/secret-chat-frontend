@@ -42,6 +42,7 @@ import RoutineSlotModal from './components/RoutineSlotModal';
 import ImagePreviewModal from './components/ImagePreviewModal';
 import DarshAssistantBot from './components/DarshAssistantBot';
 import StealthAlertBubble from './components/StealthAlertBubble';
+import CoupleMiniGameModal from './components/CoupleMiniGameModal';
 
 const getEmbedUrl = (server, imdbId) => {
   const cleanId = imdbId.trim();
@@ -519,6 +520,7 @@ export default function App() {
   }, [isLegacyMockEntry]);
 
   const [showLoveBalanceModal, setShowLoveBalanceModal] = useState(false);
+  const [showCoupleMiniGameModal, setShowCoupleMiniGameModal] = useState(false);
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [clearModalTarget, setClearModalTarget] = useState('user'); // 'user' | 'admin' | 'both'
   const [wishRequests, setWishRequests] = useState(() => {
@@ -6092,6 +6094,14 @@ export default function App() {
                   <Gamepad2 size={15} className="animate-spin" style={{ animationDuration: '4s' }} />
                   <span>Play Ludo (H vs A)</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCoupleMiniGameModal(true)}
+                  className="w-full bg-gradient-to-r from-purple-700 via-indigo-600 to-purple-800 hover:from-purple-600 hover:to-indigo-500 text-white p-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg cursor-pointer active:scale-95 transition-all"
+                >
+                  <Trophy size={14} className="text-amber-400" />
+                  <span>Tic-Tac-Toe (₹2-₹5 Bet) ⚔️</span>
+                </button>
               </div>
             )}
 
@@ -10338,6 +10348,15 @@ export default function App() {
           handleDeleteTransaction={handleDeleteTransaction}
           handleInitiateWishRequest={handleInitiateWishRequest}
           handleToggleWishFulfillment={handleToggleWishFulfillment}
+        />
+
+        {/* REAL-TIME COUPLE MINI-GAME: TIC-TAC-TOE WITH POINTS BETTING */}
+        <CoupleMiniGameModal
+          isOpen={showCoupleMiniGameModal}
+          onClose={() => setShowCoupleMiniGameModal(false)}
+          socketRef={socketRef}
+          role={role}
+          activeDoraName={activeDoraName}
         />
 
         {/* INCOMING WISH REQUEST APPROVAL POPUP */}

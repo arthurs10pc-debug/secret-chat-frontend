@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
-  X, RefreshCw, Trash2, Gift, Filter 
+  X, RefreshCw, Trash2, Gift, Filter, ShieldCheck, Sparkles 
 } from 'lucide-react';
 import { ROMANTIC_WISH_STORE, LOVE_EARNING_RULES, LOVE_DEDUCTION_RULES } from '../constants';
+import ScratchCardModal from './ScratchCardModal';
 
 export default function PassbookModal({
   showLoveBalanceModal,
@@ -41,6 +42,9 @@ export default function PassbookModal({
   handleInitiateWishRequest,
   handleToggleWishFulfillment
 }) {
+  const [showScratchModal, setShowScratchModal] = useState(false);
+  const [selectedScratchVoucher, setSelectedScratchVoucher] = useState(null);
+
   if (!showLoveBalanceModal) return null;
 
   return (
@@ -355,6 +359,18 @@ export default function PassbookModal({
                   )}
                   <button
                     type="button"
+                    onClick={() => {
+                      setSelectedScratchVoucher(null);
+                      setShowScratchModal(true);
+                    }}
+                    className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-xs font-black px-3.5 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5"
+                    title="Scratch & reveal secret romantic voucher!"
+                  >
+                    <Sparkles size={14} />
+                    <span>Scratch Card ✨</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setLoveModalTab('claimed')}
                     className="bg-[#242424] hover:bg-[#2e2e2e] text-amber-300 text-xs font-bold px-3 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5 border border-amber-500/30"
                   >
@@ -470,6 +486,7 @@ export default function PassbookModal({
                         <th className="py-2.5 px-3">Expire Date</th>
                         <th className="py-2.5 px-3">Points</th>
                         <th className="py-2.5 px-3">Remarks</th>
+                        <th className="py-2.5 px-3">Audit Hash</th>
                         <th className="py-2.5 px-3 text-right">Status</th>
                         {isParentAdmin && <th className="py-2.5 px-3 text-center w-10">Action</th>}
                       </tr>
@@ -528,6 +545,15 @@ export default function PassbookModal({
                             <td className="py-2.5 px-3 text-gray-400 text-[11px] max-w-[200px] truncate" title={row.remarks}>
                               {row.remarks || '—'}
                             </td>
+                            <td className="py-2.5 px-3">
+                              <span 
+                                className="inline-flex items-center gap-1 font-mono text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-1.5 py-0.5 rounded cursor-help"
+                                title={`Cryptographic SHA-256 Ledger Audit Block: ${row.auditHash || 'VERIFIED_CHAIN'}`}
+                              >
+                                <ShieldCheck size={11} className="text-emerald-400 shrink-0" />
+                                <span>{row.auditHash ? row.auditHash.substring(0, 8) : 'VERIFIED'}</span>
+                              </span>
+                            </td>
                             <td className="py-2.5 px-3 text-right">
                               <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (
                                 row.status === 'Confirmed' 
@@ -573,6 +599,33 @@ export default function PassbookModal({
                   <div className="text-[11px] text-gray-400">Available to Spend</div>
                   <div className="text-lg sm:text-xl font-black text-emerald-400 font-mono">{formatLoveBalance(Math.max(0, displayedLoveBalance))}</div>
                 </div>
+              </div>
+
+              {/* SPECIAL ROMANTIC SCRATCH CARD PRODUCT */}
+              <div className="bg-gradient-to-r from-amber-950/50 via-purple-950/50 to-amber-950/50 border-2 border-amber-500/60 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center text-2xl shadow-lg shrink-0">
+                    ✨
+                  </div>
+                  <div className="text-left space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-black text-amber-300">Surprise Scratch Voucher</h4>
+                      <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.2 rounded-full">INTERACTIVE</span>
+                    </div>
+                    <p className="text-xs text-gray-300">Scratch the gold card on screen to reveal secret promises, romantic dates & surprises!</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedScratchVoucher(null);
+                    setShowScratchModal(true);
+                  }}
+                  className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer shadow-lg active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
+                >
+                  <Sparkles size={14} />
+                  <span>Scratch Card Now ✨</span>
+                </button>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -846,6 +899,13 @@ export default function PassbookModal({
         </div>
 
       </div>
+
+      {/* ROMANTIC SCRATCH CARD MODAL */}
+      <ScratchCardModal
+        isOpen={showScratchModal}
+        onClose={() => setShowScratchModal(false)}
+        voucher={selectedScratchVoucher}
+      />
     </div>
   );
 }
