@@ -43,6 +43,8 @@ import ImagePreviewModal from './components/ImagePreviewModal';
 import DarshAssistantBot from './components/DarshAssistantBot';
 import StealthAlertBubble from './components/StealthAlertBubble';
 import CoupleMiniGameModal from './components/CoupleMiniGameModal';
+import LudoGameModal from './components/LudoGameModal';
+import GamesHubModal from './components/GamesHubModal';
 
 const getEmbedUrl = (server, imdbId) => {
   const cleanId = imdbId.trim();
@@ -521,6 +523,9 @@ export default function App() {
 
   const [showLoveBalanceModal, setShowLoveBalanceModal] = useState(false);
   const [showCoupleMiniGameModal, setShowCoupleMiniGameModal] = useState(false);
+  const [showLudoModal, setShowLudoModal] = useState(false);
+  const [showGamesHubModal, setShowGamesHubModal] = useState(false);
+  const [incomingGameChallenge, setIncomingGameChallenge] = useState(null);
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [clearModalTarget, setClearModalTarget] = useState('user'); // 'user' | 'admin' | 'both'
   const [wishRequests, setWishRequests] = useState(() => {
@@ -3966,8 +3971,18 @@ export default function App() {
     });
 
     socketRef.current.on('launch_game_session', (gameObj) => {
-      setActiveGame(gameObj);
+      if (gameObj && (gameObj.id === 'ludo' || gameObj === 'ludo')) {
+        setShowLudoModal(true);
+      } else {
+        setActiveGame(gameObj);
+      }
       setWinnerMessage('');
+      playReceiveSound();
+    });
+
+    socketRef.current.on('couple_game_invite_broadcast', (inviteData) => {
+      if (!inviteData) return;
+      setIncomingGameChallenge(inviteData);
       playReceiveSound();
     });
 
@@ -5192,10 +5207,39 @@ export default function App() {
   };
 
   const handleLaunchGame = (game) => {
-    setActiveGame(game);
+    if (game && (game.id === 'ludo' || game === 'ludo')) {
+      setShowLudoModal(true);
+    } else {
+      setActiveGame(game);
+    }
     setWinnerMessage('');
     if (socketRef.current) {
       socketRef.current.emit('launch_multiplayer_game', game);
+    }
+  };
+
+  const handleSendChatGameInvite = (gameType, bet = 2.0) => {
+    const isCurrentAdmin = (role === 'parent' || role === 'admin');
+    const myName = isCurrentAdmin ? 'Darsh' : activeDoraName;
+    const oppName = isCurrentAdmin ? activeDoraName : 'Darsh';
+    const gameLabel = gameType === 'ludo' ? 'Ludo Royale (2P)' : 'Couple Tic-Tac-Toe';
+    const betLabel = bet > 0 ? ` (₹${bet.toFixed(2)} Bet)` : ' (Friendly Match)';
+    const inviteMsg = `[GAME_CHALLENGE:${gameType}] ${myName} challenged ${oppName} to ${gameLabel}${betLabel}! Tap to join!`;
+
+    if (socketRef.current) {
+      socketRef.current.emit('send_stealth_msg', {
+        id: `msg_game_${Date.now()}`,
+        text: inviteMsg,
+        senderRole: role,
+        timestamp: new Date().toISOString(),
+        timeFormatted: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      });
+      socketRef.current.emit('couple_game_invite', {
+        game: gameType,
+        challenger: myName,
+        challengerRole: role,
+        betAmount: bet
+      });
     }
   };
 
@@ -6020,12 +6064,24 @@ export default function App() {
               )}
             </div>
 
+            {/* COUPLE MINI-GAMES MENU ITEM (ACCESSIBLE TO BOTH DARSH & DORA) */}
+            <div 
+              onClick={() => setShowGamesHubModal(true)}
+              className="flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors text-[#ececf1] hover:bg-[#1a1a1a]"
+            >
+              <span className="flex items-center gap-2.5">
+                <Gamepad2 size={16} className="text-amber-400" />
+                <span>Couple Games</span>
+              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                LUDO & TTT
+              </span>
+            </div>
+
             {/* PLUGINS MENU ITEM */}
             <div 
               onClick={() => {
-                if (role === 'parent' || showArcadePlugins) {
-                  setShowArcadePlugins(!showArcadePlugins);
-                }
+                setShowArcadePlugins(!showArcadePlugins);
               }}
               className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${
                 incomingGameRequest ? 'bg-amber-500/20 border border-amber-500/50 animate-pulse' : (showArcadePlugins ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]')
@@ -6038,7 +6094,7 @@ export default function App() {
               <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
                 incomingGameRequest ? 'bg-amber-500 text-black animate-bounce' : (showArcadePlugins ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-400')
               }`}>
-                {incomingGameRequest ? 'NEW REQ' : (showArcadePlugins ? 'ACTIVE' : 'LOCKED')}
+                {incomingGameRequest ? 'NEW REQ' : (showArcadePlugins ? 'ACTIVE' : 'READY')}
               </span>
             </div>
 
@@ -6080,15 +6136,16 @@ export default function App() {
               </div>
             )}
 
-            {/* LUDO MULTIPLAYER LAUNCHER IN PLUGINS MENU */}
-            {showArcadePlugins && (role === 'parent' || !incomingGameRequest) && (
+            {/* LUDO & TIC-TAC-TOE MULTIPLAYER LAUNCHER IN PLUGINS MENU */}
+            {showArcadePlugins && (
               <div className="p-2 space-y-2 bg-[#0c0c0c] rounded-xl border border-amber-500/40 my-1">
                 <div className="flex items-center justify-between text-[10px] font-bold text-amber-400 px-1">
                   <span className="flex items-center gap-1">🎲 LUDO ROYALE</span>
                   <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono">2-PLAYER</span>
                 </div>
                 <button
-                  onClick={() => handleLaunchGame(ARCADE_GAMES[0])}
+                  type="button"
+                  onClick={() => setShowLudoModal(true)}
                   className="w-full bg-gradient-to-r from-amber-600 via-rose-600 to-emerald-600 hover:from-amber-500 hover:to-emerald-500 text-white p-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg cursor-pointer active:scale-95 transition-all"
                 >
                   <Gamepad2 size={15} className="animate-spin" style={{ animationDuration: '4s' }} />
@@ -6380,6 +6437,17 @@ export default function App() {
                 </button>
               )}
 
+              {/* COUPLE MINI-GAMES BUTTON (ACCESSIBLE TO BOTH DARSH & DORA) */}
+              <button
+                type="button"
+                onClick={() => setShowGamesHubModal(true)}
+                className="flex items-center gap-1.5 backdrop-blur-xl bg-gradient-to-r from-purple-900/60 via-indigo-900/60 to-purple-900/60 hover:from-purple-800 hover:to-indigo-800 border border-purple-500/40 text-purple-200 px-2.5 py-1 rounded-2xl text-xs font-bold cursor-pointer transition-all active:scale-95 shadow-md shrink-0"
+                title="Play Couple Games: Ludo & Tic-Tac-Toe"
+              >
+                <Gamepad2 size={14} className="text-amber-400" />
+                <span className="hidden sm:inline">Games</span>
+              </button>
+
               <button
                 type="button"
                 onClick={handleStartAudioCall}
@@ -6632,6 +6700,31 @@ export default function App() {
                             className="max-h-64 rounded-xl object-contain cursor-pointer shadow-md" 
                             onClick={() => window.open(m.text, '_blank')} 
                           />
+                        </div>
+                      ) : cleanBody && cleanBody.includes('[GAME_CHALLENGE:') ? (
+                        <div className="bg-gradient-to-r from-purple-950/80 via-indigo-950/80 to-purple-950/80 border border-purple-500/50 rounded-2xl p-3 space-y-2 text-left my-1 shadow-lg select-none">
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl">{cleanBody.includes('ludo') ? '🎲' : '⚔️'}</span>
+                            <div>
+                              <h4 className="text-xs font-black text-amber-300">
+                                {cleanBody.includes('ludo') ? 'Ludo Royale Challenge' : 'Couple Tic-Tac-Toe Duel'}
+                              </h4>
+                              <p className="text-[11px] text-gray-300">
+                                {cleanBody.replace(/\[GAME_CHALLENGE:[^\]]+\]\s*/, '')}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (cleanBody.includes('ludo')) setShowLudoModal(true);
+                              else setShowCoupleMiniGameModal(true);
+                            }}
+                            className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-xs font-black py-2 rounded-xl shadow cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                          >
+                            <span>🎮 Join & Play Match Now!</span>
+                          </button>
                         </div>
                       ) : (
                         <p className="break-words select-text">{cleanBody}</p>
@@ -10350,6 +10443,65 @@ export default function App() {
           handleToggleWishFulfillment={handleToggleWishFulfillment}
         />
 
+        {/* INCOMING GAME CHALLENGE NOTIFICATION (LIVE POPUP FROM PARTNER) */}
+        {incomingGameChallenge && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100000] w-[92%] max-w-md bg-gradient-to-r from-purple-800 via-indigo-800 to-purple-900 text-white p-3.5 rounded-2xl shadow-2xl border-2 border-amber-400 flex items-center justify-between gap-3 animate-bounce font-sans">
+            <div className="flex items-center gap-2.5">
+              <span className="text-2xl">{incomingGameChallenge.game === 'ludo' ? '🎲' : '⚔️'}</span>
+              <div className="text-left">
+                <h4 className="text-xs sm:text-sm font-black text-amber-300">
+                  {incomingGameChallenge.challenger} Challenged You!
+                </h4>
+                <p className="text-[11px] text-gray-200">
+                  {incomingGameChallenge.game === 'ludo' ? 'Ludo Royale (2P Live Board)' : 'Couple Tic-Tac-Toe'}
+                  {incomingGameChallenge.betAmount ? ` • ₹${incomingGameChallenge.betAmount} Bet` : ' • Friendly'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const g = incomingGameChallenge.game;
+                  setIncomingGameChallenge(null);
+                  if (g === 'ludo') setShowLudoModal(true);
+                  else setShowCoupleMiniGameModal(true);
+                }}
+                className="bg-amber-400 hover:bg-amber-300 text-black font-black text-xs px-3 py-1.5 rounded-xl shadow cursor-pointer active:scale-95 transition-all"
+              >
+                Accept & Play
+              </button>
+              <button
+                type="button"
+                onClick={() => setIncomingGameChallenge(null)}
+                className="text-gray-300 hover:text-white text-xs font-bold p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* COUPLE GAMES HUB MODAL */}
+        <GamesHubModal
+          isOpen={showGamesHubModal}
+          onClose={() => setShowGamesHubModal(false)}
+          onOpenLudo={() => setShowLudoModal(true)}
+          onOpenTicTacToe={() => setShowCoupleMiniGameModal(true)}
+          role={role}
+          activeDoraName={activeDoraName}
+        />
+
+        {/* AUTHENTIC 2-PLAYER MOBILE LUDO ROYALE MODAL */}
+        <LudoGameModal
+          isOpen={showLudoModal}
+          onClose={() => setShowLudoModal(false)}
+          socketRef={socketRef}
+          role={role}
+          activeDoraName={activeDoraName}
+          onSendChatInvite={handleSendChatGameInvite}
+        />
+
         {/* REAL-TIME COUPLE MINI-GAME: TIC-TAC-TOE WITH POINTS BETTING */}
         <CoupleMiniGameModal
           isOpen={showCoupleMiniGameModal}
@@ -10357,6 +10509,7 @@ export default function App() {
           socketRef={socketRef}
           role={role}
           activeDoraName={activeDoraName}
+          onSendChatInvite={handleSendChatGameInvite}
         />
 
         {/* INCOMING WISH REQUEST APPROVAL POPUP */}

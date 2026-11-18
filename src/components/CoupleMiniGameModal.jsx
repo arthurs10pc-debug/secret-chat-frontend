@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Trophy, RotateCcw, Coins, Sparkles } from 'lucide-react';
+import { X, Trophy, RotateCcw, Coins, Sparkles, Share2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 const WINNING_COMBINATIONS = [
@@ -13,7 +13,8 @@ export default function CoupleMiniGameModal({
   onClose,
   socketRef,
   role,
-  activeDoraName
+  activeDoraName,
+  onSendChatInvite
 }) {
   const [board, setBoard] = useState(Array(9).fill(null));
   const [turn, setTurn] = useState('H'); // 'H' (Darsh) or 'A' (Dora)
@@ -148,6 +149,21 @@ export default function CoupleMiniGameModal({
     }
   };
 
+  const handleSendInviteToChat = () => {
+    if (onSendChatInvite) {
+      onSendChatInvite('tictactoe', betAmount);
+    }
+    if (socketRef?.current) {
+      socketRef.current.emit('couple_game_invite', {
+        game: 'tictactoe',
+        challenger: myLabel,
+        challengerRole: role,
+        betAmount
+      });
+    }
+    alert(`💌 Tic-Tac-Toe Challenge sent to ${oppLabel}!\n\nA live invite banner and clickable link have been sent.`);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -166,13 +182,24 @@ export default function CoupleMiniGameModal({
               <p className="text-[10px] text-gray-400 font-mono">Win opponent's bet into Love Balance!</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-white p-1 rounded-xl cursor-pointer hover:bg-[#222]"
-          >
-            <X size={16} />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleSendInviteToChat}
+              className="bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold px-2 py-1 rounded-xl cursor-pointer shadow flex items-center gap-1 active:scale-95 transition-all"
+              title={`Send Tic-Tac-Toe Invite to ${oppLabel}`}
+            >
+              <Share2 size={12} />
+              <span>Invite</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-gray-400 hover:text-white p-1 rounded-xl cursor-pointer hover:bg-[#222]"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         {/* BET AMOUNT SELECTOR & SCOREBOARD */}
