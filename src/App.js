@@ -526,6 +526,27 @@ export default function App() {
   const [showLudoModal, setShowLudoModal] = useState(false);
   const [showGamesHubModal, setShowGamesHubModal] = useState(false);
   const [incomingGameChallenge, setIncomingGameChallenge] = useState(null);
+
+  // Authoritative real-time game states (millisecond sync across both phones)
+  const [tictactoeState, setTictactoeState] = useState({
+    board: Array(9).fill(null),
+    turn: 'H',
+    betAmount: 2.0,
+    scores: { H: 0, A: 0 },
+    winner: null,
+    isDraw: false,
+    gameStatus: 'PLAYING'
+  });
+
+  const [ludoGameState, setLudoGameState] = useState({
+    tokens: { H: [-1, -1, -1, -1], A: [-1, -1, -1, -1] },
+    turn: 'H',
+    dice: 6,
+    statusMsg: 'Match ready! Darsh rolls first.',
+    scores: { H: 0, A: 0 },
+    betAmount: 2.0,
+    winner: null
+  });
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [clearModalTarget, setClearModalTarget] = useState('user'); // 'user' | 'admin' | 'both'
   const [wishRequests, setWishRequests] = useState(() => {
@@ -3704,6 +3725,8 @@ export default function App() {
         });
       }
       socketRef.current.emit('request_users_directory');
+      socketRef.current.emit('couple_game_get_state', { gameId: 'tictactoe' });
+      socketRef.current.emit('couple_game_get_state', { gameId: 'ludo' });
       markMessagesAsSeen();
     });
 
@@ -3984,6 +4007,64 @@ export default function App() {
       if (!inviteData) return;
       setIncomingGameChallenge(inviteData);
       playReceiveSound();
+    });
+
+    const handleIncomingGameBroadcast = (data) => {
+      if (!data) return;
+      const targetGame = data.gameId || (data.board ? 'tictactoe' : 'ludo');
+      const state = data.state || data;
+      
+      if (targetGame === 'tictactoe') {
+        setTictactoeState(prev => ({
+          ...prev,
+          board: state.board ? [...state.board] : prev.board,
+          turn: state.turn || prev.turn,
+          betAmount: state.betAmount !== undefined ? state.betAmount : prev.betAmount,
+          scores: state.scores || prev.scores,
+          winner: state.winner !== undefined ? state.winner : prev.winner,
+          isDraw: state.isDraw !== undefined ? state.isDraw : prev.isDraw,
+          gameStatus: state.winner ? 'WON' : (state.isDraw ? 'DRAW' : 'PLAYING')
+        }));
+      } else if (targetGame === 'ludo') {
+        setLudoGameState(prev => ({
+          ...prev,
+          tokens: state.tokens ? { H: [...state.tokens.H], A: [...state.tokens.A] } : prev.tokens,
+          turn: state.turn || prev.turn,
+          dice: state.dice !== undefined ? state.dice : prev.dice,
+          statusMsg: state.statusMsg || prev.statusMsg,
+          scores: state.scores || prev.scores,
+          betAmount: state.betAmount !== undefined ? state.betAmount : prev.betAmount,
+          winner: state.winner !== undefined ? state.winner : prev.winner
+        }));
+      }
+    };
+
+    socketRef.current.on('couple_game_broadcast', handleIncomingGameBroadcast);
+    socketRef.current.on('arcade_game_action_broadcast', handleIncomingGameBroadcast);
+
+    socketRef.current.on('couple_game_state_sync', ({ gameId, state }) => {
+      if (!state) return;
+      if (gameId === 'tictactoe') {
+        setTictactoeState({
+          board: state.board ? [...state.board] : Array(9).fill(null),
+          turn: state.turn || 'H',
+          betAmount: state.betAmount !== undefined ? state.betAmount : 2.0,
+          scores: state.scores || { H: 0, A: 0 },
+          winner: state.winner || null,
+          isDraw: Boolean(state.isDraw),
+          gameStatus: state.winner ? 'WON' : (state.isDraw ? 'DRAW' : 'PLAYING')
+        });
+      } else if (gameId === 'ludo') {
+        setLudoGameState({
+          tokens: state.tokens ? { H: [...state.tokens.H], A: [...state.tokens.A] } : { H: [-1, -1, -1, -1], A: [-1, -1, -1, -1] },
+          turn: state.turn || 'H',
+          dice: state.dice !== undefined ? state.dice : 6,
+          statusMsg: state.statusMsg || 'Match ready! Darsh rolls first.',
+          scores: state.scores || { H: 0, A: 0 },
+          betAmount: state.betAmount !== undefined ? state.betAmount : 2.0,
+          winner: state.winner || null
+        });
+      }
     });
 
     socketRef.current.on('togepi_movie_chat', ({ senderRole, text }) => {
@@ -5242,6 +5323,14 @@ export default function App() {
       });
     }
   };
+
+  const handleGameAction = useCallback((payload) => {
+    if (!payload) return;
+    if (socketRef.current) {
+      socketRef.current.emit('couple_game_action', payload);
+      socketRef.current.emit('arcade_game_action', payload);
+    }
+  }, []);
 
   const downloadFullChatPDF = () => {
     if (role !== 'parent') return;
@@ -10512,6 +10601,8 @@ export default function App() {
           role={role}
           activeDoraName={activeDoraName}
           onSendChatInvite={handleSendChatGameInvite}
+          gameState={ludoGameState}
+          onAction={handleGameAction}
         />
 
         {/* REAL-TIME COUPLE MINI-GAME: TIC-TAC-TOE WITH POINTS BETTING */}
@@ -10522,6 +10613,8 @@ export default function App() {
           role={role}
           activeDoraName={activeDoraName}
           onSendChatInvite={handleSendChatGameInvite}
+          gameState={tictactoeState}
+          onAction={handleGameAction}
         />
 
         {/* INCOMING WISH REQUEST APPROVAL POPUP */}

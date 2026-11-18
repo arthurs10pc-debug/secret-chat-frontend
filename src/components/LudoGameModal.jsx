@@ -71,20 +71,22 @@ export default function LudoGameModal({
   socketRef,
   role,
   activeDoraName,
-  onSendChatInvite
+  onSendChatInvite,
+  gameState,
+  onAction
 }) {
-  const [tokens, setTokens] = useState({
+  const [tokens, setTokens] = useState(gameState?.tokens || {
     H: [-1, -1, -1, -1],
     A: [-1, -1, -1, -1]
   });
-  const [turn, setTurn] = useState('H'); // 'H' (Darsh) | 'A' (Dora)
-  const [diceVal, setDiceVal] = useState(6);
+  const [turn, setTurn] = useState(gameState?.turn || 'H'); // 'H' (Darsh) | 'A' (Dora)
+  const [diceVal, setDiceVal] = useState(gameState?.dice ?? 6);
   const [isRolling, setIsRolling] = useState(false);
   const [movableTokens, setMovableTokens] = useState([]);
-  const [statusMsg, setStatusMsg] = useState('Match ready! Darsh rolls first.');
-  const [winner, setWinner] = useState(null);
-  const [scores, setScores] = useState({ H: 0, A: 0 });
-  const [betAmount, setBetAmount] = useState(2.0);
+  const [statusMsg, setStatusMsg] = useState(gameState?.statusMsg || 'Match ready! Darsh rolls first.');
+  const [winner, setWinner] = useState(gameState?.winner || null);
+  const [scores, setScores] = useState(gameState?.scores || { H: 0, A: 0 });
+  const [betAmount, setBetAmount] = useState(gameState?.betAmount ?? 2.0);
   const [tokensToWin, setTokensToWin] = useState(2); // 2 tokens for quick mobile match
 
   const isCurrentAdmin = (role === 'parent' || role === 'admin');
@@ -92,6 +94,19 @@ export default function LudoGameModal({
   const myName = isCurrentAdmin ? 'Darsh' : activeDoraName;
   const oppName = isCurrentAdmin ? activeDoraName : 'Darsh';
   const isMyTurn = (turn === myPlayerKey);
+
+  // Sync state from root App.js gameState prop instantly
+  useEffect(() => {
+    if (gameState) {
+      if (gameState.tokens) setTokens({ H: [...gameState.tokens.H], A: [...gameState.tokens.A] });
+      if (gameState.turn) setTurn(gameState.turn);
+      if (gameState.dice !== undefined) setDiceVal(gameState.dice);
+      if (gameState.statusMsg) setStatusMsg(gameState.statusMsg);
+      if (gameState.scores) setScores(gameState.scores);
+      if (gameState.betAmount !== undefined) setBetAmount(gameState.betAmount);
+      if (gameState.winner) setWinner(gameState.winner);
+    }
+  }, [gameState]);
 
   // Authoritative server state synchronization
   useEffect(() => {
@@ -133,10 +148,12 @@ export default function LudoGameModal({
 
     socket.on('couple_game_state_sync', handleStateSync);
     socket.on('couple_game_broadcast', handleBroadcast);
+    socket.on('arcade_game_action_broadcast', handleBroadcast);
 
     return () => {
       socket.off('couple_game_state_sync', handleStateSync);
       socket.off('couple_game_broadcast', handleBroadcast);
+      socket.off('arcade_game_action_broadcast', handleBroadcast);
     };
   }, [socketRef, isOpen]);
 
@@ -293,8 +310,12 @@ export default function LudoGameModal({
   };
 
   const emitGameAction = (payload) => {
+    if (onAction) {
+      onAction(payload);
+    }
     if (socketRef?.current) {
       socketRef.current.emit('couple_game_action', payload);
+      socketRef.current.emit('arcade_game_action', payload);
     }
   };
 

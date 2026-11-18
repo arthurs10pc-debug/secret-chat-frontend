@@ -14,19 +14,41 @@ export default function CoupleMiniGameModal({
   socketRef,
   role,
   activeDoraName,
-  onSendChatInvite
+  onSendChatInvite,
+  gameState,
+  onAction
 }) {
-  const [board, setBoard] = useState(Array(9).fill(null));
-  const [turn, setTurn] = useState('H'); // 'H' (Darsh) or 'A' (Dora)
-  const [betAmount, setBetAmount] = useState(2.0); // ₹2.00 or ₹5.00
-  const [gameStatus, setGameStatus] = useState('PLAYING'); // 'PLAYING' | 'WON' | 'DRAW'
-  const [winner, setWinner] = useState(null); // 'H' | 'A' | null
-  const [scores, setScores] = useState({ H: 0, A: 0 });
+  const [board, setBoard] = useState(gameState?.board || Array(9).fill(null));
+  const [turn, setTurn] = useState(gameState?.turn || 'H'); // 'H' (Darsh) or 'A' (Dora)
+  const [betAmount, setBetAmount] = useState(gameState?.betAmount ?? 2.0); // ₹2.00 or ₹5.00
+  const [gameStatus, setGameStatus] = useState(gameState?.gameStatus || 'PLAYING'); // 'PLAYING' | 'WON' | 'DRAW'
+  const [winner, setWinner] = useState(gameState?.winner || null); // 'H' | 'A' | null
+  const [scores, setScores] = useState(gameState?.scores || { H: 0, A: 0 });
 
   const isCurrentAdmin = (role === 'parent' || role === 'admin');
   const mySymbol = isCurrentAdmin ? 'H' : 'A';
   const myLabel = isCurrentAdmin ? 'Darsh' : activeDoraName;
   const oppLabel = isCurrentAdmin ? activeDoraName : 'Darsh';
+
+  // Sync state from root App.js gameState prop instantly
+  useEffect(() => {
+    if (gameState) {
+      if (gameState.board) setBoard([...gameState.board]);
+      if (gameState.turn) setTurn(gameState.turn);
+      if (gameState.betAmount !== undefined) setBetAmount(gameState.betAmount);
+      if (gameState.scores) setScores(gameState.scores);
+      if (gameState.winner) {
+        setWinner(gameState.winner);
+        setGameStatus('WON');
+      } else if (gameState.isDraw) {
+        setWinner(null);
+        setGameStatus('DRAW');
+      } else {
+        setWinner(null);
+        setGameStatus('PLAYING');
+      }
+    }
+  }, [gameState]);
 
   const checkWinner = (squares) => {
     for (const combo of WINNING_COMBINATIONS) {
@@ -66,7 +88,9 @@ export default function CoupleMiniGameModal({
     };
 
     const handleGameBroadcast = (data) => {
-      if (!data || data.gameId !== 'tictactoe') return;
+      if (!data) return;
+      const targetGame = data.gameId || (data.board ? 'tictactoe' : 'ludo');
+      if (targetGame !== 'tictactoe') return;
       const state = data.state || data;
       if (state.board) setBoard(state.board);
       if (state.turn) setTurn(state.turn);
@@ -95,10 +119,12 @@ export default function CoupleMiniGameModal({
 
     socket.on('couple_game_state_sync', handleStateSync);
     socket.on('couple_game_broadcast', handleGameBroadcast);
+    socket.on('arcade_game_action_broadcast', handleGameBroadcast);
 
     return () => {
       socket.off('couple_game_state_sync', handleStateSync);
       socket.off('couple_game_broadcast', handleGameBroadcast);
+      socket.off('arcade_game_action_broadcast', handleGameBroadcast);
     };
   }, [socketRef, isOpen, mySymbol]);
 
@@ -113,59 +139,67 @@ export default function CoupleMiniGameModal({
     const winResult = checkWinner(newBoard);
     const nextTurn = turn === 'H' ? 'A' : 'H';
 
+    let actionPayload;
     if (winResult && winResult !== 'DRAW') {
       setWinner(winResult);
       setGameStatus('WON');
       setScores(prev => ({ ...prev, [winResult]: prev[winResult] + 1 }));
       try { confetti({ particleCount: 90, spread: 80 }); } catch (e) {}
 
-      if (socketRef?.current) {
-        socketRef.current.emit('couple_game_action', {
-          type: 'MATCH_FINISH',
-          gameId: 'tictactoe',
-          betAmount,
-          board: newBoard,
-          turn: nextTurn,
-          winner: winResult,
-          isDraw: false
-        });
-      }
+      actionPayload = {
+        type: 'MATCH_FINISH',
+        gameId: 'tictactoe',
+        betAmount,
+        board: newBoard,
+        turn: nextTurn,
+        winner: winResult,
+        isDraw: false
+      };
     } else if (winResult === 'DRAW') {
       setGameStatus('DRAW');
-      if (socketRef?.current) {
-        socketRef.current.emit('couple_game_action', {
-          type: 'MATCH_FINISH',
-          gameId: 'tictactoe',
-          betAmount,
-          board: newBoard,
-          turn: nextTurn,
-          winner: null,
-          isDraw: true
-        });
-      }
+      actionPayload = {
+        type: 'MATCH_FINISH',
+        gameId: 'tictactoe',
+        betAmount,
+        board: newBoard,
+        turn: nextTurn,
+        winner: null,
+        isDraw: true
+      };
     } else {
       setTurn(nextTurn);
-      if (socketRef?.current) {
-        socketRef.current.emit('couple_game_action', {
-          type: 'MOVE',
-          gameId: 'tictactoe',
-          betAmount,
-          board: newBoard,
-          turn: nextTurn
-        });
-      }
+      actionPayload = {
+        type: 'MOVE',
+        gameId: 'tictactoe',
+        betAmount,
+        board: newBoard,
+        turn: nextTurn
+      };
+    }
+
+    if (onAction) {
+      onAction(actionPayload);
+    }
+    if (socketRef?.current) {
+      socketRef.current.emit('couple_game_action', actionPayload);
+      socketRef.current.emit('arcade_game_action', actionPayload);
     }
   };
 
   const handleSelectBet = (amt) => {
     if (gameStatus !== 'PLAYING' || board.some(s => s !== null)) return;
     setBetAmount(amt);
+    const payload = {
+      type: 'BET_CHANGE',
+      gameId: 'tictactoe',
+      betAmount: amt
+    };
+    if (onAction) {
+      onAction(payload);
+    }
     if (socketRef?.current) {
-      socketRef.current.emit('couple_game_action', {
-        type: 'BET_CHANGE',
-        gameId: 'tictactoe',
-        betAmount: amt
-      });
+      socketRef.current.emit('couple_game_action', payload);
+      socketRef.current.emit('arcade_game_action', payload);
     }
   };
 
@@ -176,14 +210,19 @@ export default function CoupleMiniGameModal({
     setGameStatus('PLAYING');
     setTurn('H');
 
+    const payload = {
+      type: 'RESET',
+      gameId: 'tictactoe',
+      betAmount,
+      board: freshBoard,
+      turn: 'H'
+    };
+    if (onAction) {
+      onAction(payload);
+    }
     if (socketRef?.current) {
-      socketRef.current.emit('couple_game_action', {
-        type: 'RESET',
-        gameId: 'tictactoe',
-        betAmount,
-        board: freshBoard,
-        turn: 'H'
-      });
+      socketRef.current.emit('couple_game_action', payload);
+      socketRef.current.emit('arcade_game_action', payload);
     }
   };
 
