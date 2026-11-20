@@ -6115,7 +6115,7 @@ export default function App() {
 
   const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
   const partnerRole = role === 'parent' ? 'user' : 'parent';
-  const isPartnerOnline = onlineRoles.includes(partnerRole);
+  const isPartnerOnline = onlineRoles.includes(partnerRole) || Boolean(usersDirectory?.users?.some(u => (u.isAdmin ? 'parent' : 'user') === partnerRole && u.isOnline));
   const filteredWpMessages = useMemo(() => {
     let list = displayedStealthMessages;
     if (filterStarredOnly) {
@@ -6679,12 +6679,13 @@ export default function App() {
           <div className="absolute top-1/2 left-1/3 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
 
           {/* IOS LIQUID GLASS WHATSAPP HEADER */}
-          <div className="h-16 backdrop-blur-2xl bg-black/45 sm:bg-[#0c181f]/65 flex items-center justify-between px-3 sm:px-4 shrink-0 text-[#e9edef] shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] z-20 border-b border-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.18)] relative">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="h-16 backdrop-blur-2xl bg-black/50 sm:bg-[#0c181f]/75 flex items-center justify-between px-2.5 sm:px-4 shrink-0 text-[#e9edef] shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] z-20 border-b border-white/10 relative overflow-hidden">
+            {/* LEFT SECTION: BACK BUTTON, AVATAR, PARTNER NAME & STATUS */}
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 mr-2">
               <button
                 type="button"
                 onClick={() => setIsWhatsAppView(false)}
-                className="backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 text-[#aebac1] hover:text-white p-2 rounded-full transition-all cursor-pointer active:scale-95 shadow-sm"
+                className="backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 text-[#aebac1] hover:text-white p-2 rounded-full transition-all cursor-pointer active:scale-95 shrink-0"
                 title="Return to Secret Chat"
               >
                 <ArrowLeft size={18} />
@@ -6692,75 +6693,90 @@ export default function App() {
 
               <div 
                 onClick={() => setIsWhatsAppView(false)}
-                className="w-10 h-10 rounded-full backdrop-blur-md bg-white/[0.08] hover:bg-white/[0.15] border border-emerald-400/40 flex items-center justify-center text-base font-bold text-[#e9edef] relative shrink-0 cursor-pointer shadow-md transition-all active:scale-95"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full backdrop-blur-md bg-white/[0.08] hover:bg-white/[0.15] border border-emerald-400/40 flex items-center justify-center text-sm sm:text-base font-bold text-[#e9edef] relative shrink-0 cursor-pointer shadow-md transition-all active:scale-95"
               >
                 {partnerName[0]}
                 {isPartnerOnline && (
-                  <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-400 border-2 border-[#0c181f] rounded-full animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-emerald-400 border-2 border-[#0c181f] rounded-full animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
                 )}
               </div>
 
-              <div className="min-w-0">
-                <h3 className="text-[15px] font-bold text-white tracking-tight truncate leading-tight flex items-center gap-1.5">
-                  <span>{partnerName}</span>
-                  <span className="text-[9px] backdrop-blur-md bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-1.5 py-0.2 rounded-full font-mono font-semibold">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm sm:text-[15px] font-bold text-white tracking-tight truncate leading-tight flex items-center gap-1.5">
+                  <span className="truncate">{partnerName}</span>
+                  <span className="hidden sm:inline-block text-[9px] backdrop-blur-md bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-1.5 py-0.2 rounded-full font-mono font-semibold">
                     IOS GLASS
                   </span>
                 </h3>
-                <div className="text-[11.5px] font-normal leading-tight h-3.5 flex items-center">
+                <div className="text-[11px] sm:text-[11.5px] font-normal leading-tight h-3.5 flex items-center">
                   {isPeerTyping ? (
                     <span className="text-emerald-400 animate-pulse font-medium">typing...</span>
                   ) : isPartnerOnline ? (
                     <span className="text-emerald-400/90 font-medium">online</span>
                   ) : (
-                    <span className="text-gray-400 text-[11px]">encrypted channel</span>
+                    <span className="text-gray-400 text-[10px] sm:text-[11px]">encrypted</span>
                   )}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 sm:gap-2.5 text-[#aebac1] relative">
+            {/* RIGHT SECTION: ACTIONS, BALANCES, GAMES, MENU */}
+            <div className="flex items-center gap-1 sm:gap-2 text-[#aebac1] shrink-0">
+              {/* VIDEO CALL: VISIBLE ON SM+ */}
               <button
                 type="button"
                 onClick={() => alert("WhatsApp Video Call feature: Secure connection established with " + partnerName + "!")}
-                className="p-2 text-white/80 hover:text-white backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 rounded-full transition-all cursor-pointer active:scale-95 shadow-sm"
+                className="hidden sm:flex p-2 text-white/80 hover:text-white backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 rounded-full transition-all cursor-pointer active:scale-95 shadow-sm"
                 title="WhatsApp Video Call"
               >
-                <VideoIcon size={17} />
+                <VideoIcon size={16} />
               </button>
 
+              {/* DUAL BALANCE PILL: EXPANDED ON SM+, COMPACT ON MOBILE */}
               {role === 'parent' ? (
-                <div
-                  className="flex items-center gap-1.5 backdrop-blur-xl bg-white/[0.08] hover:bg-white/[0.12] border border-white/20 text-white px-2.5 py-1 rounded-2xl text-xs font-mono font-bold shrink-0 shadow-md transition-all"
-                  title={`${activeDoraName}: 💕 Love Balance | Darsh: 👑 Love Balance (Click either to view passbook)`}
-                >
+                <>
+                  {/* Desktop / Tablet view */}
+                  <div
+                    className="hidden md:flex items-center gap-1.5 backdrop-blur-xl bg-white/[0.08] hover:bg-white/[0.12] border border-white/20 text-white px-2.5 py-1 rounded-2xl text-xs font-mono font-bold shrink-0 shadow-md transition-all"
+                    title={`${activeDoraName}: 💕 Love Balance | Darsh: 👑 Love Balance`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                      className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
+                    >
+                      <span className="text-[10px] text-pink-400/90 font-sans font-semibold">{activeDoraName}:</span>
+                      <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💕'}</span>
+                      <span>{formatLoveBalance(doraNetBalance)}</span>
+                    </button>
+                    <span className="text-white/20">|</span>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveLbTarget('admin'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                      className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(adminNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}
+                    >
+                      <span className="text-[10px] text-blue-400/90 font-sans font-semibold">Darsh:</span>
+                      <span>{Number(adminNetBalance || 0) < 0 ? '💔' : '👑'}</span>
+                      <span>{formatLoveBalance(adminNetBalance)}</span>
+                    </button>
+                  </div>
+
+                  {/* Compact Mobile Pill (fits without overflowing) */}
                   <button
                     type="button"
                     onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                    className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
-                    title={`${activeDoraName}'s Available Balance`}
+                    className="md:hidden flex items-center gap-1 backdrop-blur-md bg-pink-500/15 border border-pink-400/30 text-pink-300 px-2 py-1 rounded-full text-[11px] font-mono font-bold cursor-pointer shrink-0"
+                    title="Tap to view Love Balances & Passbook"
                   >
-                    <span className="text-[10px] text-pink-400/90 font-sans font-semibold">{activeDoraName}:</span>
-                    <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💕'}</span>
+                    <span>💕</span>
                     <span>{formatLoveBalance(doraNetBalance)}</span>
                   </button>
-                  <span className="text-white/20">|</span>
-                  <button
-                    type="button"
-                    onClick={() => { setActiveLbTarget('admin'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                    className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(adminNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}
-                    title="Darsh's Available Balance"
-                  >
-                    <span className="text-[10px] text-blue-400/90 font-sans font-semibold">Darsh:</span>
-                    <span>{Number(adminNetBalance || 0) < 0 ? '💔' : '👑'}</span>
-                    <span>{formatLoveBalance(adminNetBalance)}</span>
-                  </button>
-                </div>
+                </>
               ) : (
                 <button
                   type="button"
                   onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                  className={`flex items-center gap-1 backdrop-blur-xl bg-white/[0.08] hover:bg-white/[0.14] border ${Number(doraNetBalance || 0) < 0 ? 'border-rose-500/60 text-rose-300' : 'border-pink-500/50 text-pink-300'} hover:text-white px-2.5 py-1 rounded-2xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 shadow-md`}
+                  className={`flex items-center gap-1 backdrop-blur-xl bg-white/[0.08] hover:bg-white/[0.14] border ${Number(doraNetBalance || 0) < 0 ? 'border-rose-500/60 text-rose-300' : 'border-pink-500/50 text-pink-300'} hover:text-white px-2 sm:px-2.5 py-1 rounded-full text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 shadow-md`}
                   title="Your Love Balance Passbook & Wish Store"
                 >
                   <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💖'}</span>
@@ -6768,56 +6784,76 @@ export default function App() {
                 </button>
               )}
 
-              {/* COUPLE MINI-GAMES BUTTON (ACCESSIBLE TO BOTH DARSH & DORA) */}
+              {/* COUPLE MINI-GAMES BUTTON */}
               <button
                 type="button"
                 onClick={() => setShowGamesHubModal(true)}
-                className="flex items-center gap-1.5 backdrop-blur-xl bg-gradient-to-r from-purple-900/60 via-indigo-900/60 to-purple-900/60 hover:from-purple-800 hover:to-indigo-800 border border-purple-500/40 text-purple-200 px-2.5 py-1 rounded-2xl text-xs font-bold cursor-pointer transition-all active:scale-95 shadow-md shrink-0"
+                className="flex items-center gap-1 backdrop-blur-xl bg-gradient-to-r from-purple-900/60 via-indigo-900/60 to-purple-900/60 hover:from-purple-800 hover:to-indigo-800 border border-purple-500/40 text-purple-200 px-2 sm:px-2.5 py-1 rounded-full text-xs font-bold cursor-pointer transition-all active:scale-95 shadow-md shrink-0"
                 title="Play Couple Games: Ludo & Tic-Tac-Toe"
               >
-                <Gamepad2 size={14} className="text-amber-400" />
+                <Gamepad2 size={13} className="text-amber-400" />
                 <span className="hidden sm:inline">Games</span>
               </button>
 
+              {/* PHONE CALL: ON MOBILE AND DESKTOP */}
               <button
                 type="button"
                 onClick={handleStartAudioCall}
-                className="p-2 text-white/80 hover:text-emerald-400 backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 rounded-full transition-all cursor-pointer active:scale-95 shadow-sm"
+                className="p-1.5 sm:p-2 text-white/80 hover:text-emerald-400 backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 rounded-full transition-all cursor-pointer active:scale-95 shadow-sm shrink-0"
                 title="WhatsApp Voice Call"
               >
-                <Phone size={17} />
+                <Phone size={15} />
               </button>
 
+              {/* SEARCH: VISIBLE ON SM+ */}
               <button
                 type="button"
                 onClick={() => setShowWpSearch(!showWpSearch)}
-                className="p-2 text-white/80 hover:text-white backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 rounded-full transition-all cursor-pointer active:scale-95 shadow-sm"
+                className="hidden sm:flex p-2 text-white/80 hover:text-white backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 rounded-full transition-all cursor-pointer active:scale-95 shadow-sm shrink-0"
                 title="Search Messages"
               >
-                <Search size={17} />
+                <Search size={16} />
               </button>
 
-              <div className="relative">
+              {/* 3-DOT MORE MENU */}
+              <div className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowWpMenu(!showWpMenu)}
-                  className="p-2 text-white/80 hover:text-white backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 rounded-full transition-all cursor-pointer active:scale-95 shadow-sm"
+                  className="p-1.5 sm:p-2 text-white/80 hover:text-white backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 rounded-full transition-all cursor-pointer active:scale-95 shadow-sm"
                   title="Menu"
                 >
-                  <MoreVertical size={17} />
+                  <MoreVertical size={16} />
                 </button>
 
                 {showWpMenu && (
                   <div 
-                    className="absolute right-0 top-11 backdrop-blur-2xl bg-black/75 border border-white/20 rounded-2xl shadow-2xl py-2 w-48 z-50 text-xs text-gray-200 font-medium animate-in fade-in zoom-in-95 duration-150"
+                    className="absolute right-0 top-11 backdrop-blur-2xl bg-black/90 border border-white/20 rounded-2xl shadow-2xl py-2 w-52 z-50 text-xs text-gray-200 font-medium animate-in fade-in zoom-in-95 duration-150"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button 
                       type="button"
-                      onClick={() => { setShowWpSearch(true); setShowWpMenu(false); }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-white/10 transition-colors"
+                      onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); setShowWpMenu(false); }}
+                      className="w-full text-left px-4 py-2 hover:bg-white/10 transition-colors flex items-center justify-between text-pink-300 font-bold"
                     >
-                      Search in chat
+                      <span>💖 Love Passbook</span>
+                      <span className="font-mono text-[11px]">{formatLoveBalance(doraNetBalance)}</span>
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => { setShowGamesHubModal(true); setShowWpMenu(false); }}
+                      className="w-full text-left px-4 py-2 hover:bg-white/10 transition-colors flex items-center gap-2 text-purple-300"
+                    >
+                      <Gamepad2 size={13} className="text-amber-400" />
+                      <span>Couple Games (Ludo & XO)</span>
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => { setShowWpSearch(true); setShowWpMenu(false); }}
+                      className="w-full text-left px-4 py-2 hover:bg-white/10 transition-colors flex items-center gap-2"
+                    >
+                      <Search size={13} />
+                      <span>Search in chat</span>
                     </button>
                     <button 
                       type="button"
@@ -6825,7 +6861,7 @@ export default function App() {
                         setFilterStarredOnly(!filterStarredOnly); 
                         setShowWpMenu(false); 
                       }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-white/10 text-amber-300 transition-colors flex items-center justify-between"
+                      className="w-full text-left px-4 py-2 hover:bg-white/10 text-amber-300 transition-colors flex items-center justify-between"
                     >
                       <span>{filterStarredOnly ? 'Show All Messages' : 'Starred Messages'}</span>
                       <Star size={13} className="text-amber-400 fill-amber-400" />
@@ -6834,7 +6870,7 @@ export default function App() {
                       <button 
                         type="button"
                         onClick={() => { downloadFullChatPDF(); setShowWpMenu(false); }}
-                        className="w-full text-left px-4 py-2.5 hover:bg-white/10 transition-colors"
+                        className="w-full text-left px-4 py-2 hover:bg-white/10 transition-colors"
                       >
                         Export chat PDF
                       </button>
@@ -6845,7 +6881,7 @@ export default function App() {
                         setStealthMessages([]); 
                         setShowWpMenu(false); 
                       }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-white/10 text-rose-400 transition-colors"
+                      className="w-full text-left px-4 py-2 hover:bg-white/10 text-rose-400 transition-colors"
                     >
                       Clear chat
                     </button>
@@ -6853,7 +6889,7 @@ export default function App() {
                     <button 
                       type="button"
                       onClick={() => { setIsWhatsAppView(false); setShowWpMenu(false); }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-white/10 text-amber-300 font-bold transition-colors"
+                      className="w-full text-left px-4 py-2 hover:bg-white/10 text-amber-300 font-bold transition-colors"
                     >
                       Exit WhatsApp View
                     </button>
@@ -6861,10 +6897,11 @@ export default function App() {
                 )}
               </div>
 
+              {/* EXIT WP BUTTON: HIDDEN ON MOBILE (ACCESSIBLE VIA ARROWLEFT AND MENU), VISIBLE ON SM+ */}
               <button 
                 type="button"
                 onClick={() => setIsWhatsAppView(false)}
-                className="backdrop-blur-md bg-white/10 hover:bg-white/20 text-[#e9edef] hover:text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer border border-white/20 transition-all active:scale-95 shadow"
+                className="hidden sm:inline-flex backdrop-blur-md bg-white/10 hover:bg-white/20 text-[#e9edef] hover:text-white text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer border border-white/20 transition-all active:scale-95 shadow shrink-0"
               >
                 Exit WP
               </button>
@@ -7076,11 +7113,15 @@ export default function App() {
                             handleStartReply(activeSwipeMsgIdRef.current);
                           }
                         }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setActiveReactionMsgId(activeReactionMsgId === m._id ? null : m._id);
+                        }}
                         onDoubleClick={(e) => {
                           e.stopPropagation();
                           handleDoubleTapToLike(m._id);
                         }}
-                        title="Double-tap to like ❤️ • Swipe right to reply"
+                        title="Double-tap to like ❤️ • Swipe right to reply • Click ⋯ for actions"
                         className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-3.5 py-2.5 shadow-md relative cursor-pointer text-[14.5px] leading-relaxed transition-all ${
                           isMine 
                             ? 'backdrop-blur-2xl bg-gradient-to-br from-emerald-600/35 via-emerald-600/25 to-teal-700/35 border border-emerald-400/35 text-white shadow-[0_8px_25px_rgba(16,185,129,0.2)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.25)] rounded-tr-none' 
@@ -7151,10 +7192,10 @@ export default function App() {
                           <p className="break-words select-text">{cleanBody}</p>
                         )}
 
-                        {/* REACTION POPUP TRAY ON RIGHT-CLICK OR ACTION - IOS LIQUID GLASS */}
+                        {/* REACTION & ACTIONS POPUP TRAY - IOS LIQUID GLASS */}
                         {isReactionOpen && (
                           <div 
-                            className="absolute -top-11 left-0 z-30 backdrop-blur-2xl bg-black/80 border border-white/25 px-3 py-1.5 rounded-full shadow-2xl flex items-center gap-2 animate-in zoom-in-95 duration-100"
+                            className="absolute -top-12 left-0 z-30 backdrop-blur-2xl bg-black/90 border border-white/25 px-2.5 py-1.5 rounded-full shadow-2xl flex items-center gap-1.5 animate-in zoom-in-95 duration-100"
                             onClick={(e) => e.stopPropagation()}
                           >
                             {["👍", "❤️", "😂", "😮", "🙏", "➕"].map((emoji, eIdx) => (
@@ -7181,10 +7222,13 @@ export default function App() {
                                 handleTogglePinMessage(m._id, !m.isPinned);
                                 setActiveReactionMsgId(null);
                               }}
-                              className="text-sm p-0.5 hover:scale-125 transition-transform cursor-pointer"
+                              className={`text-xs px-2 py-0.5 rounded-lg hover:scale-110 transition-transform cursor-pointer flex items-center gap-1 ${
+                                m.isPinned ? 'bg-emerald-500/30 text-emerald-300 font-bold' : 'text-gray-300 hover:text-white'
+                              }`}
                               title={m.isPinned ? "Unpin message" : "Pin message"}
                             >
-                              📌
+                              <Pin size={11} className={m.isPinned ? "text-emerald-400 rotate-45" : ""} />
+                              <span>{m.isPinned ? 'Unpin' : 'Pin'}</span>
                             </button>
                             <button
                               type="button"
@@ -7192,10 +7236,25 @@ export default function App() {
                                 handleToggleStarMessage(m._id, !m.isStarred);
                                 setActiveReactionMsgId(null);
                               }}
-                              className="text-sm p-0.5 hover:scale-125 transition-transform cursor-pointer"
+                              className={`text-xs px-2 py-0.5 rounded-lg hover:scale-110 transition-transform cursor-pointer flex items-center gap-1 ${
+                                m.isStarred ? 'bg-amber-500/30 text-amber-300 font-bold' : 'text-gray-300 hover:text-white'
+                              }`}
                               title={m.isStarred ? "Unstar message" : "Star message"}
                             >
-                              ⭐
+                              <Star size={11} className={m.isStarred ? "text-amber-400 fill-amber-400" : ""} />
+                              <span>{m.isStarred ? 'Unstar' : 'Star'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleStartReply(m);
+                                setActiveReactionMsgId(null);
+                              }}
+                              className="text-xs px-2 py-0.5 rounded-lg hover:scale-110 text-gray-300 hover:text-white transition-transform cursor-pointer flex items-center gap-1"
+                              title="Reply"
+                            >
+                              <CornerUpLeft size={11} />
+                              <span>Reply</span>
                             </button>
                           </div>
                         )}
@@ -7296,6 +7355,17 @@ export default function App() {
                                 <Check size={14} className="text-gray-400" title="Sent" />
                               )
                             )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveReactionMsgId(activeReactionMsgId === m._id ? null : m._id);
+                              }}
+                              className="opacity-70 hover:opacity-100 p-0.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-opacity cursor-pointer shrink-0 ml-0.5"
+                              title="Reaction, Pin & Star Menu"
+                            >
+                              <MoreHorizontal size={13} />
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -7401,40 +7471,26 @@ export default function App() {
                   <Send size={16} className="translate-x-0.5" />
                 </button>
               ) : (
-                <button 
-                  type="button"
-                  onClick={() => {
-                    if (bottomInputMode === 'mic') {
-                      setBottomInputMode('camera');
-                    } else {
-                      setBottomInputMode('mic');
-                    }
-                  }}
-                  className={`w-10 h-10 rounded-full backdrop-blur-md border flex items-center justify-center cursor-pointer transition-all active:scale-90 shrink-0 shadow-sm ${
-                    bottomInputMode === 'camera'
-                      ? 'bg-purple-600/60 hover:bg-purple-500/80 border-purple-400/50 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
-                      : 'bg-emerald-600/40 hover:bg-emerald-500/60 border-emerald-400/40 text-emerald-300 hover:text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]'
-                  }`}
-                  title={bottomInputMode === 'mic' ? 'Tap to switch to Video Note / Click to Record Voice Note' : 'Tap to switch to Voice Note / Click to Record Video Note'}
-                >
-                  {bottomInputMode === 'mic' ? (
-                    <Mic 
-                      size={18} 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleStartVoiceNoteRecording();
-                      }} 
-                    />
-                  ) : (
-                    <Camera 
-                      size={18} 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowCircularVideoNoteModal(true);
-                      }} 
-                    />
-                  )}
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* VOICE NOTE RECORD BUTTON */}
+                  <button 
+                    type="button"
+                    onClick={handleStartVoiceNoteRecording}
+                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-full backdrop-blur-md bg-emerald-600/40 hover:bg-emerald-500/60 border border-emerald-400/40 text-emerald-300 hover:text-white flex items-center justify-center cursor-pointer transition-all active:scale-90 shadow-sm"
+                    title="Click to Record Voice Note"
+                  >
+                    <Mic size={18} />
+                  </button>
+                  {/* CIRCULAR VIDEO NOTE BUTTON */}
+                  <button 
+                    type="button"
+                    onClick={() => setShowCircularVideoNoteModal(true)}
+                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-full backdrop-blur-md bg-purple-600/40 hover:bg-purple-500/60 border border-purple-400/40 text-purple-200 hover:text-white flex items-center justify-center cursor-pointer transition-all active:scale-90 shadow-sm"
+                    title="Click to Record 60s Circular Video Note"
+                  >
+                    <Camera size={18} />
+                  </button>
+                </div>
               )}
             </form>
           )}

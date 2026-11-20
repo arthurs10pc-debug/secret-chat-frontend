@@ -18,37 +18,32 @@ export default function CoupleMiniGameModal({
   gameState,
   onAction
 }) {
-  const [board, setBoard] = useState(gameState?.board || Array(9).fill(null));
-  const [turn, setTurn] = useState(gameState?.turn || 'H'); // 'H' (Darsh) or 'A' (Dora)
-  const [betAmount, setBetAmount] = useState(gameState?.betAmount ?? 2.0); // ₹2.00 or ₹5.00
-  const [gameStatus, setGameStatus] = useState(gameState?.gameStatus || 'PLAYING'); // 'PLAYING' | 'WON' | 'DRAW'
-  const [winner, setWinner] = useState(gameState?.winner || null); // 'H' | 'A' | null
-  const [scores, setScores] = useState(gameState?.scores || { H: 0, A: 0 });
+  const board = gameState?.board || Array(9).fill(null);
+  const turn = gameState?.turn || 'H'; // 'H' (Darsh) or 'A' (Dora)
+  const betAmount = gameState?.betAmount ?? 2.0; // ₹2.00 or ₹5.00
+  const winner = gameState?.winner || null; // 'H' | 'A' | null
+  const isDraw = Boolean(gameState?.isDraw);
+  const scores = gameState?.scores || { H: 0, A: 0 };
+  const gameStatus = winner ? 'WON' : (isDraw ? 'DRAW' : 'PLAYING');
 
   const isCurrentAdmin = (role === 'parent' || role === 'admin');
   const mySymbol = isCurrentAdmin ? 'H' : 'A';
   const myLabel = isCurrentAdmin ? 'Darsh' : activeDoraName;
   const oppLabel = isCurrentAdmin ? activeDoraName : 'Darsh';
 
-  // Sync state from root App.js gameState prop instantly
+  // Request live server state whenever modal opens or socket reconnects
   useEffect(() => {
-    if (gameState) {
-      if (gameState.board) setBoard([...gameState.board]);
-      if (gameState.turn) setTurn(gameState.turn);
-      if (gameState.betAmount !== undefined) setBetAmount(gameState.betAmount);
-      if (gameState.scores) setScores(gameState.scores);
-      if (gameState.winner) {
-        setWinner(gameState.winner);
-        setGameStatus('WON');
-      } else if (gameState.isDraw) {
-        setWinner(null);
-        setGameStatus('DRAW');
-      } else {
-        setWinner(null);
-        setGameStatus('PLAYING');
-      }
+    if (isOpen && socketRef?.current) {
+      socketRef.current.emit('couple_game_get_state', { gameId: 'tictactoe' });
     }
-  }, [gameState]);
+  }, [isOpen, socketRef]);
+
+  // Confetti when winning
+  useEffect(() => {
+    if (winner === mySymbol) {
+      try { confetti({ particleCount: 80, spread: 70 }); } catch (e) {}
+    }
+  }, [winner, mySymbol]);
 
   const checkWinner = (squares) => {
     for (const combo of WINNING_COMBINATIONS) {
@@ -63,89 +58,18 @@ export default function CoupleMiniGameModal({
     return null;
   };
 
-  // Request live server state whenever modal opens or socket reconnects
-  useEffect(() => {
-    const socket = socketRef?.current;
-    if (!socket || !isOpen) return;
-
-    socket.emit('couple_game_get_state', { gameId: 'tictactoe' });
-
-    const handleStateSync = ({ gameId, state }) => {
-      if (gameId !== 'tictactoe' || !state) return;
-      if (state.board) setBoard([...state.board]);
-      if (state.turn) setTurn(state.turn);
-      if (state.betAmount !== undefined) setBetAmount(state.betAmount);
-      if (state.scores) setScores(state.scores);
-      if (state.winner) {
-        setWinner(state.winner);
-        setGameStatus('WON');
-      } else if (state.isDraw) {
-        setGameStatus('DRAW');
-      } else {
-        setWinner(null);
-        setGameStatus('PLAYING');
-      }
-    };
-
-    const handleGameBroadcast = (data) => {
-      if (!data) return;
-      const targetGame = data.gameId || (data.board ? 'tictactoe' : 'ludo');
-      if (targetGame !== 'tictactoe') return;
-      const state = data.state || data;
-      if (state.board) setBoard([...state.board]);
-      if (state.turn) setTurn(state.turn);
-      if (state.betAmount !== undefined) setBetAmount(state.betAmount);
-      if (state.scores) setScores(state.scores);
-
-      if (state.winner) {
-        setWinner(state.winner);
-        setGameStatus('WON');
-        if (state.winner === mySymbol) {
-          try { confetti({ particleCount: 80, spread: 70 }); } catch (e) {}
-        }
-      } else if (state.isDraw) {
-        setWinner(null);
-        setGameStatus('DRAW');
-      } else if (data.type === 'RESET') {
-        setBoard(Array(9).fill(null));
-        setTurn('H');
-        setWinner(null);
-        setGameStatus('PLAYING');
-      } else {
-        setWinner(null);
-        setGameStatus('PLAYING');
-      }
-    };
-
-    socket.on('couple_game_state_sync', handleStateSync);
-    socket.on('couple_game_broadcast', handleGameBroadcast);
-    socket.on('arcade_game_action_broadcast', handleGameBroadcast);
-
-    return () => {
-      socket.off('couple_game_state_sync', handleStateSync);
-      socket.off('couple_game_broadcast', handleGameBroadcast);
-      socket.off('arcade_game_action_broadcast', handleGameBroadcast);
-    };
-  }, [socketRef, isOpen, mySymbol]);
-
   const handleSquareClick = (index) => {
     if (board[index] || gameStatus !== 'PLAYING') return;
     if (turn !== mySymbol) return; // Only allow clicking when it's your turn
 
     const newBoard = [...board];
     newBoard[index] = mySymbol;
-    setBoard(newBoard);
 
     const winResult = checkWinner(newBoard);
     const nextTurn = turn === 'H' ? 'A' : 'H';
 
     let actionPayload;
     if (winResult && winResult !== 'DRAW') {
-      setWinner(winResult);
-      setGameStatus('WON');
-      setScores(prev => ({ ...prev, [winResult]: prev[winResult] + 1 }));
-      try { confetti({ particleCount: 90, spread: 80 }); } catch (e) {}
-
       actionPayload = {
         type: 'MATCH_FINISH',
         gameId: 'tictactoe',
@@ -153,10 +77,10 @@ export default function CoupleMiniGameModal({
         board: newBoard,
         turn: nextTurn,
         winner: winResult,
-        isDraw: false
+        isDraw: false,
+        scores: { ...scores, [winResult]: (scores[winResult] || 0) + 1 }
       };
     } else if (winResult === 'DRAW') {
-      setGameStatus('DRAW');
       actionPayload = {
         type: 'MATCH_FINISH',
         gameId: 'tictactoe',
@@ -164,16 +88,17 @@ export default function CoupleMiniGameModal({
         board: newBoard,
         turn: nextTurn,
         winner: null,
-        isDraw: true
+        isDraw: true,
+        scores
       };
     } else {
-      setTurn(nextTurn);
       actionPayload = {
         type: 'MOVE',
         gameId: 'tictactoe',
         betAmount,
         board: newBoard,
-        turn: nextTurn
+        turn: nextTurn,
+        scores
       };
     }
 
@@ -188,11 +113,13 @@ export default function CoupleMiniGameModal({
 
   const handleSelectBet = (amt) => {
     if (gameStatus !== 'PLAYING' || board.some(s => s !== null)) return;
-    setBetAmount(amt);
     const payload = {
       type: 'BET_CHANGE',
       gameId: 'tictactoe',
-      betAmount: amt
+      betAmount: amt,
+      board,
+      turn,
+      scores
     };
     if (onAction) {
       onAction(payload);
@@ -205,17 +132,15 @@ export default function CoupleMiniGameModal({
 
   const handleResetGame = () => {
     const freshBoard = Array(9).fill(null);
-    setBoard(freshBoard);
-    setWinner(null);
-    setGameStatus('PLAYING');
-    setTurn('H');
-
     const payload = {
       type: 'RESET',
       gameId: 'tictactoe',
       betAmount,
       board: freshBoard,
-      turn: 'H'
+      turn: 'H',
+      winner: null,
+      isDraw: false,
+      scores
     };
     if (onAction) {
       onAction(payload);
