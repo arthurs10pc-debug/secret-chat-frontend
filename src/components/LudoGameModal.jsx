@@ -1,9 +1,112 @@
 import React, { useState, useEffect } from 'react';
-import { X, Trophy, RotateCcw, Share2, Sparkles, Coins } from 'lucide-react';
+import { X, Trophy, RotateCcw, Share2, Sparkles, ShieldCheck } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-// 8 Standard Star Safe Tile Indices on 52-tile common circuit
-export const SAFE_TILE_INDICES = [0, 9, 13, 22, 26, 35, 39, 48];
+// --- AUTHENTIC 15x15 LUDO BOARD COORDINATES ---
+// Common track: 52 tiles (0 to 51)
+export const COMMON_TRACK = [
+  { r: 6, c: 1 },  // 0: Red Start (Safe Star)
+  { r: 6, c: 2 },  // 1
+  { r: 6, c: 3 },  // 2
+  { r: 6, c: 4 },  // 3
+  { r: 6, c: 5 },  // 4
+  { r: 5, c: 6 },  // 5
+  { r: 4, c: 6 },  // 6
+  { r: 3, c: 6 },  // 7
+  { r: 2, c: 6 },  // 8
+  { r: 1, c: 6 },  // 9: Safe Star
+  { r: 0, c: 6 },  // 10
+  { r: 0, c: 7 },  // 11
+  { r: 0, c: 8 },  // 12
+  { r: 1, c: 8 },  // 13: Green Start (Safe Star)
+  { r: 2, c: 8 },  // 14
+  { r: 3, c: 8 },  // 15
+  { r: 4, c: 8 },  // 16
+  { r: 5, c: 8 },  // 17
+  { r: 6, c: 9 },  // 18
+  { r: 6, c: 10 }, // 19
+  { r: 6, c: 11 }, // 20
+  { r: 6, c: 12 }, // 21
+  { r: 6, c: 13 }, // 22: Safe Star
+  { r: 6, c: 14 }, // 23
+  { r: 7, c: 14 }, // 24
+  { r: 8, c: 14 }, // 25
+  { r: 8, c: 13 }, // 26: Yellow Start (Safe Star)
+  { r: 8, c: 12 }, // 27
+  { r: 8, c: 11 }, // 28
+  { r: 8, c: 10 }, // 29
+  { r: 8, c: 9 },  // 30
+  { r: 9, c: 8 },  // 31
+  { r: 10, c: 8 }, // 32
+  { r: 11, c: 8 }, // 33
+  { r: 12, c: 8 }, // 34
+  { r: 13, c: 8 }, // 35: Safe Star
+  { r: 14, c: 8 }, // 36
+  { r: 14, c: 7 }, // 37
+  { r: 14, c: 6 }, // 38
+  { r: 13, c: 6 }, // 39: Blue Start (Safe Star)
+  { r: 12, c: 6 }, // 40
+  { r: 11, c: 6 }, // 41
+  { r: 10, c: 6 }, // 42
+  { r: 9, c: 6 },  // 43
+  { r: 8, c: 5 },  // 44
+  { r: 8, c: 4 },  // 45
+  { r: 8, c: 3 },  // 46
+  { r: 8, c: 2 },  // 47
+  { r: 8, c: 1 },  // 48: Safe Star
+  { r: 8, c: 0 },  // 49
+  { r: 7, c: 0 },  // 50
+  { r: 6, c: 0 }   // 51
+];
+
+// 8 Standard Star Safe Cells on 15x15 board
+export const SAFE_COORDS = [
+  { r: 6, c: 1 },  // Red Start
+  { r: 1, c: 6 },
+  { r: 1, c: 8 },  // Green Start
+  { r: 6, c: 13 },
+  { r: 8, c: 13 }, // Yellow Start
+  { r: 13, c: 8 },
+  { r: 13, c: 6 }, // Blue Start
+  { r: 8, c: 1 }
+];
+
+export const isCellSafe = (r, c) => {
+  return SAFE_COORDS.some(coord => coord.r === r && coord.c === c);
+};
+
+// Home Runways (5 tiles each)
+export const RED_RUNWAY = [
+  { r: 7, c: 1 },
+  { r: 7, c: 2 },
+  { r: 7, c: 3 },
+  { r: 7, c: 4 },
+  { r: 7, c: 5 }
+];
+
+export const GREEN_RUNWAY = [
+  { r: 1, c: 7 },
+  { r: 2, c: 7 },
+  { r: 3, c: 7 },
+  { r: 4, c: 7 },
+  { r: 5, c: 7 }
+];
+
+export const YELLOW_RUNWAY = [
+  { r: 7, c: 13 },
+  { r: 7, c: 12 },
+  { r: 7, c: 11 },
+  { r: 7, c: 10 },
+  { r: 7, c: 9 }
+];
+
+export const BLUE_RUNWAY = [
+  { r: 13, c: 7 },
+  { r: 12, c: 7 },
+  { r: 11, c: 7 },
+  { r: 10, c: 7 },
+  { r: 9, c: 7 }
+];
 
 // Sound synthesizer using Web Audio API
 const playAudioEffect = (type) => {
@@ -113,12 +216,11 @@ export default function LudoGameModal({
     const socket = socketRef?.current;
     if (!socket || !isOpen) return;
 
-    // 1. Immediately request live state from server
     socket.emit('couple_game_get_state', { gameId: 'ludo' });
 
     const handleStateSync = ({ gameId, state }) => {
       if (gameId !== 'ludo' || !state) return;
-      if (state.tokens) setTokens(state.tokens);
+      if (state.tokens) setTokens({ H: [...state.tokens.H], A: [...state.tokens.A] });
       if (state.turn) setTurn(state.turn);
       if (state.dice !== undefined) setDiceVal(state.dice);
       if (state.statusMsg) setStatusMsg(state.statusMsg);
@@ -128,9 +230,11 @@ export default function LudoGameModal({
     };
 
     const handleBroadcast = (data) => {
-      if (!data || data.gameId !== 'ludo') return;
+      if (!data) return;
+      const targetGame = data.gameId || (data.tokens ? 'ludo' : 'tictactoe');
+      if (targetGame !== 'ludo') return;
       const state = data.state || data;
-      if (state.tokens) setTokens(state.tokens);
+      if (state.tokens) setTokens({ H: [...state.tokens.H], A: [...state.tokens.A] });
       if (state.turn) setTurn(state.turn);
       if (state.dice !== undefined) setDiceVal(state.dice);
       if (state.statusMsg) setStatusMsg(state.statusMsg);
@@ -169,6 +273,15 @@ export default function LudoGameModal({
       }
     });
     return list;
+  };
+
+  // Helper to emit action to backend and parent
+  const emitGameAction = (actionPayload) => {
+    if (onAction) onAction(actionPayload);
+    if (socketRef?.current) {
+      socketRef.current.emit('couple_game_action', actionPayload);
+      socketRef.current.emit('arcade_game_action', actionPayload);
+    }
   };
 
   // Roll the dice
@@ -242,7 +355,10 @@ export default function LudoGameModal({
     // Check Capture on common track (0 <= pos <= 50)
     if (newPos >= 0 && newPos <= 50) {
       const globalTile = player === 'H' ? newPos : (13 + newPos) % 52;
-      const isSafe = SAFE_TILE_INDICES.includes(globalTile);
+      const isSafe = SAFE_COORDS.some(coord => {
+        const trackCoord = COMMON_TRACK[globalTile];
+        return trackCoord && coord.r === trackCoord.r && coord.c === trackCoord.c;
+      });
 
       if (!isSafe) {
         const opponent = player === 'H' ? 'A' : 'H';
@@ -303,45 +419,37 @@ export default function LudoGameModal({
       turn: nextTurn,
       dice: roll,
       statusMsg: actionText,
-      scores: newScores,
       winner: winDeclared,
+      scores: newScores,
       betAmount
     });
   };
 
-  const emitGameAction = (payload) => {
-    if (onAction) {
-      onAction(payload);
-    }
-    if (socketRef?.current) {
-      socketRef.current.emit('couple_game_action', payload);
-      socketRef.current.emit('arcade_game_action', payload);
-    }
-  };
-
+  // Reset match
   const handleResetGame = () => {
-    const initTokens = { H: [-1, -1, -1, -1], A: [-1, -1, -1, -1] };
-    setTokens(initTokens);
+    const freshTokens = { H: [-1, -1, -1, -1], A: [-1, -1, -1, -1] };
+    setTokens(freshTokens);
     setTurn('H');
     setDiceVal(6);
     setWinner(null);
     setMovableTokens([]);
-    const resetText = 'Match reset! Darsh rolls first.';
-    setStatusMsg(resetText);
+    const resetMsg = 'Match reset! Darsh rolls first.';
+    setStatusMsg(resetMsg);
 
     emitGameAction({
       type: 'RESET',
       gameId: 'ludo',
-      tokens: initTokens,
+      tokens: freshTokens,
       turn: 'H',
       dice: 6,
-      statusMsg: resetText,
+      statusMsg: resetMsg,
       winner: null,
-      betAmount
+      scores
     });
   };
 
   const handleSelectBet = (amt) => {
+    if (winner || tokens.H.some(p => p !== -1) || tokens.A.some(p => p !== -1)) return;
     setBetAmount(amt);
     emitGameAction({
       type: 'BET_CHANGE',
@@ -381,7 +489,7 @@ export default function LudoGameModal({
 
     return (
       <div 
-        className={`w-13 h-13 sm:w-15 sm:h-15 rounded-2xl bg-gradient-to-br from-white via-slate-100 to-slate-200 border-2 border-slate-300 shadow-xl p-2 relative select-none flex items-center justify-center transition-all ${
+        className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-white via-slate-100 to-slate-200 border-2 border-slate-300 shadow-xl p-2 relative select-none flex items-center justify-center transition-all ${
           isRollingNow ? 'animate-spin scale-110' : ''
         } ${activeGlow ? 'ring-4 ring-amber-400 shadow-[0_0_20px_#f59e0b] scale-105' : 'opacity-80'}`}
       >
@@ -391,7 +499,7 @@ export default function LudoGameModal({
             return (
               <div key={pos} className="w-full h-full flex items-center justify-center">
                 {hasDot && (
-                  <div className={`w-2.5 h-2.5 rounded-full shadow-inner ${
+                  <div className={`w-2 h-2 rounded-full shadow-inner ${
                     isRed ? 'bg-red-600' : 'bg-emerald-600'
                   }`} />
                 )}
@@ -403,103 +511,60 @@ export default function LudoGameModal({
     );
   };
 
-  // Find tokens on a common track tile (0..51)
-  const getTokensOnCommonTile = (globalTile) => {
-    const res = [];
+  // Find all tokens present at cell coordinate (r, c)
+  const getTokensAtCell = (r, c) => {
+    const found = [];
     tokens.H.forEach((pos, idx) => {
-      if (pos >= 0 && pos <= 50 && pos === globalTile) {
-        res.push({ player: 'H', idx });
+      if (pos >= 0 && pos <= 50) {
+        const coord = COMMON_TRACK[pos];
+        if (coord && coord.r === r && coord.c === c) {
+          found.push({ player: 'H', idx });
+        }
+      } else if (pos >= 51 && pos <= 55) {
+        const coord = RED_RUNWAY[pos - 51];
+        if (coord && coord.r === r && coord.c === c) {
+          found.push({ player: 'H', idx });
+        }
       }
     });
+
     tokens.A.forEach((pos, idx) => {
-      if (pos >= 0 && pos <= 50 && ((13 + pos) % 52) === globalTile) {
-        res.push({ player: 'A', idx });
+      if (pos >= 0 && pos <= 50) {
+        const coord = COMMON_TRACK[(13 + pos) % 52];
+        if (coord && coord.r === r && coord.c === c) {
+          found.push({ player: 'A', idx });
+        }
+      } else if (pos >= 51 && pos <= 55) {
+        const coord = GREEN_RUNWAY[pos - 51];
+        if (coord && coord.r === r && coord.c === c) {
+          found.push({ player: 'A', idx });
+        }
       }
     });
-    return res;
+
+    return found;
   };
 
-  // Find tokens on Home Runway (1..5)
-  const getTokensOnRunway = (player, runwayStep) => {
-    const res = [];
-    tokens[player].forEach((pos, idx) => {
-      if (pos === 50 + runwayStep) {
-        res.push({ player, idx });
+  // Build the list of track/runway cells (excluding the 4 yards and center home)
+  // Yards: (0..5, 0..5), (0..5, 9..14), (9..14, 0..5), (9..14, 9..14)
+  // Home: (6..8, 6..8)
+  const isYardOrHome = (r, c) => {
+    if (r < 6 && c < 6) return true; // Red Yard
+    if (r < 6 && c > 8) return true; // Green Yard
+    if (r > 8 && c < 6) return true; // Blue Yard
+    if (r > 8 && c > 8) return true; // Yellow Yard
+    if (r >= 6 && r <= 8 && c >= 6 && c <= 8) return true; // Center Home
+    return false;
+  };
+
+  const trackCells = [];
+  for (let r = 0; r < 15; r++) {
+    for (let c = 0; c < 15; c++) {
+      if (!isYardOrHome(r, c)) {
+        trackCells.push({ r, c });
       }
-    });
-    return res;
-  };
-
-  // Helper to render track tile
-  const renderTile = (globalIndex, label = '', isSafe = false, bgClass = 'bg-white', customContent = null) => {
-    const isStar = isSafe || SAFE_TILE_INDICES.includes(globalIndex);
-    const cellTokens = (globalIndex !== null && globalIndex !== undefined) ? getTokensOnCommonTile(globalIndex) : [];
-
-    return (
-      <div 
-        key={`tile_${globalIndex}_${label}`}
-        className={`border-[0.5px] border-slate-300 relative flex items-center justify-center w-full h-full ${bgClass}`}
-      >
-        {isStar && !cellTokens.length && !customContent && (
-          <span className="text-[10px] sm:text-xs font-black text-amber-500 select-none">★</span>
-        )}
-        {customContent}
-        {cellTokens.map((tok) => {
-          const isMovable = movableTokens.includes(tok.idx) && turn === tok.player;
-          return (
-            <div
-              key={`${tok.player}_${tok.idx}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (isMovable && isMyTurn) executeMove(tok.player, tok.idx, diceVal);
-              }}
-              className={`w-4.5 h-4.5 sm:w-5.5 sm:h-5.5 rounded-full flex items-center justify-center text-[8px] sm:text-[9px] font-black shadow-md border-2 border-white transition-all z-20 ${
-                tok.player === 'H' 
-                  ? 'bg-gradient-to-br from-red-500 to-red-700 text-white' 
-                  : 'bg-gradient-to-br from-emerald-500 to-emerald-700 text-white'
-              } ${isMovable ? 'cursor-pointer scale-125 ring-4 ring-amber-400 animate-bounce' : ''}`}
-            >
-              {tok.player === 'H' ? 'H' : 'A'}{tok.idx + 1}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  // Helper to render runway tile
-  const renderRunwayTile = (player, stepNum, bgClass) => {
-    const cellTokens = getTokensOnRunway(player, stepNum);
-    return (
-      <div 
-        key={`runway_${player}_${stepNum}`}
-        className={`border-[0.5px] border-slate-300 relative flex items-center justify-center w-full h-full ${bgClass}`}
-      >
-        {!cellTokens.length && (
-          <span className="text-[8px] font-bold text-white/80 select-none">{player === 'H' ? '➔' : '⬇'}</span>
-        )}
-        {cellTokens.map((tok) => {
-          const isMovable = movableTokens.includes(tok.idx) && turn === tok.player;
-          return (
-            <div
-              key={`${tok.player}_${tok.idx}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (isMovable && isMyTurn) executeMove(tok.player, tok.idx, diceVal);
-              }}
-              className={`w-4.5 h-4.5 sm:w-5.5 sm:h-5.5 rounded-full flex items-center justify-center text-[8px] sm:text-[9px] font-black shadow-md border-2 border-white transition-all z-20 ${
-                tok.player === 'H' 
-                  ? 'bg-gradient-to-br from-red-500 to-red-700 text-white' 
-                  : 'bg-gradient-to-br from-emerald-500 to-emerald-700 text-white'
-              } ${isMovable ? 'cursor-pointer scale-125 ring-4 ring-amber-400 animate-bounce' : ''}`}
-            >
-              {tok.player === 'H' ? 'H' : 'A'}{tok.idx + 1}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-2 sm:p-3 overflow-y-auto font-sans animate-in fade-in duration-200">
@@ -602,13 +667,24 @@ export default function LudoGameModal({
           </div>
         )}
 
-        {/* --- AUTHENTIC 3x3 MACRO GRID STANDARD LUDO BOARD (BULLETPROOF GEOMETRY) --- */}
-        <div className="w-full aspect-square bg-[#0b0f19] border-4 border-amber-500/90 rounded-3xl p-1.5 shadow-[0_15px_40px_rgba(0,0,0,0.9)] grid grid-cols-[2fr_1fr_2fr] grid-rows-[2fr_1fr_2fr] gap-1 select-none relative overflow-hidden">
-          
-          {/* CELL 1 (Top-Left): RED YARD (DARSH) */}
-          <div className={`w-full h-full bg-gradient-to-br from-red-600 via-rose-600 to-red-700 rounded-2xl p-1.5 border-2 border-red-800 shadow-md flex flex-col justify-between ${
-            turn === 'H' ? 'ring-2 ring-red-400 shadow-red-900/50' : ''
-          }`}>
+        {/* --- AUTHENTIC 15x15 LUDO BOARD (INLINE CSS GRID - 100% BULLETPROOF) --- */}
+        <div 
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(15, minmax(0, 1fr))',
+            gridTemplateRows: 'repeat(15, minmax(0, 1fr))',
+            width: '100%',
+            aspectRatio: '1 / 1'
+          }}
+          className="bg-[#0b0f19] border-4 border-amber-500/90 rounded-3xl p-1.5 shadow-[0_15px_40px_rgba(0,0,0,0.9)] select-none relative overflow-hidden gap-[1px]"
+        >
+          {/* 1. TOP-LEFT 6x6: RED YARD (DARSH) */}
+          <div 
+            style={{ gridColumn: '1 / span 6', gridRow: '1 / span 6' }}
+            className={`w-full h-full bg-gradient-to-br from-red-600 via-rose-600 to-red-700 rounded-2xl p-1.5 border-2 border-red-800 shadow-md flex flex-col justify-between ${
+              turn === 'H' ? 'ring-2 ring-red-400 shadow-red-900/50' : ''
+            }`}
+          >
             <div className="flex items-center justify-between text-[10px] font-black text-white px-1">
               <span>RED YARD</span>
               <span>👑 Darsh</span>
@@ -638,38 +714,13 @@ export default function LudoGameModal({
             </div>
           </div>
 
-          {/* CELL 2 (Top-Middle): TOP ARM (3 COLS x 6 ROWS) */}
-          <div className="w-full h-full bg-slate-100 rounded-xl border border-slate-300 p-0.5 grid grid-cols-3 grid-rows-6">
-            {/* Row 0 */}
-            {renderTile(10, '10')}
-            {renderTile(11, '11')}
-            {renderTile(12, '12')}
-            {/* Row 1 */}
-            {renderTile(9, '9', true)}
-            {renderRunwayTile('A', 1, 'bg-emerald-500')}
-            {renderTile(13, '13', true, 'bg-emerald-200', <span className="text-[8px] font-black text-emerald-800">⬇</span>)}
-            {/* Row 2 */}
-            {renderTile(8, '8')}
-            {renderRunwayTile('A', 2, 'bg-emerald-500')}
-            {renderTile(14, '14')}
-            {/* Row 3 */}
-            {renderTile(7, '7')}
-            {renderRunwayTile('A', 3, 'bg-emerald-500')}
-            {renderTile(15, '15')}
-            {/* Row 4 */}
-            {renderTile(6, '6')}
-            {renderRunwayTile('A', 4, 'bg-emerald-500')}
-            {renderTile(16, '16')}
-            {/* Row 5 */}
-            {renderTile(5, '5')}
-            {renderRunwayTile('A', 5, 'bg-emerald-500')}
-            {renderTile(17, '17')}
-          </div>
-
-          {/* CELL 3 (Top-Right): GREEN YARD (DORA) */}
-          <div className={`w-full h-full bg-gradient-to-br from-emerald-600 via-teal-600 to-emerald-700 rounded-2xl p-1.5 border-2 border-emerald-800 shadow-md flex flex-col justify-between ${
-            turn === 'A' ? 'ring-2 ring-emerald-400 shadow-emerald-900/50' : ''
-          }`}>
+          {/* 2. TOP-RIGHT 6x6: GREEN YARD (DORA) */}
+          <div 
+            style={{ gridColumn: '10 / span 6', gridRow: '1 / span 6' }}
+            className={`w-full h-full bg-gradient-to-br from-emerald-600 via-teal-600 to-emerald-700 rounded-2xl p-1.5 border-2 border-emerald-800 shadow-md flex flex-col justify-between ${
+              turn === 'A' ? 'ring-2 ring-emerald-400 shadow-emerald-900/50' : ''
+            }`}
+          >
             <div className="flex items-center justify-between text-[10px] font-black text-white px-1">
               <span>GREEN YARD</span>
               <span>💕 {activeDoraName}</span>
@@ -699,37 +750,41 @@ export default function LudoGameModal({
             </div>
           </div>
 
-          {/* CELL 4 (Middle-Left): LEFT ARM (6 COLS x 3 ROWS) */}
-          <div className="w-full h-full bg-slate-100 rounded-xl border border-slate-300 p-0.5 grid grid-cols-6 grid-rows-3">
-            {/* Row 0 */}
-            {renderTile(51, '51')}
-            {renderTile(0, '0', true, 'bg-red-200', <span className="text-[8px] font-black text-red-800">➔</span>)}
-            {renderTile(1, '1')}
-            {renderTile(2, '2')}
-            {renderTile(3, '3')}
-            {renderTile(4, '4')}
-            {/* Row 1 */}
-            {renderTile(50, '50')}
-            {renderRunwayTile('H', 1, 'bg-red-500')}
-            {renderRunwayTile('H', 2, 'bg-red-500')}
-            {renderRunwayTile('H', 3, 'bg-red-500')}
-            {renderRunwayTile('H', 4, 'bg-red-500')}
-            {renderRunwayTile('H', 5, 'bg-red-500')}
-            {/* Row 2 */}
-            {renderTile(49, '49')}
-            {renderTile(48, '48', true)}
-            {renderTile(47, '47')}
-            {renderTile(46, '46')}
-            {renderTile(45, '45')}
-            {renderTile(44, '44')}
+          {/* 3. BOTTOM-LEFT 6x6: BLUE YARD */}
+          <div 
+            style={{ gridColumn: '1 / span 6', gridRow: '10 / span 6' }}
+            className="w-full h-full bg-gradient-to-br from-blue-600 via-indigo-600 to-blue-700 rounded-2xl p-1.5 border-2 border-blue-800 shadow-md flex flex-col justify-between opacity-80"
+          >
+            <div className="text-[10px] font-black text-white px-1">BLUE YARD</div>
+            <div className="bg-white/95 rounded-xl p-1 h-[78%] grid grid-cols-2 gap-1 place-items-center shadow-inner">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-dashed border-blue-300 bg-blue-50" />
+              ))}
+            </div>
           </div>
 
-          {/* CELL 5 (Center): CENTER HOME (20% x 20%) */}
-          <div className="w-full h-full bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 rounded-xl border-2 border-amber-600 shadow-inner flex flex-col items-center justify-center relative overflow-hidden">
+          {/* 4. BOTTOM-RIGHT 6x6: YELLOW YARD */}
+          <div 
+            style={{ gridColumn: '10 / span 6', gridRow: '10 / span 6' }}
+            className="w-full h-full bg-gradient-to-br from-amber-500 via-yellow-500 to-amber-600 rounded-2xl p-1.5 border-2 border-amber-800 shadow-md flex flex-col justify-between opacity-80"
+          >
+            <div className="text-[10px] font-black text-amber-950 px-1">YELLOW YARD</div>
+            <div className="bg-white/95 rounded-xl p-1 h-[78%] grid grid-cols-2 gap-1 place-items-center shadow-inner">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-dashed border-amber-300 bg-amber-50" />
+              ))}
+            </div>
+          </div>
+
+          {/* 5. CENTER 3x3: HOME TRIANGLE */}
+          <div 
+            style={{ gridColumn: '7 / span 3', gridRow: '7 / span 3' }}
+            className="w-full h-full bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 rounded-xl border-2 border-amber-600 shadow-inner flex flex-col items-center justify-center relative overflow-hidden"
+          >
             <span className="text-xl sm:text-2xl animate-bounce">👑</span>
             <span className="text-[7px] font-black text-amber-950 uppercase tracking-tight">HOME</span>
             
-            {/* Render Home Pawns */}
+            {/* Tokens in Home */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="flex flex-wrap gap-0.5 justify-center max-w-[90%]">
                 {tokens.H.filter(p => p === 56).map((_, i) => (
@@ -746,91 +801,92 @@ export default function LudoGameModal({
             </div>
           </div>
 
-          {/* CELL 6 (Middle-Right): RIGHT ARM (6 COLS x 3 ROWS) */}
-          <div className="w-full h-full bg-slate-100 rounded-xl border border-slate-300 p-0.5 grid grid-cols-6 grid-rows-3">
-            {/* Row 0 */}
-            {renderTile(18, '18')}
-            {renderTile(19, '19')}
-            {renderTile(20, '20')}
-            {renderTile(21, '21')}
-            {renderTile(22, '22', true)}
-            {renderTile(23, '23')}
-            {/* Row 1 */}
-            <div className="border-[0.5px] border-slate-300 bg-amber-400 flex items-center justify-center text-[7px] text-white font-bold">⬅</div>
-            <div className="border-[0.5px] border-slate-300 bg-amber-400 flex items-center justify-center text-[7px] text-white font-bold">⬅</div>
-            <div className="border-[0.5px] border-slate-300 bg-amber-400 flex items-center justify-center text-[7px] text-white font-bold">⬅</div>
-            <div className="border-[0.5px] border-slate-300 bg-amber-400 flex items-center justify-center text-[7px] text-white font-bold">⬅</div>
-            <div className="border-[0.5px] border-slate-300 bg-amber-400 flex items-center justify-center text-[7px] text-white font-bold">⬅</div>
-            {renderTile(24, '24')}
-            {/* Row 2 */}
-            {renderTile(30, '30')}
-            {renderTile(29, '29')}
-            {renderTile(28, '28')}
-            {renderTile(27, '27')}
-            {renderTile(26, '26', true, 'bg-amber-100', <span className="text-[8px] font-black text-amber-800">⬅</span>)}
-            {renderTile(25, '25')}
-          </div>
+          {/* 6. ALL 72 TRACK & RUNWAY CELLS (AT EXACT 15x15 COORDINATES) */}
+          {trackCells.map(({ r, c }) => {
+            const isSafe = isCellSafe(r, c);
+            const isRedStart = (r === 6 && c === 1);
+            const isGreenStart = (r === 1 && c === 8);
+            const isBlueStart = (r === 13 && c === 6);
+            const isYellowStart = (r === 8 && c === 13);
+            
+            const isRedRunway = (r === 7 && c >= 1 && c <= 5);
+            const isGreenRunway = (c === 7 && r >= 1 && r <= 5);
+            const isBlueRunway = (c === 7 && r >= 9 && r <= 13);
+            const isYellowRunway = (r === 7 && c >= 9 && c <= 13);
 
-          {/* CELL 7 (Bottom-Left): BLUE YARD (CLASSIC DECORATIVE) */}
-          <div className="w-full h-full bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-1.5 border-2 border-blue-800 shadow-md flex flex-col justify-between opacity-85">
-            <span className="text-[10px] font-black text-white px-1">BLUE YARD</span>
-            <div className="bg-white/95 rounded-xl p-1 h-[78%] grid grid-cols-2 gap-1 place-items-center">
-              {[0, 1, 2, 3].map(i => (
-                <div key={i} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-dashed border-blue-300 bg-blue-50" />
-              ))}
-            </div>
-          </div>
+            let bgClass = 'bg-white';
+            if (isRedStart || isRedRunway) bgClass = 'bg-red-500';
+            else if (isGreenStart || isGreenRunway) bgClass = 'bg-emerald-500';
+            else if (isBlueStart || isBlueRunway) bgClass = 'bg-blue-500';
+            else if (isYellowStart || isYellowRunway) bgClass = 'bg-amber-400';
 
-          {/* CELL 8 (Bottom-Middle): BOTTOM ARM (3 COLS x 6 ROWS) */}
-          <div className="w-full h-full bg-slate-100 rounded-xl border border-slate-300 p-0.5 grid grid-cols-3 grid-rows-6">
-            {/* Row 0 */}
-            {renderTile(43, '43')}
-            <div className="border-[0.5px] border-slate-300 bg-blue-500 flex items-center justify-center text-[8px] text-white font-bold">⬆</div>
-            {renderTile(31, '31')}
-            {/* Row 1 */}
-            {renderTile(42, '42')}
-            <div className="border-[0.5px] border-slate-300 bg-blue-500 flex items-center justify-center text-[8px] text-white font-bold">⬆</div>
-            {renderTile(32, '32')}
-            {/* Row 2 */}
-            {renderTile(41, '41')}
-            <div className="border-[0.5px] border-slate-300 bg-blue-500 flex items-center justify-center text-[8px] text-white font-bold">⬆</div>
-            {renderTile(33, '33')}
-            {/* Row 3 */}
-            {renderTile(40, '40')}
-            <div className="border-[0.5px] border-slate-300 bg-blue-500 flex items-center justify-center text-[8px] text-white font-bold">⬆</div>
-            {renderTile(34, '34')}
-            {/* Row 4 */}
-            {renderTile(39, '39', true, 'bg-blue-100', <span className="text-[8px] font-black text-blue-800">⬆</span>)}
-            <div className="border-[0.5px] border-slate-300 bg-blue-500 flex items-center justify-center text-[8px] text-white font-bold">⬆</div>
-            {renderTile(35, '35', true)}
-            {/* Row 5 */}
-            {renderTile(38, '38')}
-            {renderTile(37, '37')}
-            {renderTile(36, '36')}
-          </div>
+            const cellTokens = getTokensAtCell(r, c);
 
-          {/* CELL 9 (Bottom-Right): YELLOW YARD (CLASSIC DECORATIVE) */}
-          <div className="w-full h-full bg-gradient-to-br from-amber-500 to-yellow-600 rounded-2xl p-1.5 border-2 border-amber-800 shadow-md flex flex-col justify-between opacity-85">
-            <span className="text-[10px] font-black text-amber-950 px-1">YELLOW YARD</span>
-            <div className="bg-white/95 rounded-xl p-1 h-[78%] grid grid-cols-2 gap-1 place-items-center">
-              {[0, 1, 2, 3].map(i => (
-                <div key={i} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-dashed border-amber-300 bg-amber-50" />
-              ))}
-            </div>
-          </div>
+            return (
+              <div
+                key={`cell_${r}_${c}`}
+                style={{
+                  gridColumn: `${c + 1} / span 1`,
+                  gridRow: `${r + 1} / span 1`
+                }}
+                className={`border-[0.5px] border-slate-300 relative flex items-center justify-center w-full h-full ${bgClass}`}
+              >
+                {/* Safe Star Icon */}
+                {isSafe && !cellTokens.length && (
+                  <span className={`text-[8px] sm:text-[10px] font-black select-none ${
+                    isRedStart || isGreenStart || isBlueStart || isYellowStart ? 'text-white' : 'text-amber-500'
+                  }`}>★</span>
+                )}
 
+                {/* Runway Arrows */}
+                {isRedRunway && !cellTokens.length && (
+                  <span className="text-[7px] font-bold text-white select-none">➔</span>
+                )}
+                {isGreenRunway && !cellTokens.length && (
+                  <span className="text-[7px] font-bold text-white select-none">⬇</span>
+                )}
+                {isBlueRunway && !cellTokens.length && (
+                  <span className="text-[7px] font-bold text-white select-none">⬆</span>
+                )}
+                {isYellowRunway && !cellTokens.length && (
+                  <span className="text-[7px] font-bold text-white select-none">⬅</span>
+                )}
+
+                {/* Render Pawns */}
+                {cellTokens.map((tok) => {
+                  const isMovable = movableTokens.includes(tok.idx) && turn === tok.player;
+                  return (
+                    <div
+                      key={`${tok.player}_${tok.idx}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isMovable && isMyTurn) executeMove(tok.player, tok.idx, diceVal);
+                      }}
+                      className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[7px] sm:text-[8px] font-black shadow-md border-2 border-white transition-all z-20 ${
+                        tok.player === 'H' 
+                          ? 'bg-gradient-to-br from-red-500 to-red-700 text-white' 
+                          : 'bg-gradient-to-br from-emerald-500 to-emerald-700 text-white'
+                      } ${isMovable ? 'cursor-pointer scale-125 ring-4 ring-amber-400 animate-bounce' : ''}`}
+                    >
+                      {tok.player === 'H' ? 'H' : 'A'}{tok.idx + 1}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
 
-        {/* CONTROLS & DICE DECKS FOR DARSH & DORA */}
-        <div className="grid grid-cols-2 gap-2.5 pt-1">
+        {/* CONTROLS & DICE DECK FOR BOTH PLAYERS */}
+        <div className="grid grid-cols-2 gap-3 pt-1">
           {/* DARSH (RED) DECK */}
           <div 
             onClick={() => {
               if (turn === 'H' && isCurrentAdmin) handleRollDice();
             }}
-            className={`p-2.5 rounded-2xl border transition-all flex items-center justify-between cursor-pointer select-none ${
+            className={`p-3 rounded-2xl border transition-all flex items-center justify-between cursor-pointer select-none ${
               turn === 'H'
-                ? 'bg-red-950/70 border-red-500 ring-2 ring-red-500/60 shadow-lg shadow-red-900/40' 
+                ? 'bg-red-950/60 border-red-500 ring-2 ring-red-500/50 shadow-lg shadow-red-900/40' 
                 : 'bg-[#181818] border-[#2b2b2b] opacity-75'
             }`}
           >
@@ -843,7 +899,7 @@ export default function LudoGameModal({
                 Home: {tokens.H.filter(p => p === 56).length}/{tokensToWin}
               </div>
               {turn === 'H' && isCurrentAdmin && (
-                <span className="inline-block text-[9px] font-black bg-amber-400 text-black px-1.5 py-0.2 rounded font-mono animate-pulse">
+                <span className="inline-block text-[9px] font-bold bg-amber-500 text-black px-1.5 py-0.2 rounded font-mono animate-pulse">
                   TAP TO ROLL
                 </span>
               )}
@@ -859,9 +915,9 @@ export default function LudoGameModal({
             onClick={() => {
               if (turn === 'A' && !isCurrentAdmin) handleRollDice();
             }}
-            className={`p-2.5 rounded-2xl border transition-all flex items-center justify-between cursor-pointer select-none ${
+            className={`p-3 rounded-2xl border transition-all flex items-center justify-between cursor-pointer select-none ${
               turn === 'A'
-                ? 'bg-emerald-950/70 border-emerald-500 ring-2 ring-emerald-500/60 shadow-lg shadow-emerald-900/40' 
+                ? 'bg-emerald-950/60 border-emerald-500 ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-900/40' 
                 : 'bg-[#181818] border-[#2b2b2b] opacity-75'
             }`}
           >
@@ -874,7 +930,7 @@ export default function LudoGameModal({
                 Home: {tokens.A.filter(p => p === 56).length}/{tokensToWin}
               </div>
               {turn === 'A' && !isCurrentAdmin && (
-                <span className="inline-block text-[9px] font-black bg-amber-400 text-black px-1.5 py-0.2 rounded font-mono animate-pulse">
+                <span className="inline-block text-[9px] font-bold bg-amber-500 text-black px-1.5 py-0.2 rounded font-mono animate-pulse">
                   TAP TO ROLL
                 </span>
               )}

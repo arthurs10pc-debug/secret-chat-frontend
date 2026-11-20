@@ -72,7 +72,7 @@ export default function CoupleMiniGameModal({
 
     const handleStateSync = ({ gameId, state }) => {
       if (gameId !== 'tictactoe' || !state) return;
-      if (state.board) setBoard(state.board);
+      if (state.board) setBoard([...state.board]);
       if (state.turn) setTurn(state.turn);
       if (state.betAmount !== undefined) setBetAmount(state.betAmount);
       if (state.scores) setScores(state.scores);
@@ -92,7 +92,7 @@ export default function CoupleMiniGameModal({
       const targetGame = data.gameId || (data.board ? 'tictactoe' : 'ludo');
       if (targetGame !== 'tictactoe') return;
       const state = data.state || data;
-      if (state.board) setBoard(state.board);
+      if (state.board) setBoard([...state.board]);
       if (state.turn) setTurn(state.turn);
       if (state.betAmount !== undefined) setBetAmount(state.betAmount);
       if (state.scores) setScores(state.scores);

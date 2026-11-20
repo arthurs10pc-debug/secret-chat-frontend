@@ -10,7 +10,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown, ChevronUp,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2, Heart, Coins, Award, Scale, Gift, SlidersHorizontal, Bell, BellRing, Filter, CheckCircle2, XCircle, ArrowLeft, MoreVertical, Paperclip, Camera, Briefcase, Calendar, CheckCircle, Users, UserCheck, Mail
+  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2, Heart, Coins, Award, Scale, Gift, SlidersHorizontal, Bell, BellRing, Filter, CheckCircle2, XCircle, ArrowLeft, MoreVertical, Paperclip, Camera, Briefcase, Calendar, CheckCircle, Users, UserCheck, Mail, Pin, Star
 } from 'lucide-react';
 
 import {
@@ -45,6 +45,10 @@ import StealthAlertBubble from './components/StealthAlertBubble';
 import CoupleMiniGameModal from './components/CoupleMiniGameModal';
 import LudoGameModal from './components/LudoGameModal';
 import GamesHubModal from './components/GamesHubModal';
+import WhatsAppMediaTray from './components/WhatsAppMediaTray';
+import CircularVideoNoteModal from './components/CircularVideoNoteModal';
+import AudioMessageBubble from './components/AudioMessageBubble';
+import CircularVideoNoteBubble from './components/CircularVideoNoteBubble';
 
 const getEmbedUrl = (server, imdbId) => {
   const cleanId = imdbId.trim();
@@ -547,6 +551,23 @@ export default function App() {
     betAmount: 2.0,
     winner: null
   });
+
+  // --- WHATSAPP SIGNATURE UPGRADE STATES ---
+  const [showWhatsAppMediaTray, setShowWhatsAppMediaTray] = useState(false);
+  const [bottomInputMode, setBottomInputMode] = useState('mic'); // 'mic' | 'camera'
+  const [showCircularVideoNoteModal, setShowCircularVideoNoteModal] = useState(false);
+  const [isRecordingVoiceNote, setIsRecordingVoiceNote] = useState(false);
+  const [voiceNoteSeconds, setVoiceNoteSeconds] = useState(0);
+  const [filterStarredOnly, setFilterStarredOnly] = useState(false);
+  const [doubleTapHeartAnimMsgId, setDoubleTapHeartAnimMsgId] = useState(null);
+  const [touchSwipeState, setTouchSwipeState] = useState({ msgId: null, deltaX: 0 });
+
+  const wpInputRef = useRef(null);
+  const voiceMediaRecorderRef = useRef(null);
+  const voiceChunksRef = useRef([]);
+  const voiceTimerRef = useRef(null);
+  const lastTouchTapRef = useRef({ time: 0, msgId: null });
+
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [clearModalTarget, setClearModalTarget] = useState('user'); // 'user' | 'admin' | 'both'
   const [wishRequests, setWishRequests] = useState(() => {
@@ -2021,6 +2042,9 @@ export default function App() {
       try { checkDailyHabitInfractions(stealthMessages); } catch(e) {}
       setInput('');
       setReplyTarget(null);
+      if (wpInputRef.current) {
+        wpInputRef.current.focus();
+      }
       if (wpChatScrollRef.current) {
         wpChatScrollRef.current.scrollTop = wpChatScrollRef.current.scrollHeight;
       }
@@ -2031,6 +2055,158 @@ export default function App() {
     fetchLiveAIResponse(val);
     setInput('');
     setReplyTarget(null);
+  };
+
+  // --- WHATSAPP SIGNATURE UPGRADE HANDLERS ---
+  const handleDoubleTapToLike = (msgId) => {
+    if (!msgId) return;
+    const targetMsg = stealthMessages.find(m => m._id === msgId);
+    if (!targetMsg) return;
+
+    const newReaction = targetMsg.reaction === '❤️' ? null : '❤️';
+    try { navigator.vibrate?.(40); } catch (e) {}
+
+    setDoubleTapHeartAnimMsgId(msgId);
+    setTimeout(() => {
+      setDoubleTapHeartAnimMsgId(null);
+    }, 850);
+
+    setStealthMessages(prev => prev.map(m => m._id === msgId ? { ...m, reaction: newReaction } : m));
+    if (socketRef.current) {
+      socketRef.current.emit('add_reaction', { room: GLOBAL_ROOM, messageId: msgId, reaction: newReaction });
+    }
+  };
+
+  const handleTogglePinMessage = (msgId) => {
+    if (!msgId) return;
+    const targetMsg = stealthMessages.find(m => m._id === msgId);
+    if (!targetMsg) return;
+
+    const newPinned = !targetMsg.isPinned;
+    setStealthMessages(prev => prev.map(m => m._id === msgId ? { ...m, isPinned: newPinned } : (newPinned ? { ...m, isPinned: false } : m)));
+    if (socketRef.current) {
+      socketRef.current.emit('pin_stealth_msg', { room: GLOBAL_ROOM, messageId: msgId, isPinned: newPinned });
+    }
+  };
+
+  const handleToggleStarMessage = (msgId) => {
+    if (!msgId) return;
+    const targetMsg = stealthMessages.find(m => m._id === msgId);
+    if (!targetMsg) return;
+
+    const newStarred = !targetMsg.isStarred;
+    setStealthMessages(prev => prev.map(m => m._id === msgId ? { ...m, isStarred: newStarred } : m));
+    if (socketRef.current) {
+      socketRef.current.emit('star_stealth_msg', { room: GLOBAL_ROOM, messageId: msgId, isStarred: newStarred });
+    }
+  };
+
+  const handleStartVoiceNoteRecording = async () => {
+    try {
+      voiceChunksRef.current = [];
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      let mimeType = 'audio/webm';
+      if (!MediaRecorder.isTypeSupported('audio/webm')) {
+        if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
+        else mimeType = '';
+      }
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      voiceMediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) voiceChunksRef.current.push(e.data);
+      };
+
+      recorder.start(200);
+      setIsRecordingVoiceNote(true);
+      setVoiceNoteSeconds(0);
+
+      if (voiceTimerRef.current) clearInterval(voiceTimerRef.current);
+      voiceTimerRef.current = setInterval(() => {
+        setVoiceNoteSeconds(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error("Microphone error:", err);
+      alert("Microphone permission is required to record voice messages.");
+    }
+  };
+
+  const handleStopAndSendVoiceNote = () => {
+    if (!voiceMediaRecorderRef.current || voiceMediaRecorderRef.current.state === 'inactive') return;
+    if (voiceTimerRef.current) clearInterval(voiceTimerRef.current);
+
+    voiceMediaRecorderRef.current.onstop = () => {
+      const mime = voiceMediaRecorderRef.current?.mimeType || 'audio/webm';
+      const blob = new Blob(voiceChunksRef.current, { type: mime });
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64Audio = reader.result;
+        const encrypted = encryptText(base64Audio);
+        if (socketRef.current) {
+          socketRef.current.emit('send_stealth_msg', {
+            room: GLOBAL_ROOM,
+            role,
+            encryptedText: encrypted,
+            isMedia: true,
+            mediaType: 'audio'
+          });
+          playSentSound();
+        }
+      };
+      reader.readAsDataURL(blob);
+      setIsRecordingVoiceNote(false);
+      setVoiceNoteSeconds(0);
+      voiceChunksRef.current = [];
+    };
+
+    try {
+      voiceMediaRecorderRef.current.stop();
+      voiceMediaRecorderRef.current.stream?.getTracks().forEach(t => t.stop());
+    } catch (e) {}
+  };
+
+  const handleCancelVoiceNote = () => {
+    if (voiceTimerRef.current) clearInterval(voiceTimerRef.current);
+    if (voiceMediaRecorderRef.current && voiceMediaRecorderRef.current.state !== 'inactive') {
+      try {
+        voiceMediaRecorderRef.current.stop();
+        voiceMediaRecorderRef.current.stream?.getTracks().forEach(t => t.stop());
+      } catch (e) {}
+    }
+    setIsRecordingVoiceNote(false);
+    setVoiceNoteSeconds(0);
+    voiceChunksRef.current = [];
+  };
+
+  const handleSendVideoNote = (base64Video) => {
+    if (!base64Video) return;
+    const encrypted = encryptText(base64Video);
+    if (socketRef.current) {
+      socketRef.current.emit('send_stealth_msg', {
+        room: GLOBAL_ROOM,
+        role,
+        encryptedText: encrypted,
+        isMedia: true,
+        mediaType: 'video_note'
+      });
+      playSentSound();
+    }
+  };
+
+  const handleSendSticker = (stickerUrl) => {
+    if (!stickerUrl) return;
+    const encrypted = encryptText(stickerUrl);
+    if (socketRef.current) {
+      socketRef.current.emit('send_stealth_msg', {
+        room: GLOBAL_ROOM,
+        role,
+        encryptedText: encrypted,
+        isMedia: true,
+        mediaType: 'sticker'
+      });
+      playSentSound();
+    }
+    setShowWhatsAppMediaTray(false);
   };
 
   const fetchLiveAIResponse = async (userPrompt) => {
@@ -3966,12 +4142,23 @@ export default function App() {
         timeFormatted: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isSeen: m.isSeen || false,
         isMedia: m.isMedia || false,
+        mediaType: m.mediaType || (m.isMedia ? 'photo' : 'text'),
         mediaOpened: m.mediaOpened || false,
-        reaction: m.reaction || null
+        reaction: m.reaction || null,
+        isPinned: Boolean(m.isPinned),
+        isStarred: Boolean(m.isStarred)
       }));
       setStealthMessages(parsed);
       markMessagesAsSeen();
       checkDailyHabitInfractions(parsed);
+    });
+
+    socketRef.current.on('update_message_pinned', ({ messageId, isPinned }) => {
+      setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, isPinned } : m));
+    });
+
+    socketRef.current.on('update_message_starred', ({ messageId, isStarred }) => {
+      setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, isStarred } : m));
     });
 
     socketRef.current.on('peer_typing_status', (data) => {
@@ -4671,8 +4858,11 @@ export default function App() {
         timeFormatted: new Date(data.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isSeen: shouldAutoSeen,
         isMedia: data.isMedia || false,
+        mediaType: data.mediaType || (data.isMedia ? 'photo' : 'text'),
         mediaOpened: false,
-        reaction: null
+        reaction: data.reaction || null,
+        isPinned: Boolean(data.isPinned),
+        isStarred: Boolean(data.isStarred)
       };
 
       setStealthMessages(prev => {
@@ -5320,13 +5510,14 @@ export default function App() {
     const inviteMsg = `[GAME_CHALLENGE:${gameType}] ${myName} challenged ${oppName} to ${gameLabel}${betLabel}! Tap to join!`;
 
     if (socketRef.current) {
+      const encrypted = encryptText(inviteMsg);
       socketRef.current.emit('send_stealth_msg', {
-        id: `msg_game_${Date.now()}`,
-        text: inviteMsg,
-        senderRole: role,
-        timestamp: new Date().toISOString(),
-        timeFormatted: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        room: GLOBAL_ROOM,
+        role,
+        encryptedText: encrypted,
+        isMedia: false
       });
+      playSentSound();
       socketRef.current.emit('couple_game_invite', {
         game: gameType,
         challenger: myName,
@@ -5338,6 +5529,30 @@ export default function App() {
 
   const handleGameAction = useCallback((payload) => {
     if (!payload) return;
+    const targetGame = payload.gameId || (payload.board ? 'tictactoe' : 'ludo');
+    if (targetGame === 'tictactoe') {
+      setTictactoeState(prev => ({
+        ...prev,
+        board: payload.board ? [...payload.board] : prev.board,
+        turn: payload.turn || prev.turn,
+        betAmount: payload.betAmount !== undefined ? payload.betAmount : prev.betAmount,
+        scores: payload.scores || prev.scores,
+        winner: payload.winner !== undefined ? payload.winner : prev.winner,
+        isDraw: payload.isDraw !== undefined ? payload.isDraw : prev.isDraw,
+        gameStatus: payload.winner ? 'WON' : (payload.isDraw ? 'DRAW' : 'PLAYING')
+      }));
+    } else if (targetGame === 'ludo') {
+      setLudoGameState(prev => ({
+        ...prev,
+        tokens: payload.tokens ? { H: [...payload.tokens.H], A: [...payload.tokens.A] } : prev.tokens,
+        turn: payload.turn || prev.turn,
+        dice: payload.dice !== undefined ? payload.dice : prev.dice,
+        statusMsg: payload.statusMsg || prev.statusMsg,
+        scores: payload.scores || prev.scores,
+        betAmount: payload.betAmount !== undefined ? payload.betAmount : prev.betAmount,
+        winner: payload.winner !== undefined ? payload.winner : prev.winner
+      }));
+    }
     if (socketRef.current) {
       socketRef.current.emit('couple_game_action', payload);
       socketRef.current.emit('arcade_game_action', payload);
@@ -5901,9 +6116,24 @@ export default function App() {
   const displayedStealthMessages = role === 'user' ? stealthMessages.slice(-60) : stealthMessages;
   const partnerRole = role === 'parent' ? 'user' : 'parent';
   const isPartnerOnline = onlineRoles.includes(partnerRole);
-  const filteredWpMessages = wpSearchQuery.trim()
-    ? displayedStealthMessages.filter(m => m.text && m.text.toLowerCase().includes(wpSearchQuery.toLowerCase()))
-    : displayedStealthMessages;
+  const filteredWpMessages = useMemo(() => {
+    let list = displayedStealthMessages;
+    if (filterStarredOnly) {
+      list = list.filter(m => m.isStarred);
+    }
+    if (wpSearchQuery.trim()) {
+      list = list.filter(m => m.text && m.text.toLowerCase().includes(wpSearchQuery.toLowerCase()));
+    }
+    return list;
+  }, [displayedStealthMessages, filterStarredOnly, wpSearchQuery]);
+
+  const pinnedMessage = useMemo(() => {
+    return stealthMessages.find(m => m.isPinned);
+  }, [stealthMessages]);
+
+  const firstUnreadIndex = useMemo(() => {
+    return filteredWpMessages.findIndex(m => m.senderRole !== role && !m.isSeen);
+  }, [filteredWpMessages, role]);
   const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
   const hasUnreadSecret = stealthMessages.some(m => m.senderRole !== role && !m.isSeen);
 
@@ -6589,6 +6819,17 @@ export default function App() {
                     >
                       Search in chat
                     </button>
+                    <button 
+                      type="button"
+                      onClick={() => { 
+                        setFilterStarredOnly(!filterStarredOnly); 
+                        setShowWpMenu(false); 
+                      }}
+                      className="w-full text-left px-4 py-2.5 hover:bg-white/10 text-amber-300 transition-colors flex items-center justify-between"
+                    >
+                      <span>{filterStarredOnly ? 'Show All Messages' : 'Starred Messages'}</span>
+                      <Star size={13} className="text-amber-400 fill-amber-400" />
+                    </button>
                     {role === 'parent' && (
                       <button 
                         type="button"
@@ -6629,6 +6870,52 @@ export default function App() {
               </button>
             </div>
           </div>
+
+          {/* PINNED MESSAGE BANNER */}
+          {pinnedMessage && (
+            <div 
+              onClick={() => {
+                if (wpChatScrollRef.current) {
+                  wpChatScrollRef.current.scrollTop = 0;
+                }
+              }}
+              className="backdrop-blur-xl bg-gradient-to-r from-emerald-950/70 via-teal-950/70 to-emerald-950/70 border-b border-emerald-500/30 px-3.5 py-1.5 flex items-center justify-between text-xs text-emerald-200 z-20 cursor-pointer shadow-md select-none"
+            >
+              <div className="flex items-center gap-2 truncate">
+                <Pin size={13} className="text-emerald-400 rotate-45 shrink-0" />
+                <span className="font-bold text-[11px] text-emerald-300">Pinned:</span>
+                <span className="truncate text-[11px] text-gray-200">{cleanOriginalText(pinnedMessage.text)}</span>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleTogglePinMessage(pinnedMessage._id, false);
+                }}
+                className="text-gray-400 hover:text-white p-1 text-[11px] font-bold cursor-pointer"
+                title="Unpin message"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* STARRED MESSAGES FILTER ALERT */}
+          {filterStarredOnly && (
+            <div className="backdrop-blur-xl bg-amber-950/80 border-b border-amber-500/40 px-3.5 py-1.5 flex items-center justify-between text-xs text-amber-200 z-20 select-none">
+              <div className="flex items-center gap-2">
+                <Star size={13} className="text-amber-400 fill-amber-400" />
+                <span className="font-bold text-[11px]">Showing Starred Messages Only</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFilterStarredOnly(false)}
+                className="bg-amber-400 text-black font-bold text-[10px] px-2 py-0.5 rounded-full cursor-pointer hover:bg-amber-300"
+              >
+                Show All
+              </button>
+            </div>
+          )}
 
           {/* SEARCH BAR IN WP VIEW - IOS GLASS */}
           {showWpSearch && (
@@ -6765,192 +7052,255 @@ export default function App() {
                 const isReactionOpen = activeReactionMsgId === m._id;
 
                 return (
-                  <div key={m._id || idx} className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'}`}>
-                    <div 
-                      onTouchStart={(e) => {
-                        touchStartXRef.current = e.touches[0].clientX;
-                        activeSwipeMsgIdRef.current = m;
-                      }}
-                      onTouchEnd={(e) => {
-                        const diffX = e.changedTouches[0].clientX - touchStartXRef.current;
-                        if (diffX > 60 && activeSwipeMsgIdRef.current) {
-                          handleStartReply(activeSwipeMsgIdRef.current);
-                        }
-                      }}
-                      onDoubleClick={() => {
-                        setActiveReactionMsgId(activeReactionMsgId === m._id ? null : m._id);
-                      }}
-                      title="Swipe right to reply • Double tap for reactions"
-                      className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-3.5 py-2.5 shadow-md relative cursor-pointer text-[14.5px] leading-relaxed transition-all ${
-                        isMine 
-                          ? 'backdrop-blur-2xl bg-gradient-to-br from-emerald-600/35 via-emerald-600/25 to-teal-700/35 border border-emerald-400/35 text-white shadow-[0_8px_25px_rgba(16,185,129,0.2)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.25)] rounded-tr-none' 
-                          : 'backdrop-blur-2xl bg-gradient-to-br from-white/[0.12] via-white/[0.08] to-white/[0.04] border border-white/20 text-[#f1f5f9] shadow-[0_8px_25px_rgba(0,0,0,0.35)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.18)] rounded-tl-none'
-                      }`}
-                    >
-                      {hasReplyTag && (
-                        <div className="backdrop-blur-md bg-black/40 border-l-2 border-emerald-400 pl-2.5 py-1 mb-1.5 text-xs text-emerald-300 italic truncate rounded">
-                          {replySnippet}
-                        </div>
-                      )}
-
-                      {m.isMedia ? (
-                        <div className="space-y-1">
-                          <img 
-                            src={m.text} 
-                            alt="Shared Photo" 
-                            className="max-h-64 rounded-xl object-contain cursor-pointer shadow-md" 
-                            onClick={() => window.open(m.text, '_blank')} 
-                          />
-                        </div>
-                      ) : cleanBody && cleanBody.includes('[GAME_CHALLENGE:') ? (
-                        <div className="bg-gradient-to-r from-purple-950/80 via-indigo-950/80 to-purple-950/80 border border-purple-500/50 rounded-2xl p-3 space-y-2 text-left my-1 shadow-lg select-none">
-                          <div className="flex items-center gap-2">
-                            <span className="text-2xl">{cleanBody.includes('ludo') ? '🎲' : '⚔️'}</span>
-                            <div>
-                              <h4 className="text-xs font-black text-amber-300">
-                                {cleanBody.includes('ludo') ? 'Ludo Royale Challenge' : 'Couple Tic-Tac-Toe Duel'}
-                              </h4>
-                              <p className="text-[11px] text-gray-300">
-                                {cleanBody.replace(/\[GAME_CHALLENGE:[^\]]+\]\s*/, '')}
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (cleanBody.includes('ludo')) setShowLudoModal(true);
-                              else setShowCoupleMiniGameModal(true);
-                            }}
-                            className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-xs font-black py-2 rounded-xl shadow cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-1.5"
-                          >
-                            <span>🎮 Join & Play Match Now!</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <p className="break-words select-text">{cleanBody}</p>
-                      )}
-
-                      {/* REACTION POPUP TRAY ON DOUBLE TAP - IOS LIQUID GLASS */}
-                      {isReactionOpen && (
-                        <div 
-                          className="absolute -top-11 left-0 z-30 backdrop-blur-2xl bg-black/70 border border-white/25 px-3 py-1.5 rounded-full shadow-2xl flex items-center gap-2 animate-in zoom-in-95 duration-100"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {["👍", "❤️", "😂", "😮", "🙏", "➕"].map((emoji, eIdx) => (
-                            <button
-                              key={eIdx}
-                              type="button"
-                              onClick={() => {
-                                if (emoji === '➕') {
-                                  setShowMiniEmojiBar(!showMiniEmojiBar);
-                                  setActiveReactionMsgId(null);
-                                } else {
-                                  handleSelectReaction(m._id, emoji);
-                                }
-                              }}
-                              className="text-base p-0.5 hover:scale-125 transition-transform cursor-pointer"
-                            >
-                              {emoji}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* MESSAGE REACTION BADGE */}
-                      {m.reaction && (
-                        <span className="absolute -bottom-2 right-2 backdrop-blur-md bg-black/70 border border-white/20 px-2 py-0.5 rounded-full text-xs shadow-lg">
-                          {m.reaction}
+                  <React.Fragment key={m._id || idx}>
+                    {/* UNREAD MESSAGES DIVIDER */}
+                    {idx === firstUnreadIndex && (
+                      <div className="flex items-center justify-center my-3 select-none">
+                        <div className="flex-1 border-t border-emerald-500/30"></div>
+                        <span className="px-3 py-1 bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-[10px] font-black rounded-full shadow tracking-wider uppercase">
+                          Unread Messages
                         </span>
-                      )}
+                        <div className="flex-1 border-t border-emerald-500/30"></div>
+                      </div>
+                    )}
 
-                      {/* TIME, DELIVERY TICKS & AWARD BUTTON */}
-                      <div className="flex items-center justify-between gap-2 mt-1 text-[11px] text-gray-400 select-none font-normal">
-                        {!isMine ? (
-                          <div className="relative inline-flex items-center">
+                    <div className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'}`}>
+                      <div 
+                        onTouchStart={(e) => {
+                          touchStartXRef.current = e.touches[0].clientX;
+                          activeSwipeMsgIdRef.current = m;
+                        }}
+                        onTouchEnd={(e) => {
+                          const diffX = e.changedTouches[0].clientX - touchStartXRef.current;
+                          if (diffX > 60 && activeSwipeMsgIdRef.current) {
+                            handleStartReply(activeSwipeMsgIdRef.current);
+                          }
+                        }}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleDoubleTapToLike(m._id);
+                        }}
+                        title="Double-tap to like ❤️ • Swipe right to reply"
+                        className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-3.5 py-2.5 shadow-md relative cursor-pointer text-[14.5px] leading-relaxed transition-all ${
+                          isMine 
+                            ? 'backdrop-blur-2xl bg-gradient-to-br from-emerald-600/35 via-emerald-600/25 to-teal-700/35 border border-emerald-400/35 text-white shadow-[0_8px_25px_rgba(16,185,129,0.2)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.25)] rounded-tr-none' 
+                            : 'backdrop-blur-2xl bg-gradient-to-br from-white/[0.12] via-white/[0.08] to-white/[0.04] border border-white/20 text-[#f1f5f9] shadow-[0_8px_25px_rgba(0,0,0,0.35)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.18)] rounded-tl-none'
+                        }`}
+                      >
+                        {/* FLOATING HEART ANIMATION ON DOUBLE-TAP */}
+                        {doubleTapHeartAnimMsgId === m._id && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30 animate-in zoom-in duration-150">
+                            <span className="text-4xl filter drop-shadow-[0_0_12px_#ec4899] animate-bounce">❤️</span>
+                          </div>
+                        )}
+
+                        {hasReplyTag && (
+                          <div className="backdrop-blur-md bg-black/40 border-l-2 border-emerald-400 pl-2.5 py-1 mb-1.5 text-xs text-emerald-300 italic truncate rounded">
+                            {replySnippet}
+                          </div>
+                        )}
+
+                        {/* MESSAGE CONTENT BY MEDIA TYPE */}
+                        {m.mediaType === 'audio' ? (
+                          <AudioMessageBubble audioUrl={m.text} isMine={isMine} />
+                        ) : m.mediaType === 'video_note' ? (
+                          <CircularVideoNoteBubble videoUrl={m.text} isMine={isMine} />
+                        ) : m.mediaType === 'sticker' ? (
+                          <div className="p-1 select-none flex items-center justify-center">
+                            <img 
+                              src={m.text} 
+                              alt="Sticker" 
+                              className="w-32 h-32 object-contain filter drop-shadow-md cursor-pointer hover:scale-105 transition-transform" 
+                            />
+                          </div>
+                        ) : m.isMedia ? (
+                          <div className="space-y-1">
+                            <img 
+                              src={m.text} 
+                              alt="Shared Photo" 
+                              className="max-h-64 rounded-xl object-contain cursor-pointer shadow-md" 
+                              onClick={() => window.open(m.text, '_blank')} 
+                            />
+                          </div>
+                        ) : cleanBody && cleanBody.includes('[GAME_CHALLENGE:') ? (
+                          <div className="bg-gradient-to-r from-purple-950/80 via-indigo-950/80 to-purple-950/80 border border-purple-500/50 rounded-2xl p-3 space-y-2 text-left my-1 shadow-lg select-none">
+                            <div className="flex items-center gap-2">
+                              <span className="text-2xl">{cleanBody.includes('ludo') ? '🎲' : '⚔️'}</span>
+                              <div>
+                                <h4 className="text-xs font-black text-amber-300">
+                                  {cleanBody.includes('ludo') ? 'Ludo Royale Challenge' : 'Couple Tic-Tac-Toe Duel'}
+                                </h4>
+                                <p className="text-[11px] text-gray-300">
+                                  {cleanBody.replace(/\[GAME_CHALLENGE:[^\]]+\]\s*/, '')}
+                                </p>
+                              </div>
+                            </div>
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setActiveAwardMsgId(activeAwardMsgId === m._id ? null : m._id);
+                                if (cleanBody.includes('ludo')) setShowLudoModal(true);
+                                else setShowCoupleMiniGameModal(true);
                               }}
-                              title={'Award Love Karma to ' + partnerName}
-                              className="px-2 py-0.5 text-[10px] font-bold rounded-full backdrop-blur-md bg-pink-500/20 hover:bg-pink-500/30 border border-pink-400/40 text-pink-300 hover:text-white cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-sm"
+                              className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-xs font-black py-2 rounded-xl shadow cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-1.5"
                             >
-                              <Heart size={10} className="text-pink-400 fill-pink-400" />
-                              <span>Award</span>
+                              <span>🎮 Join & Play Match Now!</span>
                             </button>
+                          </div>
+                        ) : (
+                          <p className="break-words select-text">{cleanBody}</p>
+                        )}
 
-                            {activeAwardMsgId === m._id && (
-                              <div 
-                                className="absolute left-0 bottom-6 z-50 backdrop-blur-2xl bg-black/85 border border-pink-500/50 p-2.5 rounded-2xl shadow-2xl flex flex-col gap-1 w-48 text-left text-xs font-sans animate-in fade-in zoom-in-95 duration-150"
-                                onClick={(e) => e.stopPropagation()}
+                        {/* REACTION POPUP TRAY ON RIGHT-CLICK OR ACTION - IOS LIQUID GLASS */}
+                        {isReactionOpen && (
+                          <div 
+                            className="absolute -top-11 left-0 z-30 backdrop-blur-2xl bg-black/80 border border-white/25 px-3 py-1.5 rounded-full shadow-2xl flex items-center gap-2 animate-in zoom-in-95 duration-100"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {["👍", "❤️", "😂", "😮", "🙏", "➕"].map((emoji, eIdx) => (
+                              <button
+                                key={eIdx}
+                                type="button"
+                                onClick={() => {
+                                  if (emoji === '➕') {
+                                    setShowWhatsAppMediaTray(true);
+                                    setActiveReactionMsgId(null);
+                                  } else {
+                                    handleSelectReaction(m._id, emoji);
+                                  }
+                                }}
+                                className="text-base p-0.5 hover:scale-125 transition-transform cursor-pointer"
                               >
-                                <p className="text-[10px] text-pink-400 font-bold uppercase tracking-wider px-1">💖 Award {partnerName} Karma</p>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const awardTarget = role === 'parent' ? 'user' : 'admin';
-                                    handleLoveBalanceTransaction(1.00, 'credit', 'Cute Gesture / Heart', false, awardTarget);
-                                    setActiveAwardMsgId(null);
-                                  }}
-                                  className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
+                                {emoji}
+                              </button>
+                            ))}
+                            <div className="w-[1px] h-4 bg-white/20 mx-0.5" />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleTogglePinMessage(m._id, !m.isPinned);
+                                setActiveReactionMsgId(null);
+                              }}
+                              className="text-sm p-0.5 hover:scale-125 transition-transform cursor-pointer"
+                              title={m.isPinned ? "Unpin message" : "Pin message"}
+                            >
+                              📌
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleToggleStarMessage(m._id, !m.isStarred);
+                                setActiveReactionMsgId(null);
+                              }}
+                              className="text-sm p-0.5 hover:scale-125 transition-transform cursor-pointer"
+                              title={m.isStarred ? "Unstar message" : "Star message"}
+                            >
+                              ⭐
+                            </button>
+                          </div>
+                        )}
+
+                        {/* MESSAGE REACTION BADGE */}
+                        {m.reaction && (
+                          <span className="absolute -bottom-2 right-2 backdrop-blur-md bg-black/70 border border-white/20 px-2 py-0.5 rounded-full text-xs shadow-lg">
+                            {m.reaction}
+                          </span>
+                        )}
+
+                        {/* TIME, DELIVERY TICKS & AWARD BUTTON */}
+                        <div className="flex items-center justify-between gap-2 mt-1 text-[11px] text-gray-400 select-none font-normal">
+                          {!isMine ? (
+                            <div className="relative inline-flex items-center">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveAwardMsgId(activeAwardMsgId === m._id ? null : m._id);
+                                }}
+                                title={'Award Love Karma to ' + partnerName}
+                                className="px-2 py-0.5 text-[10px] font-bold rounded-full backdrop-blur-md bg-pink-500/20 hover:bg-pink-500/30 border border-pink-400/40 text-pink-300 hover:text-white cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-sm"
+                              >
+                                <Heart size={10} className="text-pink-400 fill-pink-400" />
+                                <span>Award</span>
+                              </button>
+
+                              {activeAwardMsgId === m._id && (
+                                <div 
+                                  className="absolute left-0 bottom-6 z-50 backdrop-blur-2xl bg-black/85 border border-pink-500/50 p-2.5 rounded-2xl shadow-2xl flex flex-col gap-1 w-48 text-left text-xs font-sans animate-in fade-in zoom-in-95 duration-150"
+                                  onClick={(e) => e.stopPropagation()}
                                 >
-                                  +1 ₹ Cute Reaction
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const awardTarget = role === 'parent' ? 'user' : 'admin';
-                                    handleLoveBalanceTransaction(3.00, 'credit', 'Romantic Compliment Drop', false, awardTarget);
-                                    setActiveAwardMsgId(null);
-                                  }}
-                                  className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
-                                >
-                                  +3 ₹ Sweet Compliment
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const awardTarget = role === 'parent' ? 'user' : 'admin';
-                                    handleLoveBalanceTransaction(5.00, 'credit', 'Movie / Song Recommendation', false, awardTarget);
-                                    setActiveAwardMsgId(null);
-                                  }}
-                                  className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
-                                >
-                                  +5 ₹ Song/Movie Pick
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const awardTarget = role === 'parent' ? 'user' : 'admin';
-                                    handleLoveBalanceTransaction(10.00, 'credit', 'Deep Romantic Talk', false, awardTarget);
-                                    setActiveAwardMsgId(null);
-                                  }}
-                                  className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
-                                >
-                                  +10 ₹ Romantic Talk
-                                </button>
-                              </div>
+                                  <p className="text-[10px] text-pink-400 font-bold uppercase tracking-wider px-1">💖 Award {partnerName} Karma</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const awardTarget = role === 'parent' ? 'user' : 'admin';
+                                      handleLoveBalanceTransaction(1.00, 'credit', 'Cute Gesture / Heart', false, awardTarget);
+                                      setActiveAwardMsgId(null);
+                                    }}
+                                    className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
+                                  >
+                                    +1 ₹ Cute Reaction
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const awardTarget = role === 'parent' ? 'user' : 'admin';
+                                      handleLoveBalanceTransaction(3.00, 'credit', 'Romantic Compliment Drop', false, awardTarget);
+                                      setActiveAwardMsgId(null);
+                                    }}
+                                    className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
+                                  >
+                                    +3 ₹ Sweet Compliment
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const awardTarget = role === 'parent' ? 'user' : 'admin';
+                                      handleLoveBalanceTransaction(5.00, 'credit', 'Movie / Song Recommendation', false, awardTarget);
+                                      setActiveAwardMsgId(null);
+                                    }}
+                                    className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
+                                  >
+                                    +5 ₹ Song/Movie Pick
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const awardTarget = role === 'parent' ? 'user' : 'admin';
+                                      handleLoveBalanceTransaction(10.00, 'credit', 'Deep Romantic Talk', false, awardTarget);
+                                      setActiveAwardMsgId(null);
+                                    }}
+                                    className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
+                                  >
+                                    +10 ₹ Romantic Talk
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ) : <span />}
+
+                          <div className="flex items-center gap-1.5">
+                            {m.isPinned && (
+                              <Pin size={11} className="text-emerald-400 rotate-45 shrink-0" title="Pinned Message" />
+                            )}
+                            {m.isStarred && (
+                              <Star size={11} className="text-amber-400 fill-amber-400 shrink-0" title="Starred Message" />
+                            )}
+                            <span>{m.timeFormatted}</span>
+                            {isMine && (
+                              m.isSeen && isPartnerOnline ? (
+                                <CheckCheck size={14} className="text-cyan-400" title="Seen" />
+                              ) : isPartnerOnline ? (
+                                <CheckCheck size={14} className="text-gray-400" title="Delivered" />
+                              ) : (
+                                <Check size={14} className="text-gray-400" title="Sent" />
+                              )
                             )}
                           </div>
-                        ) : <span />}
-
-                        <div className="flex items-center gap-1">
-                          <span>{m.timeFormatted}</span>
-                          {isMine && (
-                            m.isSeen && isPartnerOnline ? (
-                              <CheckCheck size={14} className="text-cyan-400" title="Seen" />
-                            ) : isPartnerOnline ? (
-                              <CheckCheck size={14} className="text-gray-400" title="Delivered" />
-                            ) : (
-                              <Check size={14} className="text-gray-400" title="Sent" />
-                            )
-                          )}
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </React.Fragment>
                 );
               })
             )}
@@ -6964,76 +7314,145 @@ export default function App() {
             </div>
           )}
 
-          {showMiniEmojiBar && (
-            <div className="backdrop-blur-2xl bg-black/60 border-t border-white/10 p-2.5 flex items-center gap-2 overflow-x-auto scrollbar-none">
-              {QUICK_EMOJIS.map((emoji, idx) => (
+          {/* WHATSAPP BOTTOM INPUT BAR & VOICE NOTE RECORDER */}
+          {isRecordingVoiceNote ? (
+            <div className="backdrop-blur-2xl bg-black/85 px-4 py-3 flex items-center justify-between gap-3 shrink-0 border-t border-rose-500/30 z-20 shadow-2xl animate-in fade-in duration-150">
+              <div className="flex items-center gap-2.5">
+                <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
+                <span className="text-xs font-mono font-bold text-rose-300">
+                  {Math.floor(voiceNoteSeconds / 60).toString().padStart(2, '0')}:{(voiceNoteSeconds % 60).toString().padStart(2, '0')}
+                </span>
+                <div className="flex items-center gap-0.5 ml-2">
+                  {[4, 12, 8, 16, 10, 14, 6, 12].map((h, i) => (
+                    <div 
+                      key={i} 
+                      style={{ height: `${h}px` }} 
+                      className="w-1 bg-rose-400/80 rounded-full animate-pulse" 
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
                 <button
-                  key={idx}
                   type="button"
-                  onClick={() => handleEmojiClick(emoji)}
-                  className="text-lg p-1 hover:scale-125 transition-transform cursor-pointer"
+                  onClick={handleCancelVoiceNote}
+                  className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white text-xs font-bold cursor-pointer transition-all"
                 >
-                  {emoji}
+                  Cancel
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={handleStopAndSendVoiceNote}
+                  className="w-9 h-9 rounded-full bg-emerald-500 hover:bg-emerald-400 text-white flex items-center justify-center cursor-pointer shadow-lg active:scale-95 transition-all"
+                  title="Send Voice Note"
+                >
+                  <Send size={15} />
+                </button>
+              </div>
             </div>
-          )}
-
-          {/* WHATSAPP BOTTOM INPUT BAR - IOS LIQUID GLASS FLOATING CAPSULE */}
-          <form onSubmit={handleSubmit} className="backdrop-blur-2xl bg-black/45 sm:bg-[#0c181f]/70 px-2.5 sm:px-4 py-2.5 flex items-center gap-2 shrink-0 border-t border-white/10 z-20 shadow-[0_-8px_32px_rgba(0,0,0,0.4)]">
-            <button 
-              type="button"
-              onClick={() => setShowMiniEmojiBar(!showMiniEmojiBar)}
-              className="backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 text-gray-300 hover:text-white p-2 rounded-full transition-all cursor-pointer active:scale-95"
-              title="Emojis"
-            >
-              <Smile size={20} />
-            </button>
-            <button 
-              type="button" 
-              onClick={() => fileInputRef.current && fileInputRef.current.click()}
-              className="backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 text-gray-300 hover:text-white p-2 rounded-full transition-all cursor-pointer active:scale-95"
-              title="Attach Photo or Document"
-            >
-              <Paperclip size={19} />
-            </button>
-            <textarea 
-              rows={1}
-              value={input}
-              onChange={handleInputChange}
-              onFocus={() => {
-                if (wpChatScrollRef.current) {
-                  wpChatScrollRef.current.scrollTop = wpChatScrollRef.current.scrollHeight;
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit(e);
-                }
-              }}
-              placeholder="Type a message..."
-              className="flex-1 backdrop-blur-xl bg-white/[0.08] border border-white/15 focus:border-emerald-400/50 text-[#e9edef] placeholder-gray-400 text-[14.5px] px-4 py-2.5 rounded-full outline-none resize-none max-h-28 overflow-y-auto leading-relaxed shadow-[inset_0_1px_2px_rgba(0,0,0,0.3)] transition-all"
-            />
-            {input.trim().length > 0 ? (
-              <button 
-                type="submit" 
-                className="w-10 h-10 rounded-full backdrop-blur-md bg-gradient-to-tr from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 border border-emerald-300/40 text-white flex items-center justify-center cursor-pointer shadow-[0_0_18px_rgba(16,185,129,0.45)] transition-all active:scale-90 shrink-0"
-                title="Send Message"
-              >
-                <Send size={16} className="translate-x-0.5" />
-              </button>
-            ) : (
+          ) : (
+            <form onSubmit={handleSubmit} className="backdrop-blur-2xl bg-black/45 sm:bg-[#0c181f]/70 px-2.5 sm:px-4 py-2.5 flex items-center gap-2 shrink-0 border-t border-white/10 z-20 shadow-[0_-8px_32px_rgba(0,0,0,0.4)]">
               <button 
                 type="button"
-                onClick={handleStartAudioCall}
-                className="w-10 h-10 rounded-full backdrop-blur-md bg-gradient-to-tr from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 border border-emerald-300/40 text-white flex items-center justify-center cursor-pointer shadow-[0_0_18px_rgba(16,185,129,0.45)] transition-all active:scale-90 shrink-0"
-                title="Start Whisper Call"
+                onClick={() => setShowWhatsAppMediaTray(!showWhatsAppMediaTray)}
+                className="backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 text-gray-300 hover:text-white p-2 rounded-full transition-all cursor-pointer active:scale-95"
+                title="Emojis & Stickers"
               >
-                <Mic size={18} />
+                <Smile size={20} />
               </button>
-            )}
-          </form>
+              <button 
+                type="button" 
+                onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                className="backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 text-gray-300 hover:text-white p-2 rounded-full transition-all cursor-pointer active:scale-95"
+                title="Attach Photo or Document"
+              >
+                <Paperclip size={19} />
+              </button>
+              <textarea 
+                ref={wpInputRef}
+                rows={1}
+                value={input}
+                onChange={handleInputChange}
+                onFocus={() => {
+                  if (wpChatScrollRef.current) {
+                    wpChatScrollRef.current.scrollTop = wpChatScrollRef.current.scrollHeight;
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit(e);
+                  }
+                }}
+                placeholder="Type a message..."
+                className="flex-1 backdrop-blur-xl bg-white/[0.08] border border-white/15 focus:border-emerald-400/50 text-[#e9edef] placeholder-gray-400 text-[14.5px] px-4 py-2.5 rounded-full outline-none resize-none max-h-28 overflow-y-auto leading-relaxed shadow-[inset_0_1px_2px_rgba(0,0,0,0.3)] transition-all"
+              />
+              {input.trim().length > 0 ? (
+                <button 
+                  type="submit" 
+                  onMouseDown={(e) => e.preventDefault()}
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    handleSubmit(e);
+                  }}
+                  className="w-10 h-10 rounded-full backdrop-blur-md bg-gradient-to-tr from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 border border-emerald-300/40 text-white flex items-center justify-center cursor-pointer shadow-[0_0_18px_rgba(16,185,129,0.45)] transition-all active:scale-90 shrink-0"
+                  title="Send Message"
+                >
+                  <Send size={16} className="translate-x-0.5" />
+                </button>
+              ) : (
+                <button 
+                  type="button"
+                  onClick={() => {
+                    if (bottomInputMode === 'mic') {
+                      setBottomInputMode('camera');
+                    } else {
+                      setBottomInputMode('mic');
+                    }
+                  }}
+                  className={`w-10 h-10 rounded-full backdrop-blur-md border flex items-center justify-center cursor-pointer transition-all active:scale-90 shrink-0 shadow-sm ${
+                    bottomInputMode === 'camera'
+                      ? 'bg-purple-600/60 hover:bg-purple-500/80 border-purple-400/50 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
+                      : 'bg-emerald-600/40 hover:bg-emerald-500/60 border-emerald-400/40 text-emerald-300 hover:text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]'
+                  }`}
+                  title={bottomInputMode === 'mic' ? 'Tap to switch to Video Note / Click to Record Voice Note' : 'Tap to switch to Voice Note / Click to Record Video Note'}
+                >
+                  {bottomInputMode === 'mic' ? (
+                    <Mic 
+                      size={18} 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStartVoiceNoteRecording();
+                      }} 
+                    />
+                  ) : (
+                    <Camera 
+                      size={18} 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowCircularVideoNoteModal(true);
+                      }} 
+                    />
+                  )}
+                </button>
+              )}
+            </form>
+          )}
+
+          {/* WHATSAPP RICH MEDIA TRAY (EMOJIS, STICKERS, ADD FROM WEB) */}
+          <WhatsAppMediaTray
+            isOpen={showWhatsAppMediaTray}
+            onClose={() => setShowWhatsAppMediaTray(false)}
+            onSelectEmoji={handleEmojiClick}
+            onSelectSticker={handleSendSticker}
+          />
+
+          {/* CIRCULAR 60-SECOND VIDEO NOTE RECORDER MODAL */}
+          <CircularVideoNoteModal
+            isOpen={showCircularVideoNoteModal}
+            onClose={() => setShowCircularVideoNoteModal(false)}
+            onSendVideoNote={handleSendVideoNote}
+          />
         </aside>
       )}
 
