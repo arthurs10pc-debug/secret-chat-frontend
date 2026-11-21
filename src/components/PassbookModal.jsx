@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   X, RefreshCw, Trash2, Gift, Filter, ShieldCheck, Sparkles 
 } from 'lucide-react';
-import { ROMANTIC_WISH_STORE, LOVE_EARNING_RULES, LOVE_DEDUCTION_RULES } from '../constants';
+import { ROMANTIC_WISH_STORE, LOVE_EARNING_RULES, LOVE_DEDUCTION_RULES, SCRATCH_VOUCHERS_POOL } from '../constants';
 import ScratchCardModal from './ScratchCardModal';
 
 export default function PassbookModal({
@@ -40,10 +40,105 @@ export default function PassbookModal({
   setLoveDateTo,
   handleDeleteTransaction,
   handleInitiateWishRequest,
-  handleToggleWishFulfillment
+  handleToggleWishFulfillment,
+  handleLoveBalanceTransaction
 }) {
   const [showScratchModal, setShowScratchModal] = useState(false);
   const [selectedScratchVoucher, setSelectedScratchVoucher] = useState(null);
+
+  // Persistent tracking of unlocked scratch vouchers and revealed codes
+  const [unlockedVouchers, setUnlockedVouchers] = useState(() => {
+    try {
+      const saved = localStorage.getItem('stealth_unlocked_scratch_vouchers');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [revealedCodes, setRevealedCodes] = useState(() => {
+    try {
+      const saved = localStorage.getItem('stealth_revealed_voucher_codes');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const isDarsh = isParentAdmin ? (activeLbTarget === 'admin') : (role === 'parent');
+  const openerName = isDarsh ? 'Darsh' : (activeDoraName || 'Dora');
+  const openerRole = isDarsh ? 'admin' : 'user';
+  const currentOpenerBalance = isDarsh ? adminNetBalance : doraNetBalance;
+
+  const handleOpenScratchCard = () => {
+    // 1. Minimum 6.00 points required to open
+    if (currentOpenerBalance < 6.0) {
+      alert(`❌ Insufficient Love Points!\n\nYou need at least 6.00 Love Points to open a Surprise Scratch Card.\nYour current balance: ₹ ${Number(currentOpenerBalance || 0).toFixed(2)}\n\nPlease complete routine habits or sweet care tasks to earn points!`);
+      return;
+    }
+
+    // 2. Pick random non-repeating voucher from pool
+    const pool = (SCRATCH_VOUCHERS_POOL || []);
+    let availablePool = pool.filter(v => !revealedCodes.includes(v.code));
+    if (availablePool.length === 0) {
+      // If all vouchers have been revealed, restart cycle
+      availablePool = [...pool];
+    }
+    const chosen = availablePool[Math.floor(Math.random() * availablePool.length)];
+
+    // 3. Deduct 6.00 points from opener
+    if (handleLoveBalanceTransaction) {
+      handleLoveBalanceTransaction(
+        6.0,
+        'debit',
+        `🎟️ Opened Surprise Scratch Card: ${chosen.title} (-6.00 pts)`,
+        false,
+        openerRole,
+        {
+          title: chosen.title,
+          icon: chosen.icon,
+          points: chosen.points,
+          customId: 'sc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4)
+        }
+      );
+    }
+
+    // 4. Update revealed codes
+    const nextCodes = Array.from(new Set([...revealedCodes, chosen.code]));
+    setRevealedCodes(nextCodes);
+    try { localStorage.setItem('stealth_revealed_voucher_codes', JSON.stringify(nextCodes)); } catch(e) {}
+
+    // 5. Open Scratch Card Modal
+    const cardData = {
+      ...chosen,
+      openerName: openerName,
+      openedAt: new Date().toLocaleString('en-GB')
+    };
+    setSelectedScratchVoucher(cardData);
+    setShowScratchModal(true);
+  };
+
+  const handleSaveVoucher = (voucher) => {
+    if (!voucher) return;
+    const item = {
+      id: voucher.id || ('v_' + Date.now()),
+      title: voucher.title,
+      code: voucher.code,
+      description: voucher.description,
+      icon: voucher.icon || '🎁',
+      points: voucher.points || voucher.value || 'Priceless',
+      category: voucher.category || 'Surprise Voucher',
+      unlockedBy: voucher.openerName || openerName,
+      unlockedAt: voucher.openedAt || new Date().toLocaleString('en-GB'),
+      status: 'Active'
+    };
+    setUnlockedVouchers(prev => {
+      if (prev.some(x => x.code === item.code)) return prev;
+      const updated = [item, ...prev];
+      try { localStorage.setItem('stealth_unlocked_scratch_vouchers', JSON.stringify(updated)); } catch(e) {}
+      return updated;
+    });
+  };
 
   if (!showLoveBalanceModal) return null;
 
@@ -483,10 +578,8 @@ export default function PassbookModal({
                         <th className="py-2.5 px-3">SL</th>
                         <th className="py-2.5 px-3">Description</th>
                         <th className="py-2.5 px-3">Earned At</th>
-                        <th className="py-2.5 px-3">Expire Date</th>
                         <th className="py-2.5 px-3">Points</th>
                         <th className="py-2.5 px-3">Remarks</th>
-                        <th className="py-2.5 px-3">Audit Hash</th>
                         <th className="py-2.5 px-3 text-right">Status</th>
                         {isParentAdmin && <th className="py-2.5 px-3 text-center w-10">Action</th>}
                       </tr>
@@ -523,60 +616,83 @@ export default function PassbookModal({
                           }
                           return true;
                         })
-                        .map((row, idx) => (
-                          <tr key={row.id || idx} className="hover:bg-[#202020] transition-colors">
-                            <td className="py-2.5 px-3 font-mono text-gray-400">{row.sl || idx + 1}</td>
-                            <td className="py-2.5 px-3 font-bold text-white">
-                              {!isParentAdmin ? row.description.replace(/^\[Dora\]\s*/i, '') : row.description}
-                            </td>
-                            <td className="py-2.5 px-3 font-mono text-[11px] text-gray-400">{row.earnedAt}</td>
-                            <td className="py-2.5 px-3 font-mono text-[11px] text-gray-400">{row.expireDate || '—'}</td>
-                            <td className="py-2.5 px-3 font-mono font-bold">
-                              <span className={'px-2 py-0.5 rounded-full text-[11px] ' + (
-                                row.points > 0 
-                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                                  : (row.status === 'Redeemed'
-                                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                                      : 'bg-rose-500/20 text-rose-400 border border-rose-500/30')
-                              )}>
-                                {row.points > 0 ? '+' + row.points.toFixed(2) : row.points.toFixed(2)}
-                              </span>
-                            </td>
-                            <td className="py-2.5 px-3 text-gray-400 text-[11px] max-w-[200px] truncate" title={row.remarks}>
-                              {row.remarks || '—'}
-                            </td>
-                            <td className="py-2.5 px-3">
-                              <span 
-                                className="inline-flex items-center gap-1 font-mono text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-1.5 py-0.5 rounded cursor-help"
-                                title={`Cryptographic SHA-256 Ledger Audit Block: ${row.auditHash || 'VERIFIED_CHAIN'}`}
-                              >
-                                <ShieldCheck size={11} className="text-emerald-400 shrink-0" />
-                                <span>{row.auditHash ? row.auditHash.substring(0, 8) : 'VERIFIED'}</span>
-                              </span>
-                            </td>
-                            <td className="py-2.5 px-3 text-right">
-                              <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (
-                                row.status === 'Confirmed' 
-                                  ? 'bg-emerald-600 text-white' 
-                                  : (row.status === 'Redeemed' ? 'bg-amber-600 text-white' : 'bg-rose-600 text-white')
-                              )}>
-                                {row.status}
-                              </span>
-                            </td>
-                            {isParentAdmin && (
-                              <td className="py-2.5 px-3 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteTransaction(row.id)}
-                                  className="p-1 text-gray-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg cursor-pointer transition-all"
-                                  title="Delete this transaction permanently"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
+                        .map((row, idx) => {
+                          const rawDesc = !isParentAdmin ? (row.description || '').replace(/^\[Dora\]\s*/i, '') : (row.description || '');
+                          // Clean description without trailing date (e.g. "(2026-11-21)")
+                          const cleanDesc = rawDesc.replace(/\s*\(\d{4}-\d{2}-\d{2}\)$/, '').trim();
+
+                          // Extract slot info if present
+                          let slotBadge = null;
+                          const matchTask = (row.description || '').match(/(?:Routine Task|Approved Task|Task):\s*([^(]+)/i);
+                          if (matchTask) {
+                            slotBadge = matchTask[1].trim();
+                          } else if ((row.description || '').toLowerCase().includes('morning greeting')) {
+                            slotBadge = 'Morning Sweet Text';
+                          } else if ((row.description || '').toLowerCase().includes('good night') || (row.description || '').toLowerCase().includes('night skin')) {
+                            slotBadge = 'Night Care / Good Night';
+                          } else if (row.remarks && row.remarks.includes('Deadline')) {
+                            slotBadge = 'Routine Habit';
+                          }
+
+                          const isDeduction = row.type === 'debit' || row.points < 0;
+
+                          return (
+                            <tr key={row.id || idx} className="hover:bg-[#202020] transition-colors">
+                              <td className="py-2.5 px-3 font-mono text-gray-400">{row.sl || idx + 1}</td>
+                              <td className="py-2.5 px-3 font-bold text-white max-w-[280px]">
+                                <div>{cleanDesc}</div>
                               </td>
-                            )}
-                          </tr>
-                        ))}
+                              <td className="py-2.5 px-3 font-mono text-[11px] text-gray-300">
+                                <div className="text-gray-200 font-semibold">{row.earnedAt}</div>
+                                {slotBadge && (
+                                  <div className="text-[10px] font-sans font-bold flex items-center gap-1 mt-0.5">
+                                    <span className="text-blue-400">📍 {slotBadge}</span>
+                                    <span className={`text-[9px] px-1 py-0.2 rounded font-mono ${
+                                      isDeduction ? 'bg-rose-950/70 text-rose-300 border border-rose-500/30' : 'bg-emerald-950/70 text-emerald-300 border border-emerald-500/30'
+                                    }`}>
+                                      {isDeduction ? 'Cut' : 'Earned'}
+                                    </span>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 font-mono font-bold">
+                                <span className={'px-2 py-0.5 rounded-full text-[11px] ' + (
+                                  row.points > 0 
+                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                                    : (row.status === 'Redeemed'
+                                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                        : 'bg-rose-500/20 text-rose-400 border border-rose-500/30')
+                                )}>
+                                  {row.points > 0 ? '+' + row.points.toFixed(2) : row.points.toFixed(2)}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-gray-400 text-[11px] max-w-[220px] truncate" title={row.remarks}>
+                                {row.remarks || '—'}
+                              </td>
+                              <td className="py-2.5 px-3 text-right">
+                                <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (
+                                  row.status === 'Confirmed' 
+                                    ? 'bg-emerald-600 text-white' 
+                                    : (row.status === 'Redeemed' ? 'bg-amber-600 text-white' : 'bg-rose-600 text-white')
+                                )}>
+                                  {row.status}
+                                </span>
+                              </td>
+                              {isParentAdmin && (
+                                <td className="py-2.5 px-3 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteTransaction(row.id)}
+                                    className="p-1 text-gray-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg cursor-pointer transition-all"
+                                    title="Delete this transaction permanently"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
                     </tbody>
                   </table>
                 </div>
@@ -610,21 +726,19 @@ export default function PassbookModal({
                   <div className="text-left space-y-0.5">
                     <div className="flex items-center gap-2">
                       <h4 className="text-sm font-black text-amber-300">Surprise Scratch Voucher</h4>
-                      <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.2 rounded-full">INTERACTIVE</span>
+                      <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.2 rounded-full">6.00 PTS</span>
+                      <span className="text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 px-2 py-0.2 rounded-full">NEVER REPEATS</span>
                     </div>
-                    <p className="text-xs text-gray-300">Scratch the gold card on screen to reveal secret promises, romantic dates & surprises!</p>
+                    <p className="text-xs text-gray-300">Deduct 6 Love Points to reveal romantic promises, dates & cute surprises! Saved to your Wish Store history.</p>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedScratchVoucher(null);
-                    setShowScratchModal(true);
-                  }}
+                  onClick={handleOpenScratchCard}
                   className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer shadow-lg active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
                 >
                   <Sparkles size={14} />
-                  <span>Scratch Card Now ✨</span>
+                  <span>Scratch Card (6 Pts) ✨</span>
                 </button>
               </div>
 
@@ -732,6 +846,49 @@ export default function PassbookModal({
                   </div>
                 );
               })()}
+
+              {/* UNLOCKED SURPRISE SCRATCH CARDS & VOUCHERS VAULT */}
+              {unlockedVouchers && unlockedVouchers.length > 0 && (
+                <div className="bg-[#181818] border border-amber-500/40 rounded-2xl p-4 space-y-3 shadow-lg">
+                  <div className="flex items-center justify-between border-b border-[#2b2b2b] pb-2">
+                    <h4 className="text-sm font-black text-amber-300 flex items-center gap-2">
+                      <span>✨ Unlocked Scratch Cards & Vouchers</span>
+                      <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.2 rounded-full font-mono font-bold">
+                        {unlockedVouchers.length} REVEALED
+                      </span>
+                    </h4>
+                    <span className="text-[10px] text-gray-400 font-mono">6 pts each • Kept in Wish Store</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {unlockedVouchers.map((uv, idx) => (
+                      <div key={uv.id || idx} className="bg-gradient-to-br from-[#1c1815] via-[#161616] to-[#1c1418] border border-amber-500/30 rounded-xl p-3 space-y-2 shadow">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-2xl p-1.5 bg-black/50 rounded-xl border border-amber-500/30 shrink-0">{uv.icon || '🎁'}</span>
+                            <div className="text-left">
+                              <h5 className="text-xs font-black text-white">{uv.title}</h5>
+                              <p className="text-[10px] text-pink-200 leading-tight mt-0.5">{uv.description}</p>
+                            </div>
+                          </div>
+                          <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-500/30 px-2 py-0.5 rounded-lg shrink-0">
+                            {uv.points || uv.value || 'Priceless'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[10px] font-mono border-t border-[#262626] pt-1.5">
+                          <span className="text-amber-300 bg-black/60 px-2 py-0.5 rounded border border-amber-500/20">
+                            👤 Unlocked by: {uv.unlockedBy || 'Partner'}
+                          </span>
+                          <span className="text-gray-400">
+                            CODE: <strong className="text-amber-400">{uv.code}</strong>
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="bg-gradient-to-r from-amber-950/40 via-orange-950/40 to-amber-950/40 border border-amber-500/30 rounded-2xl p-4 sm:p-5 flex items-center justify-between">
                 <div className="space-y-1">
@@ -905,6 +1062,8 @@ export default function PassbookModal({
         isOpen={showScratchModal}
         onClose={() => setShowScratchModal(false)}
         voucher={selectedScratchVoucher}
+        openerName={selectedScratchVoucher?.openerName || openerName}
+        onSaveVoucher={handleSaveVoucher}
       />
     </div>
   );

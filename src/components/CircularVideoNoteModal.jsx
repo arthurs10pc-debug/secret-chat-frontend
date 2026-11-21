@@ -245,7 +245,7 @@ export default function CircularVideoNoteModal({
           ) : (
             <>
               <Camera size={13} className="text-amber-400" />
-              <span>INSTANT SNAP</span>
+              <span>Camera</span>
             </>
           )}
         </div>
@@ -321,7 +321,7 @@ export default function CircularVideoNoteModal({
             }`}
           >
             <Camera size={13} />
-            <span>📸 Photo (Direct Send)</span>
+            <span>📸 Photo</span>
           </button>
           <button
             type="button"
@@ -331,7 +331,7 @@ export default function CircularVideoNoteModal({
             }`}
           >
             <Video size={13} />
-            <span>🎥 Video Note</span>
+            <span>🎥 Video</span>
           </button>
         </div>
 
@@ -347,7 +347,7 @@ export default function CircularVideoNoteModal({
                     ? 'border-rose-500 bg-rose-600 ring-4 ring-rose-400/70 animate-pulse' 
                     : 'border-emerald-400 bg-emerald-500/20 hover:bg-emerald-500/40 ring-4 ring-emerald-400/50')
             }`}
-            title={captureMode === 'photo' ? "Tap to instantly capture & direct-send photo!" : (isRecording ? "Tap to finish & send video note" : "Tap to record video note")}
+            title={captureMode === 'photo' ? "Capture Photo" : (isRecording ? "Stop & Send Video" : "Record Video")}
           >
             <div className={`rounded-full transition-all ${
               captureMode === 'photo'
@@ -358,7 +358,7 @@ export default function CircularVideoNoteModal({
         </div>
 
         <p className="text-[11px] text-gray-400 text-center font-medium">
-          {captureMode === 'photo' ? '✨ Tap shutter to capture & send instantly!' : (isRecording ? '🔴 Recording... Tap shutter to finish & send!' : 'Tap shutter to start video note')}
+          {captureMode === 'photo' ? 'Tap shutter to capture & send photo' : (isRecording ? '🔴 Recording... Tap shutter to finish & send' : 'Tap shutter to record video')}
         </p>
 
       </div>

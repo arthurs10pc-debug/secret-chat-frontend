@@ -1,22 +1,26 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { X, Sparkles, Gift } from 'lucide-react';
+import { X, Sparkles, Gift, CheckCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function ScratchCardModal({
   isOpen,
   onClose,
-  voucher
+  voucher,
+  openerName = 'You',
+  onSaveVoucher
 }) {
   const canvasRef = useRef(null);
   const [isRevealed, setIsRevealed] = useState(false);
   const isDrawingRef = useRef(false);
 
   const defaultVoucher = voucher || {
+    id: 'v_dinner_default',
     title: 'Candlelight Dinner Date 🥂',
     code: 'LOVE-VIP-' + Math.floor(1000 + Math.random() * 9000),
     description: 'A fully organized royal romantic candlelight dinner date with sovereign menu choice!',
     icon: '🥂',
-    value: '₹ 250.00'
+    points: '₹ 250.00',
+    category: 'Romantic Date'
   };
 
   useEffect(() => {
@@ -47,7 +51,7 @@ export default function ScratchCardModal({
     ctx.fillText('✨ SCRATCH WITH FINGER ✨', width / 2, height / 2 - 8);
     ctx.font = '11px sans-serif';
     ctx.fillStyle = '#512e5f';
-    ctx.fillText('Scratch to reveal your romantic reward!', width / 2, height / 2 + 14);
+    ctx.fillText('Scratch to reveal your surprise voucher!', width / 2, height / 2 + 14);
 
     const checkScratchedPercentage = () => {
       try {
@@ -61,7 +65,7 @@ export default function ScratchCardModal({
         }
 
         const scratchedRatio = (transparentPixels * 4) / totalPixels;
-        if (scratchedRatio > 0.45 && !isRevealed) {
+        if (scratchedRatio > 0.40 && !isRevealed) {
           setIsRevealed(true);
           try {
             confetti({
@@ -70,6 +74,9 @@ export default function ScratchCardModal({
               origin: { y: 0.5 }
             });
           } catch (e) {}
+          if (onSaveVoucher && defaultVoucher) {
+            onSaveVoucher(defaultVoucher);
+          }
         }
       } catch (e) {}
     };
@@ -135,9 +142,19 @@ export default function ScratchCardModal({
       canvas.removeEventListener('touchmove', handleTouchMove);
       canvas.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [isOpen, isRevealed]);
+  }, [isOpen, isRevealed, defaultVoucher, onSaveVoucher]);
 
   if (!isOpen) return null;
+
+  const handleRevealAll = () => {
+    setIsRevealed(true);
+    try {
+      confetti({ particleCount: 90, spread: 80, origin: { y: 0.5 } });
+    } catch (e) {}
+    if (onSaveVoucher && defaultVoucher) {
+      onSaveVoucher(defaultVoucher);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200 font-sans">
@@ -148,8 +165,8 @@ export default function ScratchCardModal({
           <div className="flex items-center gap-2">
             <span className="text-xl">✨</span>
             <div className="text-left">
-              <h3 className="text-sm font-black text-amber-300">Romantic Scratch Card</h3>
-              <p className="text-[10px] text-gray-400 font-mono">Special Couple Voucher</p>
+              <h3 className="text-sm font-black text-amber-300">Surprise Scratch Voucher</h3>
+              <p className="text-[10px] text-gray-400 font-mono">Cost: 6 Love Points • Saved to Wish Store</p>
             </div>
           </div>
           <button
@@ -162,10 +179,23 @@ export default function ScratchCardModal({
         </div>
 
         {/* SCRATCH CONTAINER */}
-        <div className="relative w-full h-44 rounded-2xl overflow-hidden border-2 border-amber-500/50 shadow-inner bg-gradient-to-br from-pink-950/60 via-purple-950/60 to-pink-900/60 flex flex-col items-center justify-center p-3 text-center">
+        <div className="relative w-full min-h-[190px] rounded-2xl overflow-hidden border-2 border-amber-500/50 shadow-inner bg-gradient-to-br from-pink-950/70 via-purple-950/70 to-pink-900/70 flex flex-col items-center justify-center p-3.5 text-center">
           
+          {/* SMALL CORNER BADGE: OPENER NAME */}
+          <div className="absolute top-2 left-2 z-10 bg-black/70 backdrop-blur-sm border border-amber-400/40 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold text-amber-300 flex items-center gap-1 shadow">
+            <span>👤</span>
+            <span>Unlocked by: {openerName}</span>
+          </div>
+
+          {/* CATEGORY BADGE */}
+          {defaultVoucher.category && (
+            <div className="absolute top-2 right-2 z-10 bg-purple-900/70 backdrop-blur-sm border border-purple-400/40 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold text-purple-200 shadow">
+              {defaultVoucher.category}
+            </div>
+          )}
+
           {/* SECRET REVEALED CONTENT UNDERNEATH */}
-          <div className="space-y-1.5 select-none pointer-events-none">
+          <div className="space-y-1.5 select-none pt-4">
             <span className="text-3xl">{defaultVoucher.icon || '🎁'}</span>
             <h4 className="text-sm font-black text-white px-2">
               {defaultVoucher.title}
@@ -174,11 +204,11 @@ export default function ScratchCardModal({
               {defaultVoucher.description}
             </p>
             <div className="pt-1 flex items-center justify-center gap-2">
-              <span className="text-[10px] font-mono font-bold text-amber-300 bg-black/50 border border-amber-500/40 px-2 py-0.5 rounded-md">
+              <span className="text-[10px] font-mono font-bold text-amber-300 bg-black/60 border border-amber-500/40 px-2 py-0.5 rounded-md">
                 CODE: {defaultVoucher.code}
               </span>
-              <span className="text-[10px] font-mono font-bold text-emerald-300 bg-emerald-950/60 border border-emerald-500/40 px-2 py-0.5 rounded-md">
-                {defaultVoucher.value}
+              <span className="text-[10px] font-mono font-bold text-emerald-300 bg-emerald-950/70 border border-emerald-500/40 px-2 py-0.5 rounded-md">
+                {defaultVoucher.points || defaultVoucher.value || 'Priceless'}
               </span>
             </div>
           </div>
@@ -187,7 +217,7 @@ export default function ScratchCardModal({
           <canvas
             ref={canvasRef}
             width={340}
-            height={176}
+            height={190}
             className={`absolute inset-0 w-full h-full cursor-crosshair transition-opacity duration-500 ${
               isRevealed ? 'opacity-0 pointer-events-none' : 'opacity-100'
             }`}
@@ -197,13 +227,21 @@ export default function ScratchCardModal({
         {/* STATUS & ACTIONS */}
         <div className="space-y-2 pt-1">
           {isRevealed ? (
-            <div className="bg-emerald-950/60 border border-emerald-500/60 p-2 rounded-xl text-xs font-bold text-emerald-300 animate-pulse">
-              🎉 Voucher Unlocked! Take a screenshot & claim anytime!
+            <div className="bg-emerald-950/60 border border-emerald-500/60 p-2 rounded-xl text-xs font-bold text-emerald-300 flex items-center justify-center gap-1.5">
+              <CheckCircle size={14} className="text-emerald-400 shrink-0" />
+              <span>Saved to Wish Store! Claim anytime together 💖</span>
             </div>
           ) : (
-            <p className="text-[11px] text-gray-400">
-              Rub your finger or mouse across the gold card to scratch!
-            </p>
+            <div className="flex items-center justify-between px-1 text-[11px] text-gray-400">
+              <span>Rub finger or mouse to scratch</span>
+              <button
+                type="button"
+                onClick={handleRevealAll}
+                className="text-amber-400 hover:text-amber-300 underline font-semibold text-[10px] cursor-pointer"
+              >
+                Quick Reveal ✨
+              </button>
+            </div>
           )}
 
           <div className="flex gap-2">
@@ -212,7 +250,7 @@ export default function ScratchCardModal({
               onClick={onClose}
               className="flex-1 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black font-black py-2.5 rounded-xl cursor-pointer shadow text-xs transition-all active:scale-95"
             >
-              {isRevealed ? 'Save & Close' : 'Done'}
+              {isRevealed ? 'Done & Saved to Wish Store 🎁' : 'Close'}
             </button>
           </div>
         </div>

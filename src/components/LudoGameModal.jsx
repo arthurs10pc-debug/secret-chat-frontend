@@ -633,14 +633,15 @@ export default function LudoGameModal({
             ))}
           </div>
 
-          <div className="flex items-center gap-1 text-[11px] text-gray-300">
-            <span>Win:</span>
+          <div className="flex items-center gap-1.5 text-[11px] text-gray-300">
+            <span className="text-gray-400">Target:</span>
             <button
               type="button"
               onClick={() => setTokensToWin(tokensToWin === 2 ? 4 : 2)}
-              className="bg-[#242424] hover:bg-[#303030] text-amber-400 font-bold px-2 py-0.5 rounded-lg cursor-pointer"
+              className="bg-[#242424] hover:bg-[#303030] text-amber-400 font-bold px-2.5 py-0.5 rounded-lg cursor-pointer border border-[#383838] transition-all"
+              title={tokensToWin === 2 ? "Quick Match: First player to get 2 tokens home wins! Tap for Classic (4 tokens)" : "Classic Match: All 4 tokens home to win. Tap for Quick (2 tokens)"}
             >
-              {tokensToWin} Tokens
+              {tokensToWin === 2 ? '⚡ Quick (2 Tokens)' : '🏆 Classic (4 Tokens)'}
             </button>
           </div>
         </div>
