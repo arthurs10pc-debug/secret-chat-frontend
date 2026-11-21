@@ -41,6 +41,7 @@ import WishApprovalModal from './components/WishApprovalModal';
 import ClearConfirmModal from './components/ClearConfirmModal';
 import AnswerPendingModal from './components/AnswerPendingModal';
 import RoutineSlotModal from './components/RoutineSlotModal';
+import SlotReportModal from './components/SlotReportModal';
 import ImagePreviewModal from './components/ImagePreviewModal';
 import DarshAssistantBot from './components/DarshAssistantBot';
 import StealthAlertBubble from './components/StealthAlertBubble';
@@ -651,6 +652,7 @@ export default function App() {
   const [dailyImageProof, setDailyImageProof] = useState('');
   const [dailySubmitting, setDailySubmitting] = useState(false);
   const [dailyPreviewModalImg, setDailyPreviewModalImg] = useState(null);
+  const [showSlotReportModal, setShowSlotReportModal] = useState(false);
   const [dailyAdminToast, setDailyAdminToast] = useState(null);
   const [dailyAdminTab, setDailyAdminTab] = useState('review'); // 'review' | 'slots'
   const [showAddSlotModal, setShowAddSlotModal] = useState(false);
@@ -9709,9 +9711,9 @@ export default function App() {
                               key={slot.id}
                               onClick={() => {
                                 setDailySelectedSlotId(slot.id);
-                                if (sub && sub.image) setDailyPreviewModalImg(sub.image);
+                                setShowSlotReportModal(true);
                               }}
-                              className={`min-w-[90px] sm:min-w-[105px] max-w-[115px] p-2 sm:p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col items-center justify-between text-center select-none shrink-0 ${
+                              className={`min-w-[85px] sm:min-w-[100px] max-w-[120px] p-2 sm:p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col items-center justify-between text-center select-none shrink-0 ${
                                 isSelected 
                                   ? 'bg-amber-950/80 border-amber-500 ring-2 ring-amber-400 shadow-lg scale-105' 
                                   : (isOverdue && !isApproved 
@@ -9719,23 +9721,30 @@ export default function App() {
                                       : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-800 shadow-sm')
                               }`}
                             >
-                              <div className="space-y-0.5">
-                                <div className={`text-xs sm:text-sm font-black ${isSelected ? 'text-white' : (isOverdue && !isApproved ? 'text-rose-300' : 'text-gray-900')}`}>
+                              <div className="space-y-0.5 w-full">
+                                <div className={`text-sm sm:text-base font-black ${isSelected ? 'text-white' : (isOverdue && !isApproved ? 'text-rose-300' : 'text-gray-900')}`}>
                                   {topTime}
                                 </div>
                                 {botTime && (
-                                  <div className={`text-[10px] font-medium ${isSelected ? 'text-amber-300' : (isOverdue && !isApproved ? 'text-rose-400' : 'text-gray-500')}`}>
+                                  <div className={`text-[11px] font-medium ${isSelected ? 'text-amber-300' : (isOverdue && !isApproved ? 'text-rose-400' : 'text-gray-500')}`}>
                                     {botTime}
                                   </div>
                                 )}
                               </div>
 
-                              <div className="my-1.5 w-full">
+                              <div className="my-1.5 w-full flex flex-col items-center gap-1">
                                 {isApproved ? (
-                                  <div className="bg-emerald-600 text-white text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
-                                    <span>✓</span>
-                                    <span>Done</span>
-                                  </div>
+                                  <>
+                                    <div className="bg-emerald-600 text-white text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
+                                      <span>✓</span>
+                                      <span>Done</span>
+                                    </div>
+                                    {sub && sub.image && (
+                                      <div className="w-5 h-5 rounded-full border border-blue-400 bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] shadow-xs mt-0.5" title="View proof">
+                                        <Eye size={10} />
+                                      </div>
+                                    )}
+                                  </>
                                 ) : isPending ? (
                                   <div className="bg-amber-500 text-black text-[9px] font-black py-0.5 px-1.5 rounded-full flex items-center justify-center gap-0.5 shadow-sm animate-pulse">
                                     <span>⏳</span>
@@ -9745,52 +9754,18 @@ export default function App() {
                                   <div className="bg-rose-600 text-white text-[9px] font-bold py-0.5 px-1.5 rounded-full flex items-center justify-center shadow-sm">
                                     <span>Retake</span>
                                   </div>
-                                ) : slot.tag === 'Lunch' ? (
-                                  <div className="bg-amber-600 text-white text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
-                                    <span>🍴</span>
-                                    <span>Lunch</span>
-                                  </div>
-                                ) : slot.tag === 'Tea' ? (
-                                  <div className="bg-blue-600 text-white text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
-                                    <span>☕</span>
-                                    <span>Tea</span>
+                                ) : isOverdue ? (
+                                  <div className="bg-rose-600/30 border border-rose-500/50 text-rose-300 text-[9px] font-bold py-0.5 px-1.5 rounded-full flex items-center justify-center gap-0.5 shadow-sm">
+                                    <span>⏰</span>
+                                    <span>Late (50%)</span>
                                   </div>
                                 ) : (
-                                  <div className={`text-[9px] py-0.5 px-1.5 rounded-full font-medium ${isSelected ? 'bg-amber-900/50 text-amber-200' : (isOverdue && !isApproved ? 'bg-rose-900/40 text-rose-300' : 'bg-gray-100 text-gray-600')}`}>
-                                    {isOverdue && !isApproved ? 'Overdue' : (slot.tag || 'Pending')}
+                                  <div className="bg-blue-100 text-blue-700 border border-blue-200 text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
+                                    <span>⏰</span>
+                                    <span>Pending</span>
                                   </div>
                                 )}
                               </div>
-
-                              {isApproved ? (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (sub && sub.image) setDailyPreviewModalImg(sub.image);
-                                  }}
-                                  className="w-7 h-7 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-all cursor-pointer shadow-md active:scale-90 mt-0.5"
-                                  title="Task Approved ✓ (Click to view proof)"
-                                >
-                                  <Check size={14} />
-                                </button>
-                              ) : isPending ? (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (sub && sub.image) setDailyPreviewModalImg(sub.image);
-                                  }}
-                                  className="w-7 h-7 rounded-full border border-amber-500 bg-amber-500/10 text-amber-400 hover:bg-amber-500 hover:text-black flex items-center justify-center transition-all cursor-pointer shadow-sm active:scale-90 mt-0.5 animate-pulse"
-                                  title="Under Review ⏳ (Click to view proof photo)"
-                                >
-                                  <Eye size={13} />
-                                </button>
-                              ) : (
-                                <div className="w-7 h-7 rounded-full border border-gray-200 text-gray-400 flex items-center justify-center mt-0.5 opacity-40">
-                                  <Clock size={12} />
-                                </div>
-                              )}
                             </div>
                           );
                         })}
@@ -10227,8 +10202,11 @@ export default function App() {
                       return (
                         <div
                           key={slot.id}
-                          onClick={() => setDailySelectedSlotId(slot.id)}
-                          className={`min-w-[115px] sm:min-w-[130px] max-w-[155px] p-2 sm:p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col items-center justify-between text-center select-none shrink-0 ${
+                          onClick={() => {
+                            setDailySelectedSlotId(slot.id);
+                            setShowSlotReportModal(true);
+                          }}
+                          className={`min-w-[85px] sm:min-w-[100px] max-w-[120px] p-2 sm:p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col items-center justify-between text-center select-none shrink-0 ${
                             isSelected 
                               ? (isOverdue && !isApproved 
                                   ? 'bg-rose-950/90 border-rose-500 ring-2 ring-rose-400 shadow-lg scale-105 text-white' 
@@ -10240,7 +10218,7 @@ export default function App() {
                         >
                           {/* TIME HEADER */}
                           <div className="space-y-0.5 w-full">
-                            <div className={`text-xs sm:text-sm font-black ${
+                            <div className={`text-sm sm:text-base font-black ${
                               isSelected 
                                 ? 'text-white' 
                                 : (isOverdue && !isApproved ? 'text-rose-400' : 'text-gray-900')
@@ -10248,7 +10226,7 @@ export default function App() {
                               {topTime}
                             </div>
                             {botTime && (
-                              <div className={`text-[10px] font-medium ${
+                              <div className={`text-[11px] font-medium ${
                                 isSelected 
                                   ? (isOverdue && !isApproved ? 'text-rose-300' : 'text-blue-300')
                                   : (isOverdue && !isApproved ? 'text-rose-300/80' : 'text-gray-500')
@@ -10258,25 +10236,20 @@ export default function App() {
                             )}
                           </div>
 
-                          {/* FULL TASK TITLE (ADMIN INSTRUCTION) */}
-                          <div className="my-1 w-full px-1">
-                            <div 
-                              className={`text-[10px] sm:text-[11px] font-bold truncate max-w-full leading-tight ${
-                                isSelected ? 'text-amber-300' : (isOverdue && !isApproved ? 'text-rose-200' : 'text-gray-800')
-                              }`} 
-                              title={slot.title}
-                            >
-                              {slot.title || slot.tag || 'Daily Habit'}
-                            </div>
-                          </div>
-
-                          {/* STATUS BADGE */}
-                          <div className="my-1.5 w-full">
+                          {/* STATUS BADGE ONLY (BAHAR SIFT TIME AUR STATUS DIKHEGA) */}
+                          <div className="my-1.5 w-full flex flex-col items-center gap-1">
                             {isApproved ? (
-                              <div className="bg-emerald-600 text-white text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
-                                <span>✓</span>
-                                <span>Done</span>
-                              </div>
+                              <>
+                                <div className="bg-emerald-600 text-white text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
+                                  <span>✓</span>
+                                  <span>Done</span>
+                                </div>
+                                {sub && sub.image && (
+                                  <div className="w-5 h-5 rounded-full border border-blue-400 bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] shadow-xs mt-0.5" title="Proof submitted">
+                                    <Eye size={10} />
+                                  </div>
+                                )}
+                              </>
                             ) : isPending ? (
                               <div className="bg-amber-500 text-black text-[9px] font-bold py-0.5 px-1.5 rounded-full flex items-center justify-center gap-0.5 shadow-sm animate-pulse">
                                 <span>⏳</span>
@@ -10291,69 +10264,13 @@ export default function App() {
                                 <span>⏰</span>
                                 <span>Late (50%)</span>
                               </div>
-                            ) : slot.tag === 'Lunch' ? (
-                              <div className="bg-amber-600 text-white text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
-                                <span>🍴</span>
-                                <span>Lunch</span>
-                              </div>
-                            ) : slot.tag === 'Tea' ? (
-                              <div className="bg-blue-600 text-white text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
-                                <span>☕</span>
-                                <span>Tea</span>
-                              </div>
                             ) : (
-                              <div className={`text-[9px] py-0.5 px-1.5 rounded-full font-medium ${isSelected ? 'bg-blue-900/50 text-blue-200' : 'bg-gray-100 text-gray-600'}`}>
-                                {slot.tag || 'Pending'}
+                              <div className="bg-blue-100 text-blue-700 border border-blue-200 text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
+                                <span>⏰</span>
+                                <span>Pending</span>
                               </div>
                             )}
                           </div>
-
-                          {/* BUTTON: PLUS (+) IF NO PROOF OR REJECTED, EYE IF PENDING, CHECK IF APPROVED */}
-                          {(!sub || !sub.image || isRejected) ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDailySelectedSlotId(slot.id);
-                                if (dailyFileInputRef.current) {
-                                  dailyFileInputRef.current.value = "";
-                                  dailyFileInputRef.current.click();
-                                }
-                              }}
-                              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-md active:scale-90 mt-0.5 font-bold ${
-                                isRejected 
-                                  ? 'bg-rose-600 hover:bg-rose-500 text-white ring-2 ring-rose-400 animate-bounce' 
-                                  : 'bg-blue-600 hover:bg-blue-500 text-white'
-                              }`}
-                              title={isRejected ? "Rejected: Tap + to re-upload fresh photo" : "Tap + to upload/take photo proof"}
-                            >
-                              <Plus size={14} />
-                            </button>
-                          ) : isPending ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDailyPreviewModalImg(sub.image);
-                              }}
-                              className="w-7 h-7 rounded-full border border-amber-500 bg-amber-500/10 text-amber-400 hover:bg-amber-500 hover:text-black flex items-center justify-center transition-all cursor-pointer shadow-sm active:scale-90 mt-0.5"
-                              title="Under Review by Darsh - View Submitted Photo"
-                            >
-                              <Eye size={12} />
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDailyPreviewModalImg(sub.image);
-                              }}
-                              className="w-7 h-7 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center transition-all cursor-pointer shadow-md active:scale-90 mt-0.5"
-                              title="Approved by Darsh - View Proof"
-                            >
-                              <Check size={14} />
-                            </button>
-                          )}
                         </div>
                       );
                     })}
@@ -11491,6 +11408,32 @@ export default function App() {
           slotFormPoints={slotFormPoints}
           setSlotFormPoints={setSlotFormPoints}
           handleSaveSlotForm={handleSaveSlotForm}
+        />
+
+        {/* SLOT REPORT & PROOF MODAL (MATCHING USER REPORT SCREEN) */}
+        <SlotReportModal
+          isOpen={showSlotReportModal}
+          onClose={() => setShowSlotReportModal(false)}
+          slot={dailySlots.find(s => s.id === dailySelectedSlotId) || dailySlots.find(s => s.isActive)}
+          submission={getSlotSubmission(dailySelectedSlotId || (dailySlots[0] && dailySlots[0].id), dailySelectedDate)}
+          selectedDate={dailySelectedDate}
+          role={role}
+          onTriggerUpload={() => {
+            if (dailyFileInputRef.current) {
+              dailyFileInputRef.current.value = "";
+              dailyFileInputRef.current.click();
+            }
+          }}
+          onPreviewImage={(img) => setDailyPreviewModalImg(img)}
+          onApprove={(subId, slot) => {
+            const sub = getSlotSubmission(slot.id, dailySelectedDate);
+            if (sub) handleApproveDailyTask(sub);
+          }}
+          onReject={(subId, slot) => {
+            const sub = getSlotSubmission(slot.id, dailySelectedDate);
+            if (sub) handleRejectDailyTask(sub);
+          }}
+          isOverdue={checkSlotOverdue(dailySlots.find(s => s.id === dailySelectedSlotId), dailySelectedDate)}
         />
     </div>
   );
