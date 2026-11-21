@@ -39,21 +39,14 @@ export default function WishApprovalModal({
           Approving will deduct ₹ {Number(activeWishApprovalModal.wishCost || 0).toFixed(2)} from {activeWishApprovalModal.requesterName}'s Love Balance and grant the wish!
         </p>
 
-        <div className="flex gap-2.5 pt-2">
+        <div className="pt-2">
           <button
             type="button"
             onClick={() => handleApproveWishRequest(activeWishApprovalModal)}
-            className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-2.5 rounded-xl cursor-pointer shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5 text-xs"
+            className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black py-3 rounded-2xl cursor-pointer shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 text-sm tracking-wide"
           >
-            <Check size={16} />
+            <Check size={18} />
             <span>Approve & Grant 💝</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDeclineWishRequest(activeWishApprovalModal)}
-            className="bg-[#222] hover:bg-[#2c2c2c] text-gray-400 hover:text-white font-bold px-4 py-2.5 rounded-xl cursor-pointer border border-[#333] transition-all text-xs"
-          >
-            Decline
           </button>
         </div>
       </div>

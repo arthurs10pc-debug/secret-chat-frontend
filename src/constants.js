@@ -57,35 +57,35 @@ export const ROMANTIC_WISH_STORE = [
   {
     id: 'wish_voicenote',
     title: 'Voice Note on Demand',
-    cost: 20.00,
+    cost: 5.00,
     icon: '🎙️',
     description: 'A personalized cute voice note with sweet romantic nicknames and compliments on demand.'
   },
   {
     id: 'wish_icecream',
     title: 'Ice Cream / Dessert Treat',
-    cost: 40.00,
+    cost: 10.00,
     icon: '🍦',
     description: 'Guaranteed favorite ice cream flavor or dessert delivered or enjoyed together.'
   },
   {
     id: 'wish_movie',
     title: 'Codex Cinema Movie Choice',
-    cost: 75.00,
+    cost: 15.00,
     icon: '🎬',
     description: 'Full sovereign pick of the next romantic movie or show to stream synchronized together.'
   },
   {
     id: 'wish_custom',
     title: 'Custom Romantic Wish',
-    cost: 120.00,
+    cost: 20.00,
     icon: '✨',
     description: 'Any personal cute favor, romantic request, or surprise granted without hesitation.'
   },
   {
     id: 'wish_dinner',
     title: 'Candlelight Dinner Date',
-    cost: 250.00,
+    cost: 30.00,
     icon: '🥂',
     description: 'A fully planned and organized romantic dinner date with VIP royal couple treatment.'
   }
@@ -135,34 +135,34 @@ export const extractYouTubeId = (url) => {
 };
 
 export const SCRATCH_VOUCHERS_POOL = [
-  // Deeply Romantic Promises & Dates
-  { id: 'v_dinner', title: 'Candlelight Dinner Date 🥂', code: 'ROMANCE-DINNER', icon: '🥂', points: '₹ 250.00', category: 'Romantic Date', description: 'A royal candlelight dinner date planned with sovereign menu choice and zero rush.' },
-  { id: 'v_drive', title: 'Midnight Long Drive & Ice Cream 🍦', code: 'NIGHT-DRIVE', icon: '🚗', points: '₹ 50.00', category: 'Romantic Date', description: 'Late-night peaceful cruising with romantic songs & your favorite ice cream treat.' },
-  { id: 'v_king', title: 'One Full Day Royal VIP Treatment 👑', code: 'ROYAL-TREAT', icon: '👑', points: '₹ 150.00', category: 'Couple VIP', description: 'Zero arguments! Full king/queen pampered treatment all day without question.' },
-  { id: 'v_letter', title: 'Handwritten Romantic Love Letter 💌', code: 'LOVE-LETTER', icon: '💌', points: '₹ 30.00', category: 'Emotional Favor', description: 'A handwritten letter listing 10 sweet, candid reasons why you are so precious.' },
-  { id: 'v_cuddle', title: 'Unlimited Cuddle & Hugs Pass 🤗', code: 'CUDDLE-PASS', icon: '🤗', points: 'Priceless', category: 'Affection', description: 'Instant warm cuddles and forehead kisses on demand whenever you need comfort.' },
-  { id: 'v_headmassage', title: 'Relaxing Head Massage & Hair Stroking 💆', code: 'HEAD-MASSAGE', icon: '💆', points: '₹ 40.00', category: 'Care & Comfort', description: '20 minutes of relaxing head massage and loving hair stroking to melt stress.' },
-  { id: 'v_dance', title: 'Slow Dance Under Starlight 💃', code: 'STAR-DANCE', icon: '💃', points: 'Priceless', category: 'Romantic', description: 'A quiet, sweet slow dance to our favorite track in each other\'s arms.' },
-  { id: 'v_voice', title: 'Sweet Voice Note with Nicknames on Demand 🎙️', code: 'VOICE-NOTE', icon: '🎙️', points: '₹ 20.00', category: 'Sweet Audio', description: 'A cute 3-minute voice note overflowing with romantic compliments and nicknames.' },
-  { id: 'v_sunset', title: 'Sunset Picnic Date Together 🌅', code: 'SUNSET-PICNIC', icon: '🌅', points: '₹ 80.00', category: 'Romantic Date', description: 'A cute outdoor picnic with snacks, blanket, and watching the sunset together.' },
-  { id: 'v_forgive', title: 'Universal Forgiveness / "You Win" Pass 🕊️', code: 'FORGIVE-PASS', icon: '🕊️', points: '₹ 100.00', category: 'Couple Magic', description: 'Play this during any minor disagreement: instantly forgiven with a warm hug & zero ego!' },
+  // Deeply Romantic Promises & Dates (Points tuned to easily accessible values)
+  { id: 'v_dinner', title: 'Candlelight Dinner Date 🥂', code: 'ROMANCE-DINNER', icon: '🥂', points: '₹ 30.00', category: 'Romantic Date', description: 'A royal candlelight dinner date planned with sovereign menu choice and zero rush.' },
+  { id: 'v_drive', title: 'Midnight Long Drive & Ice Cream 🍦', code: 'NIGHT-DRIVE', icon: '🚗', points: '₹ 15.00', category: 'Romantic Date', description: 'Late-night peaceful cruising with romantic songs & your favorite ice cream treat.' },
+  { id: 'v_king', title: 'One Full Day Royal VIP Treatment 👑', code: 'ROYAL-TREAT', icon: '👑', points: '₹ 25.00', category: 'Couple VIP', description: 'Zero arguments! Full king/queen pampered treatment all day without question.' },
+  { id: 'v_letter', title: 'Handwritten Romantic Love Letter 💌', code: 'LOVE-LETTER', icon: '💌', points: '₹ 8.00', category: 'Emotional Favor', description: 'A handwritten letter listing 10 sweet, candid reasons why you are so precious.' },
+  { id: 'v_cuddle', title: 'Unlimited Cuddle & Hugs Pass 🤗', code: 'CUDDLE-PASS', icon: '🤗', points: '₹ 5.00', category: 'Affection', description: 'Instant warm cuddles and forehead kisses on demand whenever you need comfort.' },
+  { id: 'v_headmassage', title: 'Relaxing Head Massage & Hair Stroking 💆', code: 'HEAD-MASSAGE', icon: '💆', points: '₹ 10.00', category: 'Care & Comfort', description: '20 minutes of relaxing head massage and loving hair stroking to melt stress.' },
+  { id: 'v_dance', title: 'Slow Dance Under Starlight 💃', code: 'STAR-DANCE', icon: '💃', points: '₹ 6.00', category: 'Romantic', description: 'A quiet, sweet slow dance to our favorite track in each other\'s arms.' },
+  { id: 'v_voice', title: 'Sweet Voice Note with Nicknames on Demand 🎙️', code: 'VOICE-NOTE', icon: '🎙️', points: '₹ 5.00', category: 'Sweet Audio', description: 'A cute 3-minute voice note overflowing with romantic compliments and nicknames.' },
+  { id: 'v_sunset', title: 'Sunset Picnic Date Together 🌅', code: 'SUNSET-PICNIC', icon: '🌅', points: '₹ 15.00', category: 'Romantic Date', description: 'A cute outdoor picnic with snacks, blanket, and watching the sunset together.' },
+  { id: 'v_forgive', title: 'Universal Forgiveness / "You Win" Pass 🕊️', code: 'FORGIVE-PASS', icon: '🕊️', points: '₹ 12.00', category: 'Couple Magic', description: 'Play this during any minor disagreement: instantly forgiven with a warm hug & zero ego!' },
   
   // Couple Fun & Bonding
-  { id: 'v_movie', title: 'Movie Night (100% Your Choice) 🎬', code: 'MOVIE-PICK', icon: '🎬', points: '₹ 75.00', category: 'Entertainment', description: 'Full sovereign pick of the movie or web series, plus butter popcorn & snacks.' },
-  { id: 'v_maggie', title: 'Late Night Maggie & Hot Chai Date 🍜', code: 'MIDNIGHT-CHAI', icon: '🍜', points: '₹ 25.00', category: 'Foodie Favor', description: 'Hot spicy midnight Maggie and special tea made with love and shared together.' },
-  { id: 'v_truth', title: 'Truth or Dare - Deep Couple Edition 🎭', code: 'COUPLE-TRUTH', icon: '🎭', points: '₹ 30.00', category: 'Mini-Game', description: 'An intimate 30-minute game of deep romantic questions and cute affectionate dares.' },
-  { id: 'v_firstdate', title: 'Recreate Our Very First Date ☕', code: 'RECREATE-DATE', icon: '☕', points: '₹ 120.00', category: 'Nostalgia', description: 'We dress up, relive where we started, and experience that same exciting feeling.' },
-  { id: 'v_playlist', title: 'Curated 10-Song Romantic Playlist 🎵', code: 'CUSTOM-PLAYLIST', icon: '🎵', points: '₹ 20.00', category: 'Musical Gift', description: '10 songs handpicked specifically with lyrics that describe our bond.' },
-  { id: 'v_outfit', title: 'Matching Couple Outfits for a Day 👕', code: 'MATCH-OUTFIT', icon: '👕', points: '₹ 50.00', category: 'Cute Bonding', description: 'Color-coordinated cute outfits worn proudly together for photos & outings.' },
-  { id: 'v_selfie', title: 'Spontaneous Cute Couple Reel / Selfie 📸', code: 'CUTE-SELFIE', icon: '📸', points: '₹ 15.00', category: 'Memories', description: 'Capturing an adorable short memory video or candid aesthetic couple photo.' },
-  { id: 'v_nophones', title: '1-Hour "No Phones, Just Us" Intimate Talk 📵', code: 'NO-PHONE-HOUR', icon: '📵', points: 'Priceless', category: 'Quality Time', description: 'Phones kept away, holding hands and sharing dreams straight from the heart.' },
-  { id: 'v_wishgrant', title: 'Secret Wish Grant (Anything Within Reason) ✨', code: 'WISH-GRANT', icon: '✨', points: '₹ 120.00', category: 'Wildcard', description: 'Redeem for any special request, favor, or cute surprise you can imagine.' },
+  { id: 'v_movie', title: 'Movie Night (100% Your Choice) 🎬', code: 'MOVIE-PICK', icon: '🎬', points: '₹ 10.00', category: 'Entertainment', description: 'Full sovereign pick of the movie or web series, plus butter popcorn & snacks.' },
+  { id: 'v_maggie', title: 'Late Night Maggie & Hot Chai Date 🍜', code: 'MIDNIGHT-CHAI', icon: '🍜', points: '₹ 6.00', category: 'Foodie Favor', description: 'Hot spicy midnight Maggie and special tea made with love and shared together.' },
+  { id: 'v_truth', title: 'Truth or Dare - Deep Couple Edition 🎭', code: 'COUPLE-TRUTH', icon: '🎭', points: '₹ 8.00', category: 'Mini-Game', description: 'An intimate 30-minute game of deep romantic questions and cute affectionate dares.' },
+  { id: 'v_firstdate', title: 'Recreate Our Very First Date ☕', code: 'RECREATE-DATE', icon: '☕', points: '₹ 20.00', category: 'Nostalgia', description: 'We dress up, relive where we started, and experience that same exciting feeling.' },
+  { id: 'v_playlist', title: 'Curated 10-Song Romantic Playlist 🎵', code: 'CUSTOM-PLAYLIST', icon: '🎵', points: '₹ 6.00', category: 'Musical Gift', description: '10 songs handpicked specifically with lyrics that describe our bond.' },
+  { id: 'v_outfit', title: 'Matching Couple Outfits for a Day 👕', code: 'MATCH-OUTFIT', icon: '👕', points: '₹ 12.00', category: 'Cute Bonding', description: 'Color-coordinated cute outfits worn proudly together for photos & outings.' },
+  { id: 'v_selfie', title: 'Spontaneous Cute Couple Reel / Selfie 📸', code: 'CUTE-SELFIE', icon: '📸', points: '₹ 5.00', category: 'Memories', description: 'Capturing an adorable short memory video or candid aesthetic couple photo.' },
+  { id: 'v_nophones', title: '1-Hour "No Phones, Just Us" Intimate Talk 📵', code: 'NO-PHONE-HOUR', icon: '📵', points: '₹ 5.00', category: 'Quality Time', description: 'Phones kept away, holding hands and sharing dreams straight from the heart.' },
+  { id: 'v_wishgrant', title: 'Secret Wish Grant (Anything Within Reason) ✨', code: 'WISH-GRANT', icon: '✨', points: '₹ 18.00', category: 'Wildcard', description: 'Redeem for any special request, favor, or cute surprise you can imagine.' },
 
   // Normal / Everyday Sweet Treats
-  { id: 'v_breakfast', title: 'Breakfast in Bed on Weekend 🥐', code: 'BED-BREAKFAST', icon: '🥐', points: '₹ 40.00', category: 'Care Favor', description: 'Wake up relaxed on the weekend to a served breakfast and hot drink in bed.' },
-  { id: 'v_chores', title: 'Free Pass from Any Chores for 1 Day 🧹', code: 'CHORE-FREE', icon: '🧹', points: '₹ 35.00', category: 'Helping Hand', description: 'I take full care of whatever task or errand you don\'t feel like doing today.' },
-  { id: 'v_dessert', title: 'Favorite Dessert / Bakery Treat Run 🍰', code: 'SWEET-DESSERT', icon: '🍰', points: '₹ 45.00', category: 'Foodie Favor', description: 'Your most craved pastry, brownie, waffle or cake delivered or enjoyed together.' },
-  { id: 'v_cafe', title: 'Coffee & Books / Chill Cafe Date ☕', code: 'CAFE-CHILL', icon: '☕', points: '₹ 60.00', category: 'Casual Date', description: 'Peaceful afternoon spent at your favorite cozy cafe sipping coffee and chatting.' },
-  { id: 'v_footmassage', title: 'Tired Foot Massage After Long Day 👣', code: 'FOOT-MASSAGE', icon: '👣', points: '₹ 35.00', category: 'Care & Comfort', description: 'Warm water soak followed by a relaxing foot massage to melt away all exhaustion.' },
-  { id: 'v_surprise_gift', title: 'Small Mystery Surprise Delivery Gift 📦', code: 'MYSTERY-GIFT', icon: '📦', points: '₹ 80.00', category: 'Surprise', description: 'A cute surprise parcel arriving with something thoughtful to make you smile.' }
+  { id: 'v_breakfast', title: 'Breakfast in Bed on Weekend 🥐', code: 'BED-BREAKFAST', icon: '🥐', points: '₹ 10.00', category: 'Care Favor', description: 'Wake up relaxed on the weekend to a served breakfast and hot drink in bed.' },
+  { id: 'v_chores', title: 'Free Pass from Any Chores for 1 Day 🧹', code: 'CHORE-FREE', icon: '🧹', points: '₹ 8.00', category: 'Helping Hand', description: 'I take full care of whatever task or errand you don\'t feel like doing today.' },
+  { id: 'v_dessert', title: 'Favorite Dessert / Bakery Treat Run 🍰', code: 'SWEET-DESSERT', icon: '🍰', points: '₹ 10.00', category: 'Foodie Favor', description: 'Your most craved pastry, brownie, waffle or cake delivered or enjoyed together.' },
+  { id: 'v_cafe', title: 'Coffee & Books / Chill Cafe Date ☕', code: 'CAFE-CHILL', icon: '☕', points: '₹ 12.00', category: 'Casual Date', description: 'Peaceful afternoon spent at your favorite cozy cafe sipping coffee and chatting.' },
+  { id: 'v_footmassage', title: 'Tired Foot Massage After Long Day 👣', code: 'FOOT-MASSAGE', icon: '👣', points: '₹ 8.00', category: 'Care & Comfort', description: 'Warm water soak followed by a relaxing foot massage to melt away all exhaustion.' },
+  { id: 'v_surprise_gift', title: 'Small Mystery Surprise Delivery Gift 📦', code: 'MYSTERY-GIFT', icon: '📦', points: '₹ 15.00', category: 'Surprise', description: 'A cute surprise parcel arriving with something thoughtful to make you smile.' }
 ];

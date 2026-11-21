@@ -51,7 +51,18 @@ export default function PassbookModal({
   const [unlockedVouchers, setUnlockedVouchers] = useState(() => {
     try {
       const saved = localStorage.getItem('stealth_unlocked_scratch_vouchers');
-      return saved ? JSON.parse(saved) : [];
+      const list = saved ? JSON.parse(saved) : [];
+      // Deduplicate by normalized title to prevent repeating previously unlocked items
+      const seen = new Set();
+      const deduped = [];
+      for (const item of list) {
+        const normKey = (item.title || item.code || '').trim().toLowerCase();
+        if (normKey && !seen.has(normKey)) {
+          seen.add(normKey);
+          deduped.push(item);
+        }
+      }
+      return deduped;
     } catch (e) {
       return [];
     }
@@ -167,7 +178,7 @@ export default function PassbookModal({
       status: 'Active'
     };
     setUnlockedVouchers(prev => {
-      if (prev.some(x => x.code === item.code)) return prev;
+      if (prev.some(x => (x.code === item.code) || (x.title && item.title && x.title.trim().toLowerCase() === item.title.trim().toLowerCase()))) return prev;
       const updated = [item, ...prev];
       try { localStorage.setItem('stealth_unlocked_scratch_vouchers', JSON.stringify(updated)); } catch(e) {}
       return updated;
@@ -434,16 +445,9 @@ export default function PassbookModal({
                           <button
                             type="button"
                             onClick={() => handleApproveWishRequest(req)}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer shadow active:scale-95"
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg cursor-pointer shadow active:scale-95"
                           >
                             Approve & Grant 💝
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeclineWishRequest(req)}
-                            className="bg-[#242424] hover:bg-[#333] text-gray-300 text-xs px-2.5 py-1.5 rounded-lg cursor-pointer border border-[#3a3a3a]"
-                          >
-                            Decline
                           </button>
                         </div>
                       </div>
@@ -578,21 +582,6 @@ export default function PassbookModal({
                   >
                     <Sparkles size={14} />
                     <span>{currentOpenerBalance < 6.0 ? '🔒 Scratch (Need 6 Pts)' : 'Scratch Card (6 Pts) ✨'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLoveModalTab('claimed')}
-                    className="bg-[#242424] hover:bg-[#2e2e2e] text-amber-300 text-xs font-bold px-3 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5 border border-amber-500/30"
-                  >
-                    <span>🎁 Redeemed ({redeemedWishesList.length})</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLoveModalTab('redeem')}
-                    className="bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5"
-                  >
-                    <Gift size={14} />
-                    <span>Redeem Wish</span>
                   </button>
                 </div>
               </div>
@@ -837,6 +826,88 @@ export default function PassbookModal({
                 </button>
               </div>
 
+              {/* DEDICATED SECTION: UNLOCKED SURPRISE SCRATCH CARDS & VOUCHERS */}
+              {unlockedVouchers && unlockedVouchers.length > 0 && (
+                <div className="bg-[#181818] border border-amber-500/50 rounded-2xl p-4 space-y-3 shadow-xl">
+                  <div className="flex items-center justify-between border-b border-[#2b2b2b] pb-2">
+                    <div>
+                      <h4 className="text-sm font-black text-amber-300 flex items-center gap-2">
+                        <span>✨ Unlocked Scratch Cards & Romantic Coupons</span>
+                        <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.2 rounded-full font-mono font-bold">
+                          {unlockedVouchers.length} UNLOCKED
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-gray-400 mt-0.5">Surprise rewards revealed via Scratch Card — redeemable with Love Balance!</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {unlockedVouchers.map((uv, idx) => {
+                      const availablePts = Math.max(0, displayedLoveBalance);
+                      const numericCost = parseFloat(String(uv.points || uv.value || '10').replace(/[^0-9.]/g, '')) || 10;
+                      const canAffordUv = availablePts >= numericCost;
+                      const requesterRole = isParentAdmin ? (activeLbTarget === 'admin' ? 'admin' : 'user') : 'user';
+                      const isUvPending = wishRequests.some(r => (r.wishTitle === uv.title || r.wishId === uv.code) && r.status === 'PENDING' && r.requesterRole === requesterRole);
+
+                      return (
+                        <div key={uv.id || uv.code || idx} className="bg-gradient-to-br from-[#1c1815] via-[#161616] to-[#1c1418] border border-amber-500/40 hover:border-amber-400/70 rounded-2xl p-3.5 flex flex-col justify-between space-y-3 shadow transition-colors">
+                          <div className="space-y-1.5">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2.5">
+                                <span className="text-2xl p-1.5 bg-black/60 rounded-xl border border-amber-500/40 shrink-0">{uv.icon || '🎁'}</span>
+                                <div className="text-left">
+                                  <h5 className="text-xs font-black text-white">{uv.title}</h5>
+                                  <span className="text-[10px] font-mono text-purple-300 bg-purple-950/60 border border-purple-800 px-1.5 py-0.2 rounded">
+                                    {uv.category || 'Surprise Voucher'}
+                                  </span>
+                                </div>
+                              </div>
+                              <span className="text-xs font-mono font-black text-amber-400 bg-amber-500/10 border border-amber-500/40 px-2 py-0.5 rounded-lg shrink-0">
+                                ₹ {numericCost.toFixed(2)}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-300 leading-snug">{uv.description}</p>
+                          </div>
+
+                          <div className="space-y-2 pt-2 border-t border-[#262626]">
+                            <div className="flex items-center justify-between text-[10px] font-mono">
+                              <span className="text-amber-300 bg-black/60 px-2 py-0.5 rounded border border-amber-500/20">
+                                👤 Unlocked by: {uv.unlockedBy || openerName}
+                              </span>
+                              <span className="text-gray-400">
+                                CODE: <strong className="text-amber-400">{uv.code}</strong>
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleInitiateWishRequest({
+                                id: uv.code || uv.id || ('uv_' + idx),
+                                title: uv.title,
+                                cost: numericCost,
+                                icon: uv.icon || '🎁',
+                                description: uv.description || uv.title
+                              })}
+                              className={'w-full py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow active:scale-95 ' + (
+                                isUvPending
+                                  ? 'bg-amber-600 text-white animate-pulse border border-amber-400'
+                                  : (canAffordUv 
+                                      ? 'bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white' 
+                                      : 'bg-zinc-800 text-gray-500 cursor-not-allowed border border-[#333]')
+                              )}
+                            >
+                              {isUvPending 
+                                ? '⏳ Awaiting Partner Approval' 
+                                : (canAffordUv ? ('Redeem Voucher for ₹ ' + numericCost.toFixed(2) + ' 💝') : ('Need ₹ ' + (numericCost - availablePts).toFixed(2) + ' More'))}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 {ROMANTIC_WISH_STORE.map((wish) => {
                   const availablePts = Math.max(0, displayedLoveBalance);
@@ -905,20 +976,13 @@ export default function PassbookModal({
                             <p className="text-[10px] text-gray-500 font-mono">Requested: {req.requestedAt}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <div className="w-full sm:w-auto">
                           <button
                             type="button"
                             onClick={() => handleApproveWishRequest(req)}
-                            className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all"
+                            className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all"
                           >
                             Approve & Grant 💝
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeclineWishRequest(req)}
-                            className="bg-[#242424] hover:bg-[#333] text-gray-300 text-xs px-3 py-2 rounded-xl cursor-pointer border border-[#3a3a3a]"
-                          >
-                            Decline
                           </button>
                         </div>
                       </div>
@@ -941,49 +1005,6 @@ export default function PassbookModal({
                   </div>
                 );
               })()}
-
-              {/* UNLOCKED SURPRISE SCRATCH CARDS & VOUCHERS VAULT */}
-              {unlockedVouchers && unlockedVouchers.length > 0 && (
-                <div className="bg-[#181818] border border-amber-500/40 rounded-2xl p-4 space-y-3 shadow-lg">
-                  <div className="flex items-center justify-between border-b border-[#2b2b2b] pb-2">
-                    <h4 className="text-sm font-black text-amber-300 flex items-center gap-2">
-                      <span>✨ Unlocked Scratch Cards & Vouchers</span>
-                      <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.2 rounded-full font-mono font-bold">
-                        {unlockedVouchers.length} REVEALED
-                      </span>
-                    </h4>
-                    <span className="text-[10px] text-gray-400 font-mono">6 pts each • Kept in Wish Store</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {unlockedVouchers.map((uv, idx) => (
-                      <div key={uv.id || idx} className="bg-gradient-to-br from-[#1c1815] via-[#161616] to-[#1c1418] border border-amber-500/30 rounded-xl p-3 space-y-2 shadow">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2.5">
-                            <span className="text-2xl p-1.5 bg-black/50 rounded-xl border border-amber-500/30 shrink-0">{uv.icon || '🎁'}</span>
-                            <div className="text-left">
-                              <h5 className="text-xs font-black text-white">{uv.title}</h5>
-                              <p className="text-[10px] text-pink-200 leading-tight mt-0.5">{uv.description}</p>
-                            </div>
-                          </div>
-                          <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-500/30 px-2 py-0.5 rounded-lg shrink-0">
-                            {uv.points || uv.value || 'Priceless'}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between text-[10px] font-mono border-t border-[#262626] pt-1.5">
-                          <span className="text-amber-300 bg-black/60 px-2 py-0.5 rounded border border-amber-500/20">
-                            👤 Unlocked by: {uv.unlockedBy || 'Partner'}
-                          </span>
-                          <span className="text-gray-400">
-                            CODE: <strong className="text-amber-400">{uv.code}</strong>
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               <div className="bg-gradient-to-r from-amber-950/40 via-orange-950/40 to-amber-950/40 border border-amber-500/30 rounded-2xl p-4 sm:p-5 flex items-center justify-between">
                 <div className="space-y-1">
@@ -1048,16 +1069,18 @@ export default function PassbookModal({
                           {rw.fulfillmentStatus === 'Fulfilled' ? '✅ Granted & Fulfilled' : '⏳ Date / Reward Pending'}
                         </span>
 
-                        {isParentAdmin && (
-                          <button
-                            type="button"
-                            onClick={() => handleToggleWishFulfillment(rw.id)}
-                            className="text-xs font-bold bg-[#262626] hover:bg-[#333] text-white px-3 py-1.5 rounded-xl border border-[#3d3d3d] cursor-pointer transition-all active:scale-95"
-                            title="Toggle fulfillment status"
-                          >
-                            {rw.fulfillmentStatus === 'Fulfilled' ? 'Mark Pending ⏳' : 'Mark Fulfilled ✅'}
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleWishFulfillment(rw.id)}
+                          className={`text-xs font-bold px-3 py-1.5 rounded-xl border cursor-pointer transition-all active:scale-95 flex items-center gap-1.5 ${
+                            rw.fulfillmentStatus === 'Fulfilled'
+                              ? 'bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border-amber-700/50'
+                              : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow'
+                          }`}
+                          title="Toggle fulfillment status manually"
+                        >
+                          {rw.fulfillmentStatus === 'Fulfilled' ? 'Mark Pending ⏳' : 'Mark Done ✅'}
+                        </button>
                       </div>
                     </div>
                   ))}
