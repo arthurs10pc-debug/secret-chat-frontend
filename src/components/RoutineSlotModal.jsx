@@ -1,18 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Briefcase, X, Clock, Sparkles, Check, ChevronDown, Plus, Calendar } from 'lucide-react';
 
-const COMMON_PRESETS = [
-  { label: 'Morning Workout', range: '08:00 - 09:00', tag: 'Workout', icon: '🌅' },
-  { label: 'Detox Juice', range: '09:00 - 10:00', tag: 'Juice', icon: '🥤' },
-  { label: 'Heavy Breakfast', range: '10:00 - 11:00', tag: 'Breakfast', icon: '🍳' },
-  { label: 'Lunch Care', range: '13:00 - 14:00', tag: 'Lunch', icon: '🍱' },
-  { label: 'Hydration Intake', range: '15:30 - 16:30', tag: 'Water', icon: '💧' },
-  { label: 'Evening Tea', range: '17:00 - 17:30', tag: 'Tea', icon: '☕' },
-  { label: 'Dinner Plate', range: '20:30 - 21:30', tag: 'Dinner', icon: '🥗' },
-  { label: '8,000 Steps', range: '22:00 - 22:30', tag: 'Steps', icon: '👟' },
-  { label: 'Night Skincare', range: '22:30 - 23:00', tag: 'Skincare', icon: '✨' }
-];
-
 const QUICK_START_HOURS = [
   '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', 
   '13:00', '14:00', '15:30', '17:00', '18:30', '20:00', '21:00', '22:00'
@@ -74,31 +62,6 @@ export default function RoutineSlotModal({
   const handleEndChange = (val) => {
     setEndTime(val);
     setSlotFormTimeRange(`${startTime} - ${val}`);
-  };
-
-  const handleAddMinutes = (mins) => {
-    if (!startTime) return;
-    const [h, m] = startTime.split(':').map(Number);
-    if (isNaN(h) || isNaN(m)) return;
-    const totalMins = (h * 60 + m + mins) % (24 * 60);
-    const newH = String(Math.floor(totalMins / 60)).padStart(2, '0');
-    const newM = String(totalMins % 60).padStart(2, '0');
-    const newEnd = `${newH}:${newM}`;
-    setEndTime(newEnd);
-    setSlotFormTimeRange(`${startTime} - ${newEnd}`);
-  };
-
-  const handleApplyPreset = (preset) => {
-    const parsed = parseRange(preset.range);
-    setStartTime(parsed.start);
-    setEndTime(parsed.end);
-    setSlotFormTimeRange(preset.range);
-    if (preset.tag && setSlotFormTag) {
-      setSlotFormTag(preset.tag);
-    }
-    if ((!slotFormTitle || !slotFormTitle.trim()) && setSlotFormTitle) {
-      setSlotFormTitle(preset.label);
-    }
   };
 
   const getDurationText = () => {
@@ -221,27 +184,6 @@ export default function RoutineSlotModal({
                   </div>
                 </div>
 
-                {/* DURATION SHORTCUT BUTTONS */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] text-gray-400 font-bold">Quick Duration:</span>
-                  {[
-                    { label: '+30m', mins: 30 },
-                    { label: '+45m', mins: 45 },
-                    { label: '+1 hr', mins: 60 },
-                    { label: '+1.5 hr', mins: 90 },
-                    { label: '+2 hr', mins: 120 }
-                  ].map((dur) => (
-                    <button
-                      key={dur.mins}
-                      type="button"
-                      onClick={() => handleAddMinutes(dur.mins)}
-                      className="bg-white/10 hover:bg-blue-600/60 text-gray-200 hover:text-white px-2 py-0.5 rounded-lg text-[10px] font-bold border border-white/10 transition-all cursor-pointer active:scale-95"
-                    >
-                      {dur.label}
-                    </button>
-                  ))}
-                </div>
-
                 {/* QUICK START HOUR SELECTOR CHIPS */}
                 <div className="space-y-1">
                   <span className="text-[10px] text-gray-400 font-bold block">1-Tap Start Hour:</span>
@@ -286,34 +228,6 @@ export default function RoutineSlotModal({
                 </div>
               </div>
             )}
-
-            {/* 1-CLICK POPULAR ROUTINE PRESETS */}
-            <div className="space-y-1.5 pt-1 border-t border-[#262626]">
-              <span className="text-[10px] text-gray-400 font-bold block">Or Pick a Standard Routine Preset:</span>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                {COMMON_PRESETS.map((preset) => {
-                  const isCurrent = slotFormTimeRange === preset.range;
-                  return (
-                    <button
-                      key={preset.range}
-                      type="button"
-                      onClick={() => handleApplyPreset(preset)}
-                      className={`p-1.5 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-1.5 ${
-                        isCurrent
-                          ? 'bg-blue-900/50 border-blue-400 text-white shadow'
-                          : 'bg-[#1e1e1e] hover:bg-[#252525] border-[#2e2e2e] text-gray-300'
-                      }`}
-                    >
-                      <span className="text-sm shrink-0">{preset.icon}</span>
-                      <div className="truncate">
-                        <div className="font-bold text-[10px] truncate text-white">{preset.label}</div>
-                        <div className="text-[9px] font-mono text-gray-400">{preset.range}</div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
           </div>
 
           {/* 3. CATEGORY & REWARD POINTS */}
