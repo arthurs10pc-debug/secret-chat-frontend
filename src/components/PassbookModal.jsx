@@ -117,6 +117,52 @@ export default function PassbookModal({
     }
   };
 
+  const formatRowTimeOnly = (row) => {
+    if (!row) return '—';
+
+    // 1. Try to extract time range or deadline from remarks
+    const remarks = String(row.remarks || '').trim();
+    const desc = String(row.description || '').trim();
+
+    // Pattern A: "(10:00 am - 10:30 am)" or "(09:00 am)" or "(Before 9:00 AM)"
+    const parenTimeMatch = remarks.match(/\((?:(?:Before|After|Around)\s+)?([0-9]{1,2}:[0-9]{2}\s*(?:am|pm|AM|PM)(?:\s*-\s*[0-9]{1,2}:[0-9]{2}\s*(?:am|pm|AM|PM))?)\)/i);
+    if (parenTimeMatch && parenTimeMatch[1]) {
+      return parenTimeMatch[1].trim();
+    }
+
+    // Pattern B: "Before 9:00 AM" or "at 10:30 pm"
+    const beforeTimeMatch = remarks.match(/(?:Before|at)\s+([0-9]{1,2}:[0-9]{2}\s*(?:am|pm|AM|PM))/i);
+    if (beforeTimeMatch && beforeTimeMatch[1]) {
+      return beforeTimeMatch[1].trim();
+    }
+
+    // Pattern C: Specific habits fallback
+    const lower = (desc + ' ' + remarks).toLowerCase();
+    if (lower.includes('morning greeting') || lower.includes('morning sweet text')) {
+      return '09:00 am';
+    }
+    if (lower.includes('good night') || lower.includes('sleeping without')) {
+      return '11:00 pm';
+    }
+
+    // 2. Extract clean time from row.earnedAt (strip date portion)
+    const rawEarned = String(row.earnedAt || '').trim();
+    if (rawEarned) {
+      let timeOnly = rawEarned;
+      if (timeOnly.includes(',')) {
+        const parts = timeOnly.split(',');
+        timeOnly = parts.slice(1).join(',').trim();
+      } else {
+        timeOnly = timeOnly.replace(/^\d{4}-\d{2}-\d{2}\s*/, '').replace(/^\d{1,2}\/\d{1,2}\/\d{4}\s*/, '').trim();
+      }
+      if (timeOnly && timeOnly.toLowerCase() !== '12:00 pm') {
+        return timeOnly;
+      }
+    }
+
+    return '10:00 am';
+  };
+
   const handleOpenScratchCard = () => {
     // 1. Minimum 6.00 points required to open
     if (currentOpenerBalance < 6.0) {
@@ -786,7 +832,7 @@ export default function PassbookModal({
                                         <div>{cleanDesc}</div>
                                       </td>
                                       <td className="py-2.5 px-3 font-mono text-[11px] text-gray-300">
-                                        <div className="text-gray-200 font-semibold">{row.earnedAt}</div>
+                                        <div className="text-gray-200 font-semibold">{formatRowTimeOnly(row)}</div>
                                         {slotBadge && (
                                           <div className="text-[10px] font-sans font-bold flex items-center gap-1 mt-0.5">
                                             <span className="text-blue-400">📍 {slotBadge}</span>

@@ -6325,6 +6325,7 @@ export default function App() {
   const redeemedWishesTotal = redeemedWishesList
     .reduce((sum, e) => sum + Math.abs(e.points), 0);
 
+  const myRole = role === 'parent' ? 'admin' : 'user';
   const hasIncomingPendingWish = Boolean(
     wishRequests && wishRequests.some(r => r.status === 'PENDING' && r.requesterRole !== myRole)
   );
