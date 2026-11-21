@@ -81,6 +81,60 @@ const ChatGPTLogo = ({ className = "w-4 h-4", fill = "currentColor" }) => (
   </svg>
 );
 
+// Auto-linkify helper for interactive, smooth link rendering (Instagram/Google style)
+const renderTextWithLinks = (text) => {
+  if (!text || typeof text !== 'string') return text;
+  const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+  const parts = text.split(urlRegex);
+  if (parts.length <= 1) return text;
+
+  return parts.map((part, i) => {
+    if (part.match(urlRegex)) {
+      const href = part.startsWith('www.') ? `https://${part}` : part;
+      return (
+        <a
+          key={i}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="text-blue-400 hover:text-blue-300 underline font-semibold transition-colors duration-150 break-all inline-block hover:opacity-90"
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+};
+
+// Isolated self-updating countdown to prevent re-rendering the whole 11,000-line App component every second
+const AutoDownloadCountdown = React.memo(({ prefix = "", suffix = "" }) => {
+  const [countdown, setCountdown] = useState("00:00:00");
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = new Date();
+      const nextTarget = new Date();
+      nextTarget.setHours(19, 20, 0, 0);
+      if (now.getTime() >= nextTarget.getTime()) {
+        nextTarget.setDate(nextTarget.getDate() + 1);
+      }
+      const diff = nextTarget.getTime() - now.getTime();
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      setCountdown(`${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return <>{prefix}{countdown}{suffix}</>;
+});
+
 const GOOGLE_CLIENT_ID = "644760404837-q0g258ajc1r1vjo8jqtru2c1cc11q1n7.apps.googleusercontent.com";
 
 const parseJwt = (token) => {
@@ -380,8 +434,7 @@ export default function App() {
   const [ludoStatusMsg, setLudoStatusMsg] = useState('Welcome to Ludo Royal! Admin rolls first.');
   const [movableTokens, setMovableTokens] = useState([]);
 
-  // 7:20 PM Auto-Download Countdown Timer State
-  const [countdownStr, setCountdownStr] = useState("00:00:00");
+  // 7:20 PM Auto-Download Daily Ref
   const autoDownloadedRef = useRef(false);
 
   // Love Balance & Karma Currency State
@@ -2542,9 +2595,8 @@ export default function App() {
   };
 
   useEffect(() => {
-    const timerInterval = setInterval(() => {
+    const checkAutoDownload = () => {
       const now = new Date();
-
       // Auto-download check at 7:20 PM (19:20)
       const currentHours = now.getHours();
       const currentMinutes = now.getMinutes();
@@ -2556,21 +2608,10 @@ export default function App() {
       } else {
         autoDownloadedRef.current = false;
       }
+    };
 
-      // Next 7:20 PM target countdown
-      const nextTarget = new Date();
-      nextTarget.setHours(19, 20, 0, 0);
-      if (now.getTime() >= nextTarget.getTime()) {
-        nextTarget.setDate(nextTarget.getDate() + 1);
-      }
-      const diff = nextTarget.getTime() - now.getTime();
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-      setCountdownStr(`${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
-    }, 1000);
-
+    checkAutoDownload();
+    const timerInterval = setInterval(checkAutoDownload, 15000);
     return () => clearInterval(timerInterval);
   }, []);
 
@@ -7289,10 +7330,10 @@ export default function App() {
                           handleDoubleTapToLike(m._id);
                         }}
                         title="Double-tap to like ❤️ • Swipe right to reply • Click ⋯ for actions"
-                        className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-3.5 pt-2.5 pb-3.5 shadow-md relative cursor-pointer text-[14.5px] leading-relaxed transition-all ${
+                        className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-3.5 pt-2.5 pb-3.5 shadow-md relative cursor-pointer text-[14.5px] leading-relaxed transition-transform duration-100 will-change-transform ${
                           isMine 
-                            ? 'backdrop-blur-2xl bg-gradient-to-br from-emerald-600/35 via-emerald-600/25 to-teal-700/35 border border-emerald-400/35 text-white shadow-[0_8px_25px_rgba(16,185,129,0.2)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.25)] rounded-tr-none' 
-                            : 'backdrop-blur-2xl bg-gradient-to-br from-white/[0.12] via-white/[0.08] to-white/[0.04] border border-white/20 text-[#f1f5f9] shadow-[0_8px_25px_rgba(0,0,0,0.35)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.18)] rounded-tl-none'
+                            ? 'bg-[#0f4431] border border-emerald-500/40 text-white shadow-[0_4px_16px_rgba(0,0,0,0.25)] rounded-tr-none' 
+                            : 'bg-[#182334] border border-slate-700/60 text-[#f1f5f9] shadow-[0_4px_16px_rgba(0,0,0,0.3)] rounded-tl-none'
                         }`}
                       >
                         {/* FLOATING HEART ANIMATION ON DOUBLE-TAP */}
@@ -7356,7 +7397,7 @@ export default function App() {
                             </button>
                           </div>
                         ) : (
-                          <p className="break-words select-text">{cleanBody}</p>
+                          <p className="break-words select-text">{renderTextWithLinks(cleanBody)}</p>
                         )}
 
                         {/* REACTION & ACTIONS POPUP TRAY - IOS LIQUID GLASS */}
@@ -7819,7 +7860,7 @@ export default function App() {
                   className="flex items-center gap-1.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600/60 text-emerald-300 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer shadow-[0_0_10px_rgba(16,185,129,0.2)] active:scale-95 shrink-0"
                 >
                   <Timer size={15} className="text-emerald-400 animate-spin" style={{ animationDuration: '4s' }} />
-                  <span className="hidden md:inline">7:20 PM: {countdownStr}</span>
+                  <span className="hidden md:inline">7:20 PM: <AutoDownloadCountdown /></span>
                   <span className="md:hidden text-[11px] font-mono">7:20 PM</span>
                 </button>
               </div>
@@ -8386,7 +8427,7 @@ export default function App() {
                     {msg.role === 'user' ? (
                       <div className="flex justify-end my-2 sm:my-3">
                         <div className="bg-[#1c3a6b] text-white px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl max-w-[88%] sm:max-w-[80%] text-sm leading-relaxed shadow-lg whitespace-pre-wrap break-words select-text">
-                          {msg.text}
+                          {renderTextWithLinks(msg.text)}
                         </div>
                       </div>
                     ) : (
@@ -8407,7 +8448,7 @@ export default function App() {
                           </div>
 
                           <div className="text-[#ececf1] text-sm leading-[1.7] whitespace-pre-wrap break-words">
-                            {msg.text}
+                            {renderTextWithLinks(msg.text)}
                           </div>
                         </div>
                       </div>
@@ -9245,7 +9286,7 @@ export default function App() {
                       <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                         <div className="backdrop-blur-md bg-white/[0.07] border border-amber-500/30 px-2 py-0.5 rounded-xl text-[11px] font-mono text-amber-300 font-bold flex items-center gap-1 hidden sm:flex">
                           <Clock size={11} />
-                          <span>7:20 PM ({countdownStr})</span>
+                          <span><AutoDownloadCountdown prefix="7:20 PM (" suffix=")" /></span>
                         </div>
 
                         <button
