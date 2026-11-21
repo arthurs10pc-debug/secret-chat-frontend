@@ -9993,8 +9993,19 @@ export default function App() {
                         <div key={slot.id} className="bg-[#181818] border border-[#2a2a2a] p-3 rounded-2xl flex items-center justify-between gap-2">
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.2 rounded font-mono font-bold">
-                                {slot.timeRange}
+                              <span 
+                                onClick={() => {
+                                  setEditingSlotId(slot.id);
+                                  setSlotFormTitle(slot.title);
+                                  setSlotFormTimeRange(slot.timeRange);
+                                  setSlotFormTag(slot.tag);
+                                  setSlotFormPoints(String(slot.rewardPoints));
+                                  setShowAddSlotModal(true);
+                                }}
+                                className="text-[10px] bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 hover:text-white px-2 py-0.5 rounded-lg font-mono font-bold cursor-pointer transition-colors shadow-sm flex items-center gap-1"
+                                title="Click to quickly change slot time"
+                              >
+                                🕒 {slot.timeRange}
                               </span>
                               <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.2 rounded">
                                 {slot.tag}
