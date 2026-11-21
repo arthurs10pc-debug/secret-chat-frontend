@@ -5097,14 +5097,16 @@ export default function App() {
 
       if (isMyOwnAction) return;
 
-      // PRIVACY ENFORCEMENT: Dora must NEVER receive or view Darsh's points
-      if (myRole !== 'parent' && myRole !== 'admin' && data.target === 'admin') {
+      // PRIVACY ENFORCEMENT: Dora must NEVER receive or view Darsh's personal routine task deductions,
+      // BUT shared couple wish events (redeem transactions, approvals, fulfillment) MUST be synchronized!
+      const isSharedWishAction = data.action === 'WISH_APPROVED' || data.action === 'WISH_REQUEST' || data.action === 'TOGGLE_FULFILLMENT' || data.action === 'SYNC_UNLOCKED_VOUCHERS';
+      if (myRole !== 'parent' && myRole !== 'admin' && data.target === 'admin' && !isSharedWishAction && !(data.action === 'TRANSACTION' && data.newEntry && data.newEntry.type === 'redeem')) {
         return;
       }
 
       if (data.action === 'TRANSACTION' && data.newEntry) {
         const entry = data.newEntry;
-        if (myRole !== 'parent' && myRole !== 'admin' && entry.target === 'admin') {
+        if (myRole !== 'parent' && myRole !== 'admin' && entry.target === 'admin' && entry.type !== 'redeem') {
           return;
         }
         setLoveLedger(prev => {
@@ -5207,8 +5209,37 @@ export default function App() {
           try {
             confetti({ particleCount: 100, spread: 100, origin: { y: 0.4 } });
           } catch (e) {}
-          alert('🎉 IT\'S APPROVED! 💖\n\n' + (req.targetName || 'Your partner') + ' APPROVED your wish:\n"' + req.wishTitle + '"!\n\nPoints deducted and wish granted!');
+
+          // Ensure the redeemed wish is recorded in loveLedger with status Pending
+          setLoveLedger(prev => {
+            const exists = prev.some(e => e.wishTitle === req.wishTitle && (e.id === ('lb_wish_' + req.id) || e.remarks === ('Redeemed: ' + req.wishTitle)));
+            if (exists) return prev;
+            const newRedeemEntry = {
+              id: 'lb_wish_' + req.id,
+              sl: 1,
+              target: req.requesterRole,
+              description: '[' + req.requesterName + '] Redeemed: ' + req.wishTitle,
+              earnedAt: req.requestedAt || new Date().toLocaleString('en-GB'),
+              points: -Number(req.wishCost || 0),
+              type: 'redeem',
+              remarks: 'Redeemed: ' + req.wishTitle,
+              status: 'Redeemed',
+              wishTitle: req.wishTitle,
+              wishIcon: req.wishIcon || '🎁',
+              wishCost: Number(req.wishCost || 0),
+              fulfillmentStatus: 'Pending',
+              approvedBy: req.targetName || (role === 'parent' ? 'Darsh' : 'Dora')
+            };
+            const updated = [newRedeemEntry, ...prev.map((e, idx) => ({ ...e, sl: idx + 2 }))];
+            try { localStorage.setItem('stealth_love_ledger', JSON.stringify(updated)); } catch(e) {}
+            return updated;
+          });
+
+          alert('🎉 IT\'S APPROVED! 💖\n\n' + (req.targetName || 'Your partner') + ' APPROVED your wish:\n"' + req.wishTitle + '"!\n\nPoints deducted and wish is pending completion!');
         }
+      } else if (data.action === 'SYNC_UNLOCKED_VOUCHERS' && Array.isArray(data.vouchers)) {
+        try { localStorage.setItem('stealth_unlocked_scratch_vouchers', JSON.stringify(data.vouchers)); } catch(e) {}
+        window.dispatchEvent(new CustomEvent('stealth_unlocked_vouchers_updated', { detail: data.vouchers }));
       } else if (data.action === 'WISH_DECLINED') {
         const req = data.wishRequest;
         if (req) {
@@ -6287,11 +6318,16 @@ export default function App() {
     .filter(e => e.type === 'credit')
     .reduce((sum, e) => sum + Math.abs(e.points), 0);
 
-  const redeemedWishesList = visibleLoveLedger
+  // Redeemed Wishes are shared couple promises (both Darsh & Dora must see all couple wishes)
+  const redeemedWishesList = loveLedger
     .filter(e => e.type === 'redeem' || e.status === 'Redeemed');
 
   const redeemedWishesTotal = redeemedWishesList
     .reduce((sum, e) => sum + Math.abs(e.points), 0);
+
+  const hasIncomingPendingWish = Boolean(
+    wishRequests && wishRequests.some(r => r.status === 'PENDING' && r.requesterRole !== myRole)
+  );
 
   return (
     <div 
@@ -6842,12 +6878,19 @@ export default function App() {
                 <>
                   {/* Desktop / Tablet view */}
                   <div
-                    className="hidden md:flex items-center gap-1.5 backdrop-blur-xl bg-white/[0.08] hover:bg-white/[0.12] border border-white/20 text-white px-2.5 py-1 rounded-2xl text-xs font-mono font-bold shrink-0 shadow-md transition-all"
-                    title={`${activeDoraName}: 💕 Love Balance | Darsh: 👑 Love Balance`}
+                    className={`hidden md:flex items-center gap-1.5 backdrop-blur-xl text-white px-2.5 py-1 rounded-2xl text-xs font-mono font-bold shrink-0 shadow-md transition-all ${
+                      hasIncomingPendingWish 
+                        ? 'bg-pink-600/30 border-2 border-pink-400 animate-pulse ring-2 ring-pink-500 shadow-[0_0_16px_rgba(244,63,94,0.8)]' 
+                        : 'bg-white/[0.08] hover:bg-white/[0.12] border border-white/20'
+                    }`}
+                    title={hasIncomingPendingWish ? "Incoming Wish Request Waiting! Tap to Review & Approve" : `${activeDoraName}: 💕 Love Balance | Darsh: 👑 Love Balance`}
                   >
+                    {hasIncomingPendingWish && (
+                      <span className="w-2 h-2 rounded-full bg-pink-400 animate-ping mr-0.5 shrink-0" />
+                    )}
                     <button
                       type="button"
-                      onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                      onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab(hasIncomingPendingWish ? 'claimed' : 'passbook'); }}
                       className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
                     >
                       <span className="text-[10px] text-pink-400/90 font-sans font-semibold">{activeDoraName}:</span>
@@ -6857,7 +6900,7 @@ export default function App() {
                     <span className="text-white/20">|</span>
                     <button
                       type="button"
-                      onClick={() => { setActiveLbTarget('admin'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                      onClick={() => { setActiveLbTarget('admin'); setShowLoveBalanceModal(true); setLoveModalTab(hasIncomingPendingWish ? 'claimed' : 'passbook'); }}
                       className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(adminNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}
                     >
                       <span className="text-[10px] text-blue-400/90 font-sans font-semibold">Darsh:</span>
@@ -6869,10 +6912,17 @@ export default function App() {
                   {/* Compact Mobile Pill (fits without overflowing) */}
                   <button
                     type="button"
-                    onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                    className="md:hidden flex items-center gap-1 backdrop-blur-md bg-pink-500/15 border border-pink-400/30 text-pink-300 px-2 py-1 rounded-full text-[11px] font-mono font-bold cursor-pointer shrink-0"
-                    title="Tap to view Love Balances & Passbook"
+                    onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab(hasIncomingPendingWish ? 'claimed' : 'passbook'); }}
+                    className={`md:hidden flex items-center gap-1 backdrop-blur-md px-2 py-1 rounded-full text-[11px] font-mono font-bold cursor-pointer shrink-0 transition-all ${
+                      hasIncomingPendingWish
+                        ? 'bg-pink-600/40 border-2 border-pink-400 text-white animate-pulse ring-2 ring-pink-500 shadow-[0_0_16px_rgba(244,63,94,0.8)]'
+                        : 'bg-pink-500/15 border border-pink-400/30 text-pink-300'
+                    }`}
+                    title={hasIncomingPendingWish ? "Incoming Wish Request Waiting! Tap to Review & Approve" : "Tap to view Love Balances & Passbook"}
                   >
+                    {hasIncomingPendingWish && (
+                      <span className="w-2 h-2 rounded-full bg-pink-400 animate-ping mr-0.5 shrink-0" />
+                    )}
                     <span>💕</span>
                     <span>{formatLoveBalance(doraNetBalance)}</span>
                   </button>
@@ -6880,11 +6930,18 @@ export default function App() {
               ) : (
                 <button
                   type="button"
-                  onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                  className={`flex items-center gap-1 backdrop-blur-xl bg-white/[0.08] hover:bg-white/[0.14] border ${Number(doraNetBalance || 0) < 0 ? 'border-rose-500/60 text-rose-300' : 'border-pink-500/50 text-pink-300'} hover:text-white px-2 sm:px-2.5 py-1 rounded-full text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 shadow-md`}
-                  title="Your Love Balance Passbook & Wish Store"
+                  onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab(hasIncomingPendingWish ? 'claimed' : 'passbook'); }}
+                  className={`flex items-center gap-1 backdrop-blur-xl hover:bg-white/[0.14] border ${
+                    hasIncomingPendingWish
+                      ? 'bg-pink-600/40 border-2 border-pink-400 text-white animate-pulse ring-2 ring-pink-500 shadow-[0_0_18px_rgba(244,63,94,0.85)]'
+                      : (Number(doraNetBalance || 0) < 0 ? 'bg-white/[0.08] border-rose-500/60 text-rose-300' : 'bg-white/[0.08] border-pink-500/50 text-pink-300')
+                  } hover:text-white px-2 sm:px-2.5 py-1 rounded-full text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 shadow-md`}
+                  title={hasIncomingPendingWish ? "Incoming Wish Request Waiting! Tap to Review & Approve" : "Your Love Balance Passbook & Wish Store"}
                 >
-                  <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💖'}</span>
+                  {hasIncomingPendingWish && (
+                    <span className="w-2 h-2 rounded-full bg-pink-400 animate-ping mr-0.5 shrink-0" />
+                  )}
+                  <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💕'}</span>
                   <span>{formatLoveBalance(doraNetBalance)}</span>
                 </button>
               )}
@@ -7793,12 +7850,19 @@ export default function App() {
             {/* LOVE BALANCE BUTTON PILL (SHOW BOTH FOR DARSH, DORA ONLY SEES DORA) */}
             {role === 'parent' ? (
               <div
-                className="flex items-center gap-1.5 bg-emerald-950/50 border border-emerald-500/60 text-white px-2.5 py-1 rounded-xl text-xs font-mono font-bold shadow-[0_0_12px_rgba(16,185,129,0.2)] shrink-0"
-                title={`${activeDoraName}: 💕 Love Balance | Darsh: 👑 Love Balance (Click either to view passbook)`}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono font-bold shrink-0 transition-all ${
+                  hasIncomingPendingWish
+                    ? 'bg-pink-900/60 border-2 border-pink-400 text-white animate-pulse ring-2 ring-pink-500 shadow-[0_0_18px_rgba(244,63,94,0.85)]'
+                    : 'bg-emerald-950/50 border border-emerald-500/60 text-white shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                }`}
+                title={hasIncomingPendingWish ? "Incoming Wish Request Waiting! Tap to Review & Approve" : `${activeDoraName}: 💕 Love Balance | Darsh: 👑 Love Balance (Click either to view passbook)`}
               >
+                {hasIncomingPendingWish && (
+                  <span className="w-2 h-2 rounded-full bg-pink-400 animate-ping mr-0.5 shrink-0" />
+                )}
                 <button
                   type="button"
-                  onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                  onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab(hasIncomingPendingWish ? 'claimed' : 'passbook'); }}
                   className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
                   title={`${activeDoraName}'s Available Balance`}
                 >
@@ -7809,7 +7873,7 @@ export default function App() {
                 <span className="text-emerald-700">|</span>
                 <button
                   type="button"
-                  onClick={() => { setActiveLbTarget('admin'); setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
+                  onClick={() => { setActiveLbTarget('admin'); setShowLoveBalanceModal(true); setLoveModalTab(hasIncomingPendingWish ? 'claimed' : 'passbook'); }}
                   className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(adminNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}
                   title="Darsh's Available Balance"
                 >
@@ -7821,11 +7885,18 @@ export default function App() {
             ) : (
               <button
                 type="button"
-                onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab('passbook'); }}
-                className={`flex items-center gap-1 bg-emerald-950/50 hover:bg-emerald-900/70 border ${Number(doraNetBalance || 0) < 0 ? 'border-rose-500/70 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.3)]' : 'border-emerald-500/60 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)]'} hover:text-white px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0`}
-                title="Open Love Balance Passbook & Wish Store"
+                onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab(hasIncomingPendingWish ? 'claimed' : 'passbook'); }}
+                className={`flex items-center gap-1 border px-2.5 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all active:scale-95 shrink-0 ${
+                  hasIncomingPendingWish
+                    ? 'bg-pink-900/70 border-2 border-pink-400 text-white animate-pulse ring-2 ring-pink-500 shadow-[0_0_18px_rgba(244,63,94,0.85)]'
+                    : (Number(doraNetBalance || 0) < 0 ? 'bg-emerald-950/50 border-rose-500/70 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.3)]' : 'bg-emerald-950/50 border-emerald-500/60 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)]')
+                } hover:text-white`}
+                title={hasIncomingPendingWish ? "Incoming Wish Request Waiting! Tap to Review & Approve" : "Open Love Balance Passbook & Wish Store"}
               >
-                <span className="text-sm font-sans">{Number(doraNetBalance || 0) < 0 ? '💔' : '💖'}</span>
+                {hasIncomingPendingWish && (
+                  <span className="w-2 h-2 rounded-full bg-pink-400 animate-ping mr-0.5 shrink-0" />
+                )}
+                <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💕'}</span>
                 <span>{formatLoveBalance(doraNetBalance)}</span>
               </button>
             )}
@@ -11232,6 +11303,7 @@ export default function App() {
           handleInitiateWishRequest={handleInitiateWishRequest}
           handleToggleWishFulfillment={handleToggleWishFulfillment}
           handleLoveBalanceTransaction={handleLoveBalanceTransaction}
+          socketRef={socketRef}
         />
 
         {/* INCOMING GAME CHALLENGE NOTIFICATION (LIVE POPUP FROM PARTNER) */}

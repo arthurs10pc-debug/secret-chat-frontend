@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  X, RefreshCw, Trash2, Gift, Filter, ShieldCheck, Sparkles, Calendar 
+  X, RefreshCw, Trash2, Gift, Filter, ShieldCheck, Sparkles, Calendar, CheckSquare, Square 
 } from 'lucide-react';
 import { ROMANTIC_WISH_STORE, LOVE_EARNING_RULES, LOVE_DEDUCTION_RULES, SCRATCH_VOUCHERS_POOL } from '../constants';
 import ScratchCardModal from './ScratchCardModal';
@@ -41,11 +41,13 @@ export default function PassbookModal({
   handleDeleteTransaction,
   handleInitiateWishRequest,
   handleToggleWishFulfillment,
-  handleLoveBalanceTransaction
+  handleLoveBalanceTransaction,
+  socketRef
 }) {
   const [showScratchModal, setShowScratchModal] = useState(false);
   const [selectedScratchVoucher, setSelectedScratchVoucher] = useState(null);
   const [showDateFilter, setShowDateFilter] = useState(false);
+  const [selectedVoucherIds, setSelectedVoucherIds] = useState([]);
 
   // Persistent tracking of unlocked scratch vouchers and revealed codes
   const [unlockedVouchers, setUnlockedVouchers] = useState(() => {
@@ -181,8 +183,76 @@ export default function PassbookModal({
       if (prev.some(x => (x.code === item.code) || (x.title && item.title && x.title.trim().toLowerCase() === item.title.trim().toLowerCase()))) return prev;
       const updated = [item, ...prev];
       try { localStorage.setItem('stealth_unlocked_scratch_vouchers', JSON.stringify(updated)); } catch(e) {}
+      if (socketRef && socketRef.current) {
+        socketRef.current.emit('love_balance_action', {
+          room: 'global_stealth_chat_sync_channel_v1',
+          action: 'SYNC_UNLOCKED_VOUCHERS',
+          vouchers: updated,
+          senderRole: role || 'admin',
+          timestamp: Date.now()
+        });
+      }
       return updated;
     });
+  };
+
+  // Listen for real-time unlocked voucher sync from partner
+  useEffect(() => {
+    const handleSync = (e) => {
+      if (e.detail && Array.isArray(e.detail)) {
+        setUnlockedVouchers(e.detail);
+      }
+    };
+    window.addEventListener('stealth_unlocked_vouchers_updated', handleSync);
+    return () => window.removeEventListener('stealth_unlocked_vouchers_updated', handleSync);
+  }, []);
+
+  const handleDeleteSelectedVouchers = () => {
+    if (selectedVoucherIds.length === 0) return;
+    if (!window.confirm(`Delete ${selectedVoucherIds.length} selected voucher(s) from Wish Store?`)) return;
+    const remaining = unlockedVouchers.filter(v => !selectedVoucherIds.includes(v.code) && !selectedVoucherIds.includes(v.id));
+    setUnlockedVouchers(remaining);
+    setSelectedVoucherIds([]);
+    try { localStorage.setItem('stealth_unlocked_scratch_vouchers', JSON.stringify(remaining)); } catch(e) {}
+    if (socketRef && socketRef.current) {
+      socketRef.current.emit('love_balance_action', {
+        room: 'global_stealth_chat_sync_channel_v1',
+        action: 'SYNC_UNLOCKED_VOUCHERS',
+        vouchers: remaining,
+        senderRole: role || 'admin',
+        timestamp: Date.now()
+      });
+    }
+  };
+
+  const handleDeleteSingleVoucher = (vKey) => {
+    const remaining = unlockedVouchers.filter(v => v.id !== vKey && v.code !== vKey);
+    setUnlockedVouchers(remaining);
+    setSelectedVoucherIds(prev => prev.filter(k => k !== vKey));
+    try { localStorage.setItem('stealth_unlocked_scratch_vouchers', JSON.stringify(remaining)); } catch(e) {}
+    if (socketRef && socketRef.current) {
+      socketRef.current.emit('love_balance_action', {
+        room: 'global_stealth_chat_sync_channel_v1',
+        action: 'SYNC_UNLOCKED_VOUCHERS',
+        vouchers: remaining,
+        senderRole: role || 'admin',
+        timestamp: Date.now()
+      });
+    }
+  };
+
+  const toggleSelectVoucher = (vKey) => {
+    setSelectedVoucherIds(prev => 
+      prev.includes(vKey) ? prev.filter(k => k !== vKey) : [...prev, vKey]
+    );
+  };
+
+  const toggleSelectAllVouchers = () => {
+    if (selectedVoucherIds.length === unlockedVouchers.length) {
+      setSelectedVoucherIds([]);
+    } else {
+      setSelectedVoucherIds(unlockedVouchers.map(v => v.code || v.id));
+    }
   };
 
   if (!showLoveBalanceModal) return null;
@@ -560,15 +630,26 @@ export default function PassbookModal({
 
                 <div className="flex items-center gap-2 flex-wrap">
                   {role === 'parent' && (
-                    <button
-                      type="button"
-                      onClick={() => handleOpenClearModal(activeLbTarget)}
-                      className="bg-rose-950/70 hover:bg-rose-900 border border-rose-700/60 text-rose-300 text-xs font-bold px-3 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5"
-                      title="Clear passbook ledger history"
-                    >
-                      <Trash2 size={13} />
-                      <span>Clear All</span>
-                    </button>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenClearModal(activeLbTarget)}
+                        className="bg-rose-950/70 hover:bg-rose-900 border border-rose-700/60 text-rose-300 text-xs font-bold px-3 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5"
+                        title={`Clear ${activeLbTarget === 'admin' ? 'Darsh' : 'Dora'}'s passbook ledger`}
+                      >
+                        <Trash2 size={13} />
+                        <span>Clear {activeLbTarget === 'admin' ? 'Darsh' : 'Dora'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenClearModal('both')}
+                        className="bg-red-950 hover:bg-red-900 border border-red-600 text-red-200 text-xs font-black px-3 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5"
+                        title="Clear BOTH Dora and Darsh passbook ledgers at once"
+                      >
+                        <Trash2 size={13} className="text-red-400" />
+                        <span>Clear Both</span>
+                      </button>
+                    </div>
                   )}
                   <button
                     type="button"
@@ -829,7 +910,7 @@ export default function PassbookModal({
               {/* DEDICATED SECTION: UNLOCKED SURPRISE SCRATCH CARDS & VOUCHERS */}
               {unlockedVouchers && unlockedVouchers.length > 0 && (
                 <div className="bg-[#181818] border border-amber-500/50 rounded-2xl p-4 space-y-3 shadow-xl">
-                  <div className="flex items-center justify-between border-b border-[#2b2b2b] pb-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#2b2b2b] pb-2 gap-2">
                     <div>
                       <h4 className="text-sm font-black text-amber-300 flex items-center gap-2">
                         <span>✨ Unlocked Scratch Cards & Romantic Coupons</span>
@@ -839,10 +920,34 @@ export default function PassbookModal({
                       </h4>
                       <p className="text-[11px] text-gray-400 mt-0.5">Surprise rewards revealed via Scratch Card — redeemable with Love Balance!</p>
                     </div>
+
+                    {isParentAdmin && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={toggleSelectAllVouchers}
+                          className="text-[11px] font-bold bg-[#262626] hover:bg-[#333] text-gray-300 px-2.5 py-1 rounded-lg border border-[#3d3d3d] cursor-pointer transition-all"
+                        >
+                          {selectedVoucherIds.length === unlockedVouchers.length ? 'Deselect All' : 'Select All'}
+                        </button>
+                        {selectedVoucherIds.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleDeleteSelectedVouchers}
+                            className="text-[11px] font-bold bg-rose-600 hover:bg-rose-500 text-white px-3 py-1 rounded-lg shadow cursor-pointer active:scale-95 flex items-center gap-1 transition-all"
+                          >
+                            <Trash2 size={12} />
+                            <span>Delete Selected ({selectedVoucherIds.length})</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {unlockedVouchers.map((uv, idx) => {
+                      const vKey = uv.code || uv.id || String(idx);
+                      const isSelected = selectedVoucherIds.includes(vKey) || (uv.id && selectedVoucherIds.includes(uv.id)) || (uv.code && selectedVoucherIds.includes(uv.code));
                       const availablePts = Math.max(0, displayedLoveBalance);
                       const numericCost = parseFloat(String(uv.points || uv.value || '10').replace(/[^0-9.]/g, '')) || 10;
                       const canAffordUv = availablePts >= numericCost;
@@ -850,8 +955,28 @@ export default function PassbookModal({
                       const isUvPending = wishRequests.some(r => (r.wishTitle === uv.title || r.wishId === uv.code) && r.status === 'PENDING' && r.requesterRole === requesterRole);
 
                       return (
-                        <div key={uv.id || uv.code || idx} className="bg-gradient-to-br from-[#1c1815] via-[#161616] to-[#1c1418] border border-amber-500/40 hover:border-amber-400/70 rounded-2xl p-3.5 flex flex-col justify-between space-y-3 shadow transition-colors">
-                          <div className="space-y-1.5">
+                        <div key={uv.id || uv.code || idx} className={`bg-gradient-to-br from-[#1c1815] via-[#161616] to-[#1c1418] border ${isSelected ? 'border-amber-400 ring-2 ring-amber-500/50' : 'border-amber-500/40 hover:border-amber-400/70'} rounded-2xl p-3.5 flex flex-col justify-between space-y-3 shadow transition-colors relative`}>
+                          {isParentAdmin && (
+                            <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleSelectVoucher(vKey)}
+                                className="w-4 h-4 rounded text-amber-500 bg-[#222] border-gray-600 cursor-pointer accent-amber-500"
+                                title="Select voucher for bulk delete"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSingleVoucher(vKey)}
+                                className="p-1 text-gray-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg cursor-pointer transition-all"
+                                title="Delete this voucher from Wish Store"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          )}
+
+                          <div className="space-y-1.5 pr-14">
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-center gap-2.5">
                                 <span className="text-2xl p-1.5 bg-black/60 rounded-xl border border-amber-500/40 shrink-0">{uv.icon || '🎁'}</span>
@@ -862,10 +987,10 @@ export default function PassbookModal({
                                   </span>
                                 </div>
                               </div>
-                              <span className="text-xs font-mono font-black text-amber-400 bg-amber-500/10 border border-amber-500/40 px-2 py-0.5 rounded-lg shrink-0">
-                                ₹ {numericCost.toFixed(2)}
-                              </span>
                             </div>
+                            <span className="inline-block text-xs font-mono font-black text-amber-400 bg-amber-500/10 border border-amber-500/40 px-2 py-0.5 rounded-lg shrink-0 mt-1">
+                              ₹ {numericCost.toFixed(2)}
+                            </span>
                             <p className="text-[11px] text-gray-300 leading-snug">{uv.description}</p>
                           </div>
 
@@ -1051,7 +1176,12 @@ export default function PassbookModal({
                             <h4 className="text-sm font-black text-white">
                               {rw.wishTitle || rw.description.replace(/^\[(Dora|Darsh)\]\s*Redeemed:\s*/i, '').replace(/^Redeemed:\s*/i, '')}
                             </h4>
-                            <div className="text-[11px] text-gray-400 font-mono">Redeemed: {rw.earnedAt}</div>
+                            <div className="flex items-center gap-2 text-[11px] font-mono">
+                              <span className="text-pink-300 bg-pink-950/60 border border-pink-700/50 px-2 py-0.2 rounded">
+                                👤 {rw.description && rw.description.includes('[Darsh]') ? 'Darsh' : 'Dora'} claimed
+                              </span>
+                              <span className="text-gray-400">Redeemed: {rw.earnedAt}</span>
+                            </div>
                             <div className="text-[10px] text-gray-500">Remarks: {rw.remarks}</div>
                           </div>
                         </div>
@@ -1066,21 +1196,33 @@ export default function PassbookModal({
                             ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                             : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse'
                         )}>
-                          {rw.fulfillmentStatus === 'Fulfilled' ? '✅ Granted & Fulfilled' : '⏳ Date / Reward Pending'}
+                          {rw.fulfillmentStatus === 'Fulfilled' ? '✅ Completed & Fulfilled 💝' : '⏳ Accepted & Pending Completion'}
                         </span>
 
-                        <button
-                          type="button"
-                          onClick={() => handleToggleWishFulfillment(rw.id)}
-                          className={`text-xs font-bold px-3 py-1.5 rounded-xl border cursor-pointer transition-all active:scale-95 flex items-center gap-1.5 ${
-                            rw.fulfillmentStatus === 'Fulfilled'
-                              ? 'bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border-amber-700/50'
-                              : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow'
-                          }`}
-                          title="Toggle fulfillment status manually"
-                        >
-                          {rw.fulfillmentStatus === 'Fulfilled' ? 'Mark Pending ⏳' : 'Mark Done ✅'}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleWishFulfillment(rw.id)}
+                            className={`text-xs font-bold px-3 py-1.5 rounded-xl border cursor-pointer transition-all active:scale-95 flex items-center gap-1.5 ${
+                              rw.fulfillmentStatus === 'Fulfilled'
+                                ? 'bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border-amber-700/50'
+                                : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow'
+                            }`}
+                            title="Toggle fulfillment status manually"
+                          >
+                            {rw.fulfillmentStatus === 'Fulfilled' ? 'Mark Pending ⏳' : 'Mark Done ✅'}
+                          </button>
+                          {isParentAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTransaction(rw.id)}
+                              className="p-1.5 text-gray-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-xl cursor-pointer transition-all border border-transparent hover:border-rose-800"
+                              title="Delete this redeemed wish permanently"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
