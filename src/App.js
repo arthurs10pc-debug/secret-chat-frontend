@@ -1045,6 +1045,7 @@ export default function App() {
   const swRegistrationRef = useRef(null);
 
   const viewModeRef = useRef(viewMode);
+  const isWhatsAppViewRef = useRef(isWhatsAppView);
   const roleRef = useRef(role);
   const isCurrentAdmin = role === 'parent';
 
@@ -1901,10 +1902,10 @@ export default function App() {
   };
 
   const markMessagesAsSeen = useCallback(() => {
-    const isCurrentlyStealth = viewModeRef.current === 'stealth';
+    const isChatOpen = viewModeRef.current === 'stealth' || isWhatsAppViewRef.current;
     const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
 
-    if (isCurrentlyStealth && isTabActive && socketRef.current) {
+    if (isChatOpen && isTabActive && socketRef.current) {
       const currentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
       socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: currentRole });
     }
@@ -2188,6 +2189,21 @@ export default function App() {
         encryptedText: encrypted,
         isMedia: true,
         mediaType: 'video_note'
+      });
+      playSentSound();
+    }
+  };
+
+  const handleSendInstantPhoto = (base64Photo) => {
+    if (!base64Photo) return;
+    const encrypted = encryptText(base64Photo);
+    if (socketRef.current) {
+      socketRef.current.emit('send_stealth_msg', {
+        room: GLOBAL_ROOM,
+        role,
+        encryptedText: encrypted,
+        isMedia: true,
+        mediaType: 'photo'
       });
       playSentSound();
     }
@@ -2524,22 +2540,27 @@ export default function App() {
   useEffect(() => {
     const timerInterval = setInterval(() => {
       const now = new Date();
-      const target = new Date();
-      target.setHours(19, 20, 0, 0);
 
-      let diff = target.getTime() - now.getTime();
-      if (diff <= 0) {
-        target.setDate(target.getDate() + 1);
-        diff = target.getTime() - now.getTime();
+      // Auto-download check at 7:20 PM (19:20)
+      const currentHours = now.getHours();
+      const currentMinutes = now.getMinutes();
+      if (currentHours === 19 && currentMinutes === 20) {
+        if (!autoDownloadedRef.current) {
+          autoDownloadedRef.current = true;
+          downloadFullChatPDF();
+        }
+      } else {
         autoDownloadedRef.current = false;
       }
 
-      if (Math.abs(diff) < 1500 && !autoDownloadedRef.current && role === 'parent') {
-        autoDownloadedRef.current = true;
-        downloadFullChatPDF();
+      // Next 7:20 PM target countdown
+      const nextTarget = new Date();
+      nextTarget.setHours(19, 20, 0, 0);
+      if (now.getTime() >= nextTarget.getTime()) {
+        nextTarget.setDate(nextTarget.getDate() + 1);
       }
-
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const diff = nextTarget.getTime() - now.getTime();
+      const hours = Math.floor(diff / (1000 * 60 * 60));
       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
       const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
@@ -2547,7 +2568,7 @@ export default function App() {
     }, 1000);
 
     return () => clearInterval(timerInterval);
-  }, [role, stealthMessages]);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -2583,6 +2604,13 @@ export default function App() {
       setIsPlaying(false);
     }
   }, [viewMode, isPlaying]);
+
+  useEffect(() => {
+    isWhatsAppViewRef.current = isWhatsAppView;
+    if (isWhatsAppView) {
+      markMessagesAsSeen();
+    }
+  }, [isWhatsAppView, markMessagesAsSeen]);
 
   useEffect(() => {
     roleRef.current = role;
@@ -4848,7 +4876,7 @@ export default function App() {
       setIsPeerTyping(false);
       const text = decryptText(data.encryptedText);
       const myCurrentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
-      const isCurrentlyStealth = viewModeRef.current === 'stealth';
+      const isCurrentlyStealth = viewModeRef.current === 'stealth' || isWhatsAppViewRef.current;
       const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
       const shouldAutoSeen = isCurrentlyStealth && isTabActive && data.senderRole !== myCurrentRole;
 
@@ -4891,7 +4919,7 @@ export default function App() {
     socketRef.current.on('messages_marked_seen', ({ viewerRole }) => {
       setStealthMessages(prev => prev.map(m => {
         if (m.senderRole !== viewerRole) {
-          return { ...m, isSeen: true };
+          return { ...m, isSeen: true, isDelivered: true };
         }
         return m;
       }));
@@ -5559,47 +5587,103 @@ export default function App() {
     }
   }, []);
 
-  const downloadFullChatPDF = () => {
-    if (role !== 'parent') return;
-
+  const downloadFullChatPDF = async () => {
     try {
+      let rawMessages = [];
+      try {
+        const resp = await fetch(`${BACKEND_URL}/api/chat-history?room=${GLOBAL_ROOM}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          if (Array.isArray(data) && data.length > 0) {
+            rawMessages = data.map(m => ({
+              ...m,
+              text: m.text || decryptText(m.encryptedText || ''),
+              timeFormatted: new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }));
+          }
+        }
+      } catch (e) {
+        console.warn("Could not fetch remote chat-history, using local buffer:", e);
+      }
+
+      if (rawMessages.length === 0) {
+        rawMessages = stealthMessagesRef.current && stealthMessagesRef.current.length > 0 
+          ? stealthMessagesRef.current 
+          : stealthMessages;
+      }
+
       const doc = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: 'a4'
       });
 
+      // Header Banner
       doc.setFillColor(15, 23, 42);
       doc.rect(0, 0, 210, 24, 'F');
       doc.setTextColor(255, 255, 255);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(14);
-      doc.text("WhatsApp / Chat Transcript - Bubble Export", 14, 12);
+      doc.text("WhatsApp / Complete Secret Chat Transcript", 14, 11);
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(8.5);
+      doc.setFontSize(8);
       doc.setTextColor(203, 213, 225);
-      doc.text(`Exported: ${new Date().toLocaleString()}  |  Total Messages: ${stealthMessages.length}`, 14, 19);
+      doc.text(`Auto-Generated: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} (IST)  |  Total Messages: ${rawMessages.length}`, 14, 18);
 
       let y = 32;
       const pageHeight = 297;
-      const maxWidth = 90;
+      const maxWidth = 95;
       const margin = 14;
 
-      if (stealthMessages.length === 0) {
+      if (!rawMessages || rawMessages.length === 0) {
         doc.setTextColor(100, 116, 139);
         doc.setFontSize(11);
         doc.text("No messages recorded in this chat stream.", margin, y);
       } else {
-        stealthMessages.forEach((m) => {
-          const isUser = m.senderRole === 'user';
-          const senderLabel = isUser ? 'A (User)' : 'H (Admin)';
+        rawMessages.forEach((m) => {
+          const isUser = (m.senderRole === 'user' || m.senderRole === 'A');
+          const senderLabel = isUser ? `A (${activeDoraName || 'Dora'})` : 'H (Darsh)';
           const time = m.timeFormatted || new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const content = m.isMedia ? "[Encrypted Secret Photo Asset]" : cleanOriginalText(m.text || "");
+          
+          let fullRawText = m.text || "";
+          let replyHeader = "";
+          let actualText = fullRawText;
+
+          // Check if message is a reply
+          const replyMatch = fullRawText.match(/^\[⤴\s*([AH]):\s*"([^"]*)"\]\s*(.*)/s);
+          if (replyMatch) {
+            const replierRole = isUser ? 'A' : 'H';
+            const repliedToRole = replyMatch[1];
+            const quotedSnippet = replyMatch[2];
+            const remainder = replyMatch[3];
+            const replierName = replierRole === 'A' ? (activeDoraName || 'Dora') : 'Darsh';
+            const repliedToName = repliedToRole === 'A' ? (activeDoraName || 'Dora') : 'Darsh';
+            
+            replyHeader = `[↩ ${repliedToName} ke message ka reply ${replierName} ne diya: "${quotedSnippet}"]`;
+            actualText = remainder;
+          }
+
+          if (m.mediaType === 'audio') {
+            actualText = "[🎙️ Voice Note Recording]";
+          } else if (m.mediaType === 'video_note') {
+            actualText = "[🎥 60s Circular Video Note]";
+          } else if (m.mediaType === 'sticker') {
+            actualText = "[🎨 Sticker Asset]";
+          } else if (m.isMedia || m.mediaType === 'photo') {
+            actualText = "[📷 Photo Asset]";
+          } else if (actualText && actualText.includes('[GAME_CHALLENGE:')) {
+            actualText = actualText.includes('ludo') ? "🎲 [Ludo Royale 2P Match Challenge]" : "⚔️ [Couple Tic-Tac-Toe Duel Challenge]";
+          }
 
           doc.setFont("helvetica", "normal");
-          doc.setFontSize(9);
-          const splitLines = doc.splitTextToSize(content || "(empty)", maxWidth);
-          const bubbleHeight = (splitLines.length * 4.5) + 10;
+          doc.setFontSize(8.5);
+
+          const linesHeader = replyHeader ? doc.splitTextToSize(replyHeader, maxWidth - 8) : [];
+          const linesBody = doc.splitTextToSize(actualText || "(empty)", maxWidth - 8);
+          
+          const headerHeight = linesHeader.length > 0 ? (linesHeader.length * 3.8) + 3 : 0;
+          const bodyHeight = (linesBody.length * 4.2);
+          const bubbleHeight = 11 + headerHeight + bodyHeight;
 
           if (y + bubbleHeight > pageHeight - 15) {
             doc.addPage();
@@ -5608,6 +5692,7 @@ export default function App() {
 
           const xPos = isUser ? margin : (210 - margin - maxWidth);
 
+          // Bubble background
           if (isUser) {
             doc.setFillColor(241, 245, 249);
             doc.setDrawColor(203, 213, 225);
@@ -5617,24 +5702,50 @@ export default function App() {
           }
           doc.roundedRect(xPos, y, maxWidth, bubbleHeight, 3, 3, 'FD');
 
-          doc.setTextColor(15, 23, 42);
+          // Sender Name
+          doc.setTextColor(isUser ? 30 : 6, isUser ? 41 : 78, isUser ? 59 : 59);
           doc.setFont("helvetica", "bold");
           doc.setFontSize(8);
-          doc.text(`${senderLabel}`, xPos + 4, y + 5);
+          doc.text(senderLabel, xPos + 4, y + 5);
 
+          let currentY = y + 9;
+
+          // Render Quoted Reply Box if present
+          if (linesHeader.length > 0) {
+            doc.setFillColor(isUser ? 226 : 187, isUser ? 232 : 247, isUser ? 240 : 208);
+            doc.roundedRect(xPos + 3, currentY - 3, maxWidth - 6, headerHeight, 1.5, 1.5, 'F');
+            doc.setTextColor(71, 85, 105);
+            doc.setFont("helvetica", "italic");
+            doc.setFontSize(7);
+            doc.text(linesHeader, xPos + 5, currentY + 0.5);
+            currentY += headerHeight + 2;
+          }
+
+          // Message Body
+          doc.setTextColor(15, 23, 42);
           doc.setFont("helvetica", "normal");
-          doc.setFontSize(9);
-          doc.text(splitLines, xPos + 4, y + 10);
+          doc.setFontSize(8.5);
+          doc.text(linesBody, xPos + 4, currentY);
 
-          doc.setFontSize(7);
+          // Timestamp
+          doc.setFontSize(6.5);
           doc.setTextColor(100, 116, 139);
-          doc.text(time, xPos + maxWidth - 16, y + bubbleHeight - 3);
+          doc.text(time, xPos + maxWidth - 16, y + bubbleHeight - 2.5);
 
-          y += bubbleHeight + 4;
+          y += bubbleHeight + 3.5;
         });
       }
 
-      doc.save(`WhatsApp_Chat_Bubble_Transcript_${Date.now()}.pdf`);
+      // Add Page Numbers
+      const totalPages = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(7);
+        doc.setTextColor(148, 163, 184);
+        doc.text(`Page ${i} of ${totalPages}`, 190, 292, { align: 'right' });
+      }
+
+      doc.save(`Complete_Chat_History_${Date.now()}.pdf`);
     } catch (err) {
       console.error("PDF Export Error:", err);
       alert("Error generating PDF: " + err.message);
@@ -7347,9 +7458,9 @@ export default function App() {
                             )}
                             <span>{m.timeFormatted}</span>
                             {isMine && (
-                              m.isSeen && isPartnerOnline ? (
+                              m.isSeen ? (
                                 <CheckCheck size={14} className="text-cyan-400" title="Seen" />
-                              ) : isPartnerOnline ? (
+                              ) : (isPartnerOnline || m.isDelivered) ? (
                                 <CheckCheck size={14} className="text-gray-400" title="Delivered" />
                               ) : (
                                 <Check size={14} className="text-gray-400" title="Sent" />
@@ -7433,10 +7544,18 @@ export default function App() {
               <button 
                 type="button" 
                 onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                className="backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 text-gray-300 hover:text-white p-2 rounded-full transition-all cursor-pointer active:scale-95"
+                className="backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 text-gray-300 hover:text-white p-2 rounded-full transition-all cursor-pointer active:scale-95 shrink-0"
                 title="Attach Photo or Document"
               >
                 <Paperclip size={19} />
+              </button>
+              <button 
+                type="button"
+                onClick={() => setShowCircularVideoNoteModal(true)}
+                className="backdrop-blur-md bg-white/[0.06] hover:bg-white/[0.15] border border-white/10 hover:border-white/25 text-purple-300 hover:text-white p-2 rounded-full transition-all cursor-pointer active:scale-95 shrink-0"
+                title="Instant Camera & Video"
+              >
+                <Camera size={19} />
               </button>
               <textarea 
                 ref={wpInputRef}
@@ -7460,37 +7579,20 @@ export default function App() {
               {input.trim().length > 0 ? (
                 <button 
                   type="submit" 
-                  onMouseDown={(e) => e.preventDefault()}
-                  onTouchStart={(e) => {
-                    e.preventDefault();
-                    handleSubmit(e);
-                  }}
                   className="w-10 h-10 rounded-full backdrop-blur-md bg-gradient-to-tr from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 border border-emerald-300/40 text-white flex items-center justify-center cursor-pointer shadow-[0_0_18px_rgba(16,185,129,0.45)] transition-all active:scale-90 shrink-0"
                   title="Send Message"
                 >
                   <Send size={16} className="translate-x-0.5" />
                 </button>
               ) : (
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {/* VOICE NOTE RECORD BUTTON */}
-                  <button 
-                    type="button"
-                    onClick={handleStartVoiceNoteRecording}
-                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-full backdrop-blur-md bg-emerald-600/40 hover:bg-emerald-500/60 border border-emerald-400/40 text-emerald-300 hover:text-white flex items-center justify-center cursor-pointer transition-all active:scale-90 shadow-sm"
-                    title="Click to Record Voice Note"
-                  >
-                    <Mic size={18} />
-                  </button>
-                  {/* CIRCULAR VIDEO NOTE BUTTON */}
-                  <button 
-                    type="button"
-                    onClick={() => setShowCircularVideoNoteModal(true)}
-                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-full backdrop-blur-md bg-purple-600/40 hover:bg-purple-500/60 border border-purple-400/40 text-purple-200 hover:text-white flex items-center justify-center cursor-pointer transition-all active:scale-90 shadow-sm"
-                    title="Click to Record 60s Circular Video Note"
-                  >
-                    <Camera size={18} />
-                  </button>
-                </div>
+                <button 
+                  type="button"
+                  onClick={handleStartVoiceNoteRecording}
+                  className="w-10 h-10 rounded-full backdrop-blur-md bg-emerald-600/40 hover:bg-emerald-500/60 border border-emerald-400/40 text-emerald-300 hover:text-white flex items-center justify-center cursor-pointer transition-all active:scale-90 shadow-sm shrink-0"
+                  title="Click to Record Voice Note"
+                >
+                  <Mic size={18} />
+                </button>
               )}
             </form>
           )}
@@ -7508,6 +7610,7 @@ export default function App() {
             isOpen={showCircularVideoNoteModal}
             onClose={() => setShowCircularVideoNoteModal(false)}
             onSendVideoNote={handleSendVideoNote}
+            onSendPhoto={handleSendInstantPhoto}
           />
         </aside>
       )}
@@ -8452,11 +8555,11 @@ export default function App() {
                                   {showStatusReceipt && (
                                     <span 
                                       className={`text-[12px] font-mono tracking-tighter shrink-0 ml-1 font-bold transition-colors duration-100 ${
-                                        isSeen ? 'text-[#38bdf8]' : 'text-gray-500'
+                                        isSeen ? 'text-[#38bdf8]' : ((isPartnerOnline || m.isDelivered) ? 'text-gray-400' : 'text-gray-600')
                                       }`}
-                                      title={isSeen ? "Seen by counterpart" : "Sent"}
+                                      title={isSeen ? "Seen by counterpart" : ((isPartnerOnline || m.isDelivered) ? "Delivered" : "Sent")}
                                     >
-                                      {isSeen ? '..' : '.'}
+                                      {isSeen ? '..' : ((isPartnerOnline || m.isDelivered) ? '..' : '.')}
                                     </span>
                                   )}
                                 </div>
