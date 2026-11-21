@@ -1,6 +1,7 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { X, Sparkles, Gift, CheckCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { SCRATCH_VOUCHERS_POOL } from '../constants';
 
 export default function ScratchCardModal({
   isOpen,
@@ -13,15 +14,26 @@ export default function ScratchCardModal({
   const [isRevealed, setIsRevealed] = useState(false);
   const isDrawingRef = useRef(false);
 
-  const defaultVoucher = voucher || {
-    id: 'v_dinner_default',
-    title: 'Candlelight Dinner Date 🥂',
-    code: 'LOVE-VIP-' + Math.floor(1000 + Math.random() * 9000),
-    description: 'A fully organized royal romantic candlelight dinner date with sovereign menu choice!',
-    icon: '🥂',
-    points: '₹ 250.00',
-    category: 'Romantic Date'
-  };
+  // Pick voucher if provided, or random item from pool
+  const currentVoucher = useMemo(() => {
+    if (voucher) return voucher;
+    if (SCRATCH_VOUCHERS_POOL && SCRATCH_VOUCHERS_POOL.length > 0) {
+      const rnd = SCRATCH_VOUCHERS_POOL[Math.floor(Math.random() * SCRATCH_VOUCHERS_POOL.length)];
+      return {
+        ...rnd,
+        code: rnd.code + '-' + Math.floor(1000 + Math.random() * 9000)
+      };
+    }
+    return {
+      id: 'v_random_' + Date.now(),
+      title: 'Romantic Movie & Snacks Date 🎬',
+      code: 'MOVIE-DATE-' + Math.floor(1000 + Math.random() * 9000),
+      description: 'Your choice of movie, warm butter popcorn, and cozy cuddles together!',
+      icon: '🎬',
+      points: '₹ 75.00',
+      category: 'Entertainment'
+    };
+  }, [voucher, isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -74,8 +86,8 @@ export default function ScratchCardModal({
               origin: { y: 0.5 }
             });
           } catch (e) {}
-          if (onSaveVoucher && defaultVoucher) {
-            onSaveVoucher(defaultVoucher);
+          if (onSaveVoucher && currentVoucher) {
+            onSaveVoucher(currentVoucher);
           }
         }
       } catch (e) {}
@@ -142,7 +154,7 @@ export default function ScratchCardModal({
       canvas.removeEventListener('touchmove', handleTouchMove);
       canvas.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [isOpen, isRevealed, defaultVoucher, onSaveVoucher]);
+  }, [isOpen, isRevealed, currentVoucher, onSaveVoucher]);
 
   if (!isOpen) return null;
 
@@ -151,8 +163,8 @@ export default function ScratchCardModal({
     try {
       confetti({ particleCount: 90, spread: 80, origin: { y: 0.5 } });
     } catch (e) {}
-    if (onSaveVoucher && defaultVoucher) {
-      onSaveVoucher(defaultVoucher);
+    if (onSaveVoucher && currentVoucher) {
+      onSaveVoucher(currentVoucher);
     }
   };
 
@@ -188,27 +200,27 @@ export default function ScratchCardModal({
           </div>
 
           {/* CATEGORY BADGE */}
-          {defaultVoucher.category && (
+          {currentVoucher.category && (
             <div className="absolute top-2 right-2 z-10 bg-purple-900/70 backdrop-blur-sm border border-purple-400/40 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold text-purple-200 shadow">
-              {defaultVoucher.category}
+              {currentVoucher.category}
             </div>
           )}
 
           {/* SECRET REVEALED CONTENT UNDERNEATH */}
           <div className="space-y-1.5 select-none pt-4">
-            <span className="text-3xl">{defaultVoucher.icon || '🎁'}</span>
+            <span className="text-3xl">{currentVoucher.icon || '🎁'}</span>
             <h4 className="text-sm font-black text-white px-2">
-              {defaultVoucher.title}
+              {currentVoucher.title}
             </h4>
             <p className="text-[11px] text-pink-200 leading-snug px-3">
-              {defaultVoucher.description}
+              {currentVoucher.description}
             </p>
             <div className="pt-1 flex items-center justify-center gap-2">
               <span className="text-[10px] font-mono font-bold text-amber-300 bg-black/60 border border-amber-500/40 px-2 py-0.5 rounded-md">
-                CODE: {defaultVoucher.code}
+                CODE: {currentVoucher.code}
               </span>
               <span className="text-[10px] font-mono font-bold text-emerald-300 bg-emerald-950/70 border border-emerald-500/40 px-2 py-0.5 rounded-md">
-                {defaultVoucher.points || defaultVoucher.value || 'Priceless'}
+                {currentVoucher.points || currentVoucher.value || 'Priceless'}
               </span>
             </div>
           </div>

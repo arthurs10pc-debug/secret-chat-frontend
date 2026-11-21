@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  X, RefreshCw, Trash2, Gift, Filter, ShieldCheck, Sparkles 
+  X, RefreshCw, Trash2, Gift, Filter, ShieldCheck, Sparkles, Calendar 
 } from 'lucide-react';
 import { ROMANTIC_WISH_STORE, LOVE_EARNING_RULES, LOVE_DEDUCTION_RULES, SCRATCH_VOUCHERS_POOL } from '../constants';
 import ScratchCardModal from './ScratchCardModal';
@@ -45,6 +45,7 @@ export default function PassbookModal({
 }) {
   const [showScratchModal, setShowScratchModal] = useState(false);
   const [selectedScratchVoucher, setSelectedScratchVoucher] = useState(null);
+  const [showDateFilter, setShowDateFilter] = useState(false);
 
   // Persistent tracking of unlocked scratch vouchers and revealed codes
   const [unlockedVouchers, setUnlockedVouchers] = useState(() => {
@@ -69,6 +70,39 @@ export default function PassbookModal({
   const openerName = isDarsh ? 'Darsh' : (activeDoraName || 'Dora');
   const openerRole = isDarsh ? 'admin' : 'user';
   const currentOpenerBalance = isDarsh ? adminNetBalance : doraNetBalance;
+
+  // Day formatting helper for passbook day-wise groups
+  const getEntryDateKey = (earnedAt) => {
+    if (!earnedAt) return 'Other';
+    const str = String(earnedAt).trim();
+    const mIso = str.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (mIso) return mIso[1];
+    const mDmy = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (mDmy) return `${mDmy[3]}-${mDmy[2].padStart(2, '0')}-${mDmy[1].padStart(2, '0')}`;
+    return str.split(',')[0].trim() || 'Other';
+  };
+
+  const formatDayHeader = (dateKey) => {
+    if (!dateKey || dateKey === 'Other') return 'Earlier Records';
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const yestDate = new Date();
+      yestDate.setDate(yestDate.getDate() - 1);
+      const yestStr = yestDate.toISOString().split('T')[0];
+
+      const parts = dateKey.split('-');
+      if (parts.length === 3) {
+        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        const formatted = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+        if (dateKey === todayStr) return `📅 Today • ${formatted}`;
+        if (dateKey === yestStr) return `📅 Yesterday • ${formatted}`;
+        return `📅 ${formatted}`;
+      }
+      return `📅 ${dateKey}`;
+    } catch (e) {
+      return `📅 ${dateKey}`;
+    }
+  };
 
   const handleOpenScratchCard = () => {
     // 1. Minimum 6.00 points required to open
@@ -432,15 +466,95 @@ export default function PassbookModal({
                 );
               })()}
 
-              {/* ACTION ROW: PASSBOOK HEADER & BUTTONS */}
-              <div className="flex items-center justify-between bg-[#181818] border border-[#282828] p-3 rounded-2xl">
+              {/* ACTION ROW: PASSBOOK HEADER & COMPACT CALENDAR FILTER BUTTON */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-[#181818] border border-[#282828] p-3 rounded-2xl gap-2.5">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
                   <span className="text-xs sm:text-sm font-bold text-white">Love Balance Passbook</span>
-                  <span className="text-[10px] text-gray-500 font-mono hidden sm:inline">({visibleLoveLedger.length} Records)</span>
+                  <span className="text-[10px] text-gray-500 font-mono">({visibleLoveLedger.length} Records)</span>
+
+                  {/* COMPACT CALENDAR FILTER BUTTON (ZERO CLUTTER) */}
+                  <div className="relative ml-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowDateFilter(!showDateFilter)}
+                      className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                        loveDateFrom 
+                          ? 'bg-blue-600 text-white border-blue-400 shadow' 
+                          : 'bg-[#222] hover:bg-[#2c2c2c] text-gray-300 border-[#383838]'
+                      }`}
+                      title="Filter passbook by specific day"
+                    >
+                      <Calendar size={13} className={loveDateFrom ? "text-white" : "text-blue-400"} />
+                      <span className="font-mono text-[11px]">{loveDateFrom ? loveDateFrom : 'Calendar'}</span>
+                    </button>
+
+                    {showDateFilter && (
+                      <div className="absolute left-0 sm:left-auto sm:right-0 top-9 z-50 bg-[#161616] border border-blue-500/50 p-3 rounded-2xl shadow-2xl space-y-2 w-64 animate-in fade-in zoom-in-95 duration-150">
+                        <div className="flex items-center justify-between text-xs font-bold text-gray-300 pb-1 border-b border-[#262626]">
+                          <span className="flex items-center gap-1"><Calendar size={13} className="text-blue-400" /> Filter Day</span>
+                          {loveDateFrom && (
+                            <button
+                              type="button"
+                              onClick={() => { setLoveDateFrom(''); setLoveDateTo(''); setShowDateFilter(false); }}
+                              className="text-[10px] text-rose-400 hover:underline cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        <input
+                          type="date"
+                          value={loveDateFrom}
+                          onChange={(e) => {
+                            setLoveDateFrom(e.target.value);
+                            setLoveDateTo(e.target.value);
+                          }}
+                          className="w-full bg-[#0d0d0d] border border-[#333] text-white p-2 rounded-xl text-xs font-mono outline-none focus:border-blue-500 cursor-pointer"
+                        />
+                        <div className="flex items-center gap-1.5 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const today = new Date().toISOString().split('T')[0];
+                              setLoveDateFrom(today);
+                              setLoveDateTo(today);
+                              setShowDateFilter(false);
+                            }}
+                            className="flex-1 bg-white/5 hover:bg-white/10 text-gray-300 py-1 rounded-lg text-[10px] font-mono cursor-pointer border border-[#333]"
+                          >
+                            Today
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const yest = new Date();
+                              yest.setDate(yest.getDate() - 1);
+                              const yestStr = yest.toISOString().split('T')[0];
+                              setLoveDateFrom(yestStr);
+                              setLoveDateTo(yestStr);
+                              setShowDateFilter(false);
+                            }}
+                            className="flex-1 bg-white/5 hover:bg-white/10 text-gray-300 py-1 rounded-lg text-[10px] font-mono cursor-pointer border border-[#333]"
+                          >
+                            Yesterday
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleManualSectionRefresh('passbook_refresh')}
+                    className="w-7 h-7 rounded-full bg-[#202020] hover:bg-blue-600/30 border border-[#333] hover:border-blue-500 text-gray-400 hover:text-blue-400 flex items-center justify-center transition-all cursor-pointer active:scale-90"
+                    title="Refresh Passbook Real-Time Data"
+                  >
+                    <RefreshCw size={12} className={refreshingSection === 'passbook_refresh' ? 'animate-spin text-blue-400' : ''} />
+                  </button>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {role === 'parent' && (
                     <button
                       type="button"
@@ -454,15 +568,16 @@ export default function PassbookModal({
                   )}
                   <button
                     type="button"
-                    onClick={() => {
-                      setSelectedScratchVoucher(null);
-                      setShowScratchModal(true);
-                    }}
-                    className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-xs font-black px-3.5 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5"
-                    title="Scratch & reveal secret romantic voucher!"
+                    onClick={handleOpenScratchCard}
+                    className={`text-xs font-black px-3.5 py-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all flex items-center gap-1.5 ${
+                      currentOpenerBalance < 6.0 
+                        ? 'bg-zinc-800 text-amber-400/80 border border-amber-600/50 hover:bg-zinc-700' 
+                        : 'bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black'
+                    }`}
+                    title={currentOpenerBalance < 6.0 ? `Locked: Need 6.00 Points (Current: ₹${currentOpenerBalance.toFixed(2)})` : "Scratch & reveal secret romantic voucher!"}
                   >
                     <Sparkles size={14} />
-                    <span>Scratch Card ✨</span>
+                    <span>{currentOpenerBalance < 6.0 ? '🔒 Scratch (Need 6 Pts)' : 'Scratch Card (6 Pts) ✨'}</span>
                   </button>
                   <button
                     type="button"
@@ -482,221 +597,184 @@ export default function PassbookModal({
                 </div>
               </div>
 
-              {/* FILTER TOOLBAR */}
-              <div className="bg-[#181818] border border-[#282828] p-3 sm:p-4 rounded-2xl space-y-3">
-                <div className="flex items-center justify-between pb-1 border-b border-[#262626]">
-                  <span className="text-xs font-bold text-gray-300 flex items-center gap-1.5 uppercase tracking-wider font-mono">
-                    <Filter size={13} className="text-blue-400" />
-                    <span>Passbook Filters & Search</span>
-                  </span>
-                  <div className="flex items-center gap-2">
-                    {(loveSourceFilter !== 'All' || loveStatusFilter !== 'All' || loveDateFrom || loveDateTo) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLoveSourceFilter('All');
-                          setLoveStatusFilter('All');
-                          setLoveDateFrom('');
-                          setLoveDateTo('');
-                        }}
-                        className="text-[11px] text-rose-400 hover:text-rose-300 font-semibold cursor-pointer underline transition-all"
-                      >
-                        Reset Filters
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleManualSectionRefresh('passbook_refresh')}
-                      className="w-7 h-7 rounded-full bg-[#202020] hover:bg-blue-600/30 border border-[#333] hover:border-blue-500 text-gray-400 hover:text-blue-400 flex items-center justify-center transition-all cursor-pointer active:scale-90"
-                      title="Refresh Passbook Real-Time Data"
-                    >
-                      <RefreshCw size={12} className={refreshingSection === 'passbook_refresh' ? 'animate-spin text-blue-400' : ''} />
-                    </button>
+              {/* PASSBOOK LEDGER: GROUPED BY DAY / DATE */}
+              {(() => {
+                const filteredEntries = visibleLoveLedger.filter(e => {
+                  if (!e) return false;
+                  if (loveDateFrom || loveDateTo) {
+                    const rawEarned = e.earnedAt || '';
+                    let entryDateStr = '';
+                    if (rawEarned.includes('/')) {
+                      const parts = rawEarned.split(',')[0].split('/').map(p => p.trim());
+                      if (parts.length === 3) {
+                        entryDateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                      }
+                    } else if (rawEarned.includes('-')) {
+                      entryDateStr = rawEarned.split('T')[0].split(',')[0].trim();
+                    }
+                    if (entryDateStr) {
+                      if (loveDateFrom && entryDateStr < loveDateFrom) return false;
+                      if (loveDateTo && entryDateStr > loveDateTo) return false;
+                    }
+                  }
+                  return true;
+                });
+
+                if (filteredEntries.length === 0) {
+                  return (
+                    <div className="bg-[#181818] border border-[#282828] rounded-2xl p-8 text-center text-gray-400 space-y-2">
+                      <p className="text-sm font-bold">No passbook records found.</p>
+                      {loveDateFrom && (
+                        <button
+                          type="button"
+                          onClick={() => { setLoveDateFrom(''); setLoveDateTo(''); }}
+                          className="text-xs text-blue-400 hover:underline cursor-pointer font-mono"
+                        >
+                          Clear Date Filter ✕
+                        </button>
+                      )}
+                    </div>
+                  );
+                }
+
+                // Bucket entries by Day
+                const dayBuckets = {};
+                filteredEntries.forEach(entry => {
+                  const dKey = getEntryDateKey(entry.earnedAt);
+                  if (!dayBuckets[dKey]) dayBuckets[dKey] = [];
+                  dayBuckets[dKey].push(entry);
+                });
+
+                const sortedDayKeys = Object.keys(dayBuckets).sort((a, b) => b.localeCompare(a));
+
+                return (
+                  <div className="space-y-4">
+                    {sortedDayKeys.map((dayKey) => {
+                      const dayEntries = dayBuckets[dayKey];
+                      const dayNet = dayEntries.reduce((sum, r) => sum + (Number(r.points) || 0), 0);
+
+                      return (
+                        <div key={dayKey} className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden shadow-md">
+                          {/* DAY SECTION HEADER */}
+                          <div className="bg-[#141414] px-4 py-2.5 border-b border-[#252525] flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
+                                {formatDayHeader(dayKey)}
+                              </span>
+                              <span className="text-[10px] font-mono font-bold bg-[#222] text-gray-400 px-2 py-0.5 rounded-full border border-[#333]">
+                                {dayEntries.length} {dayEntries.length === 1 ? 'record' : 'records'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className={`text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full ${
+                                dayNet >= 0 
+                                  ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-500/30' 
+                                  : 'bg-rose-950/70 text-rose-300 border border-rose-500/30'
+                              }`}>
+                                Day Net: {dayNet >= 0 ? `+${dayNet.toFixed(2)}` : dayNet.toFixed(2)} pts
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* DAY TRANSACTIONS TABLE */}
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs font-sans min-w-[620px]">
+                              <thead className="bg-[#101010] text-gray-400 uppercase text-[10px] font-mono border-b border-[#222]">
+                                <tr>
+                                  <th className="py-2.5 px-3 w-10">SL</th>
+                                  <th className="py-2.5 px-3">Description</th>
+                                  <th className="py-2.5 px-3">Earned At</th>
+                                  <th className="py-2.5 px-3">Points</th>
+                                  <th className="py-2.5 px-3">Remarks</th>
+                                  <th className="py-2.5 px-3 text-right">Status</th>
+                                  {isParentAdmin && <th className="py-2.5 px-3 text-center w-10">Action</th>}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-[#222] text-gray-300">
+                                {dayEntries.map((row, rowIdx) => {
+                                  const rawDesc = !isParentAdmin ? (row.description || '').replace(/^\[Dora\]\s*/i, '') : (row.description || '');
+                                  const cleanDesc = rawDesc.replace(/\s*\(\d{4}-\d{2}-\d{2}\)$/, '').trim();
+
+                                  let slotBadge = null;
+                                  const matchTask = (row.description || '').match(/(?:Routine Task|Approved Task|Task):\s*([^(]+)/i);
+                                  if (matchTask) {
+                                    slotBadge = matchTask[1].trim();
+                                  } else if ((row.description || '').toLowerCase().includes('morning greeting')) {
+                                    slotBadge = 'Morning Sweet Text';
+                                  } else if ((row.description || '').toLowerCase().includes('good night') || (row.description || '').toLowerCase().includes('night skin')) {
+                                    slotBadge = 'Night Care / Good Night';
+                                  } else if (row.remarks && row.remarks.includes('Deadline')) {
+                                    slotBadge = 'Routine Habit';
+                                  }
+
+                                  const isDeduction = row.type === 'debit' || row.points < 0;
+
+                                  return (
+                                    <tr key={row.id || rowIdx} className="hover:bg-[#202020] transition-colors">
+                                      <td className="py-2.5 px-3 font-mono text-gray-400 font-bold">{rowIdx + 1}</td>
+                                      <td className="py-2.5 px-3 font-bold text-white max-w-[280px]">
+                                        <div>{cleanDesc}</div>
+                                      </td>
+                                      <td className="py-2.5 px-3 font-mono text-[11px] text-gray-300">
+                                        <div className="text-gray-200 font-semibold">{row.earnedAt}</div>
+                                        {slotBadge && (
+                                          <div className="text-[10px] font-sans font-bold flex items-center gap-1 mt-0.5">
+                                            <span className="text-blue-400">📍 {slotBadge}</span>
+                                            <span className={`text-[9px] px-1 py-0.2 rounded font-mono ${
+                                              isDeduction ? 'bg-rose-950/70 text-rose-300 border border-rose-500/30' : 'bg-emerald-950/70 text-emerald-300 border border-emerald-500/30'
+                                            }`}>
+                                              {isDeduction ? 'Cut' : 'Earned'}
+                                            </span>
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td className="py-2.5 px-3 font-mono font-bold">
+                                        <span className={'px-2 py-0.5 rounded-full text-[11px] ' + (
+                                          row.points > 0 
+                                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                                            : (row.status === 'Redeemed'
+                                                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                                : 'bg-rose-500/20 text-rose-400 border border-rose-500/30')
+                                        )}>
+                                          {row.points > 0 ? '+' + Number(row.points).toFixed(2) : Number(row.points).toFixed(2)}
+                                        </span>
+                                      </td>
+                                      <td className="py-2.5 px-3 text-gray-400 text-[11px] max-w-[220px] truncate" title={row.remarks}>
+                                        {row.remarks || '—'}
+                                      </td>
+                                      <td className="py-2.5 px-3 text-right">
+                                        <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (
+                                          row.status === 'Confirmed' 
+                                            ? 'bg-emerald-600 text-white' 
+                                            : (row.status === 'Redeemed' ? 'bg-amber-600 text-white' : 'bg-rose-600 text-white')
+                                        )}>
+                                          {row.status}
+                                        </span>
+                                      </td>
+                                      {isParentAdmin && (
+                                        <td className="py-2.5 px-3 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeleteTransaction(row.id)}
+                                            className="p-1 text-gray-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg cursor-pointer transition-all"
+                                            title="Delete this transaction permanently"
+                                          >
+                                            <Trash2 size={13} />
+                                          </button>
+                                        </td>
+                                      )}
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
-                  <div>
-                    <label className="text-[10px] uppercase font-mono text-gray-400 block mb-1">Source Category</label>
-                    <select
-                      value={loveSourceFilter}
-                      onChange={(e) => setLoveSourceFilter(e.target.value)}
-                      className="w-full bg-[#121212] border border-[#333] hover:border-gray-500 rounded-xl px-2.5 py-1.5 text-gray-200 text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
-                    >
-                      <option value="All">All Sources</option>
-                      <option value="routine">Hourly Routine Tasks</option>
-                      <option value="morning">Morning Sweet Text / Greeting</option>
-                      <option value="night">Good Night Wish</option>
-                      <option value="sweet">Sweet Reactions / Gestures</option>
-                      <option value="adjustment">Admin Manual Adjustment</option>
-                      <option value="redeem">Redeemed Wishes</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] uppercase font-mono text-gray-400 block mb-1">Date From</label>
-                    <input
-                      type="date"
-                      value={loveDateFrom}
-                      onChange={(e) => setLoveDateFrom(e.target.value)}
-                      className="w-full bg-[#121212] border border-[#333] hover:border-gray-500 rounded-xl px-2.5 py-1.5 text-gray-200 text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] uppercase font-mono text-gray-400 block mb-1">Date To</label>
-                    <input
-                      type="date"
-                      value={loveDateTo}
-                      onChange={(e) => setLoveDateTo(e.target.value)}
-                      className="w-full bg-[#121212] border border-[#333] hover:border-gray-500 rounded-xl px-2.5 py-1.5 text-gray-200 text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] uppercase font-mono text-gray-400 block mb-1">Status</label>
-                    <select
-                      value={loveStatusFilter}
-                      onChange={(e) => setLoveStatusFilter(e.target.value)}
-                      className="w-full bg-[#121212] border border-[#333] hover:border-gray-500 rounded-xl px-2.5 py-1.5 text-gray-200 text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
-                    >
-                      <option value="All">All Statuses</option>
-                      <option value="Confirmed">Confirmed (Credit)</option>
-                      <option value="Deducted">Deducted (Debit)</option>
-                      <option value="Redeemed">Redeemed (Wish)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* PASSBOOK TABLE */}
-              <div className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs font-sans min-w-[650px]">
-                    <thead className="bg-[#121212] text-gray-400 uppercase text-[10px] font-mono border-b border-[#262626]">
-                      <tr>
-                        <th className="py-2.5 px-3">SL</th>
-                        <th className="py-2.5 px-3">Description</th>
-                        <th className="py-2.5 px-3">Earned At</th>
-                        <th className="py-2.5 px-3">Points</th>
-                        <th className="py-2.5 px-3">Remarks</th>
-                        <th className="py-2.5 px-3 text-right">Status</th>
-                        {isParentAdmin && <th className="py-2.5 px-3 text-center w-10">Action</th>}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#242424] text-gray-300">
-                      {visibleLoveLedger
-                        .filter(e => {
-                          if (!e) return false;
-                          if (loveSourceFilter !== 'All') {
-                            const desc = (e.description || '').toLowerCase();
-                            if (loveSourceFilter === 'routine' && !desc.includes('routine') && !desc.includes('approved task')) return false;
-                            if (loveSourceFilter === 'morning' && !desc.includes('morning')) return false;
-                            if (loveSourceFilter === 'night' && !desc.includes('good night') && !desc.includes('night')) return false;
-                            if (loveSourceFilter === 'sweet' && !desc.includes('gesture') && !desc.includes('compliment') && !desc.includes('heart') && !desc.includes('reply') && !desc.includes('reaction')) return false;
-                            if (loveSourceFilter === 'adjustment' && !desc.includes('adjustment')) return false;
-                            if (loveSourceFilter === 'redeem' && e.type !== 'redeem' && e.status !== 'Redeemed') return false;
-                          }
-                          if (loveStatusFilter !== 'All' && e.status !== loveStatusFilter) return false;
-                          if (loveDateFrom || loveDateTo) {
-                            const rawEarned = e.earnedAt || '';
-                            let entryDateStr = '';
-                            if (rawEarned.includes('/')) {
-                              const parts = rawEarned.split(',')[0].split('/').map(p => p.trim());
-                              if (parts.length === 3) {
-                                entryDateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-                              }
-                            } else if (rawEarned.includes('-')) {
-                              entryDateStr = rawEarned.split('T')[0].split(',')[0].trim();
-                            }
-                            if (entryDateStr) {
-                              if (loveDateFrom && entryDateStr < loveDateFrom) return false;
-                              if (loveDateTo && entryDateStr > loveDateTo) return false;
-                            }
-                          }
-                          return true;
-                        })
-                        .map((row, idx) => {
-                          const rawDesc = !isParentAdmin ? (row.description || '').replace(/^\[Dora\]\s*/i, '') : (row.description || '');
-                          // Clean description without trailing date (e.g. "(2026-11-21)")
-                          const cleanDesc = rawDesc.replace(/\s*\(\d{4}-\d{2}-\d{2}\)$/, '').trim();
-
-                          // Extract slot info if present
-                          let slotBadge = null;
-                          const matchTask = (row.description || '').match(/(?:Routine Task|Approved Task|Task):\s*([^(]+)/i);
-                          if (matchTask) {
-                            slotBadge = matchTask[1].trim();
-                          } else if ((row.description || '').toLowerCase().includes('morning greeting')) {
-                            slotBadge = 'Morning Sweet Text';
-                          } else if ((row.description || '').toLowerCase().includes('good night') || (row.description || '').toLowerCase().includes('night skin')) {
-                            slotBadge = 'Night Care / Good Night';
-                          } else if (row.remarks && row.remarks.includes('Deadline')) {
-                            slotBadge = 'Routine Habit';
-                          }
-
-                          const isDeduction = row.type === 'debit' || row.points < 0;
-
-                          return (
-                            <tr key={row.id || idx} className="hover:bg-[#202020] transition-colors">
-                              <td className="py-2.5 px-3 font-mono text-gray-400">{row.sl || idx + 1}</td>
-                              <td className="py-2.5 px-3 font-bold text-white max-w-[280px]">
-                                <div>{cleanDesc}</div>
-                              </td>
-                              <td className="py-2.5 px-3 font-mono text-[11px] text-gray-300">
-                                <div className="text-gray-200 font-semibold">{row.earnedAt}</div>
-                                {slotBadge && (
-                                  <div className="text-[10px] font-sans font-bold flex items-center gap-1 mt-0.5">
-                                    <span className="text-blue-400">📍 {slotBadge}</span>
-                                    <span className={`text-[9px] px-1 py-0.2 rounded font-mono ${
-                                      isDeduction ? 'bg-rose-950/70 text-rose-300 border border-rose-500/30' : 'bg-emerald-950/70 text-emerald-300 border border-emerald-500/30'
-                                    }`}>
-                                      {isDeduction ? 'Cut' : 'Earned'}
-                                    </span>
-                                  </div>
-                                )}
-                              </td>
-                              <td className="py-2.5 px-3 font-mono font-bold">
-                                <span className={'px-2 py-0.5 rounded-full text-[11px] ' + (
-                                  row.points > 0 
-                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                                    : (row.status === 'Redeemed'
-                                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                                        : 'bg-rose-500/20 text-rose-400 border border-rose-500/30')
-                                )}>
-                                  {row.points > 0 ? '+' + row.points.toFixed(2) : row.points.toFixed(2)}
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-3 text-gray-400 text-[11px] max-w-[220px] truncate" title={row.remarks}>
-                                {row.remarks || '—'}
-                              </td>
-                              <td className="py-2.5 px-3 text-right">
-                                <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (
-                                  row.status === 'Confirmed' 
-                                    ? 'bg-emerald-600 text-white' 
-                                    : (row.status === 'Redeemed' ? 'bg-amber-600 text-white' : 'bg-rose-600 text-white')
-                                )}>
-                                  {row.status}
-                                </span>
-                              </td>
-                              {isParentAdmin && (
-                                <td className="py-2.5 px-3 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteTransaction(row.id)}
-                                    className="p-1 text-gray-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg cursor-pointer transition-all"
-                                    title="Delete this transaction permanently"
-                                  >
-                                    <Trash2 size={13} />
-                                  </button>
-                                </td>
-                              )}
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                );
+              })()}
             </div>
           )}
 
@@ -723,22 +801,39 @@ export default function PassbookModal({
                   <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center text-2xl shadow-lg shrink-0">
                     ✨
                   </div>
-                  <div className="text-left space-y-0.5">
+                  <div className="text-left space-y-1">
                     <div className="flex items-center gap-2">
                       <h4 className="text-sm font-black text-amber-300">Surprise Scratch Voucher</h4>
-                      <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.2 rounded-full">6.00 PTS</span>
+                      <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.2 rounded-full">COST: 6.00 PTS</span>
                       <span className="text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 px-2 py-0.2 rounded-full">NEVER REPEATS</span>
                     </div>
-                    <p className="text-xs text-gray-300">Deduct 6 Love Points to reveal romantic promises, dates & cute surprises! Saved to your Wish Store history.</p>
+                    <p className="text-xs text-gray-300">Deduct 6 Love Points to reveal secret romantic promises, dates & cute surprises! Saved to your Wish Store history.</p>
+                    <div className="text-[11px] font-mono text-amber-300 font-bold flex items-center gap-2">
+                      <span>👤 {openerName}'s Balance: ₹{Number(currentOpenerBalance || 0).toFixed(2)}</span>
+                      {currentOpenerBalance < 6.0 ? (
+                        <span className="text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-800 text-[10px]">
+                          ⚠️ Need ₹{(6.0 - Math.max(0, currentOpenerBalance)).toFixed(2)} more points to unlock
+                        </span>
+                      ) : (
+                        <span className="text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800 text-[10px]">
+                          ✓ Ready to Scratch
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={handleOpenScratchCard}
-                  className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer shadow-lg active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
+                  className={`text-xs font-black px-4 py-2.5 rounded-xl cursor-pointer shadow-lg active:scale-95 transition-all flex items-center gap-1.5 shrink-0 ${
+                    currentOpenerBalance < 6.0
+                      ? 'bg-zinc-800 text-amber-400/80 border border-amber-600/50 hover:bg-zinc-700'
+                      : 'bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black'
+                  }`}
+                  title={currentOpenerBalance < 6.0 ? `Locked: Need 6.00 Points (Current: ₹${currentOpenerBalance.toFixed(2)})` : "Scratch & reveal secret romantic voucher!"}
                 >
                   <Sparkles size={14} />
-                  <span>Scratch Card (6 Pts) ✨</span>
+                  <span>{currentOpenerBalance < 6.0 ? '🔒 Locked (Need 6 Pts)' : 'Scratch Card (6 Pts) ✨'}</span>
                 </button>
               </div>
 

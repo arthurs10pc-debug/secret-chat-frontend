@@ -7227,7 +7227,7 @@ export default function App() {
                           handleDoubleTapToLike(m._id);
                         }}
                         title="Double-tap to like ❤️ • Swipe right to reply • Click ⋯ for actions"
-                        className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-3.5 py-2.5 shadow-md relative cursor-pointer text-[14.5px] leading-relaxed transition-all ${
+                        className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-3.5 pt-2.5 pb-3.5 shadow-md relative cursor-pointer text-[14.5px] leading-relaxed transition-all ${
                           isMine 
                             ? 'backdrop-blur-2xl bg-gradient-to-br from-emerald-600/35 via-emerald-600/25 to-teal-700/35 border border-emerald-400/35 text-white shadow-[0_8px_25px_rgba(16,185,129,0.2)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.25)] rounded-tr-none' 
                             : 'backdrop-blur-2xl bg-gradient-to-br from-white/[0.12] via-white/[0.08] to-white/[0.04] border border-white/20 text-[#f1f5f9] shadow-[0_8px_25px_rgba(0,0,0,0.35)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.18)] rounded-tl-none'
@@ -7300,7 +7300,7 @@ export default function App() {
                         {/* REACTION & ACTIONS POPUP TRAY - IOS LIQUID GLASS */}
                         {isReactionOpen && (
                           <div 
-                            className="absolute -top-12 left-0 z-30 backdrop-blur-2xl bg-black/90 border border-white/25 px-2.5 py-1.5 rounded-full shadow-2xl flex items-center gap-1.5 animate-in zoom-in-95 duration-100"
+                            className={`absolute -top-12 z-30 backdrop-blur-2xl bg-black/95 border border-white/25 px-2.5 py-1.5 rounded-full shadow-2xl flex items-center gap-1.5 animate-in zoom-in-95 duration-100 max-w-[calc(100vw-36px)] overflow-x-auto scrollbar-none whitespace-nowrap ${isMine ? 'right-0' : 'left-0'}`}
                             onClick={(e) => e.stopPropagation()}
                           >
                             {["👍", "❤️", "😂", "😮", "🙏", "➕"].map((emoji, eIdx) => (
@@ -7372,7 +7372,7 @@ export default function App() {
                         )}
 
                         {/* TIME, DELIVERY TICKS & AWARD BUTTON */}
-                        <div className="flex items-center justify-between gap-2 mt-1 text-[11px] text-gray-400 select-none font-normal">
+                        <div className="flex items-center justify-between gap-2 mt-2 pt-1 pb-0.5 text-[11px] text-gray-400 select-none font-normal">
                           {!isMine ? (
                             <div className="relative inline-flex items-center">
                               <button
@@ -8523,7 +8523,7 @@ export default function App() {
 
                                     {isReactionOpen && (
                                       <div 
-                                        className="absolute left-0 -top-8 z-30 bg-[#1e1e1e] border border-[#3a3a3a] px-2 py-1 rounded-full shadow-2xl flex items-center gap-1.5 backdrop-blur-md"
+                                        className={`absolute -top-8 z-30 bg-[#1e1e1e] border border-[#3a3a3a] px-2 py-1 rounded-full shadow-2xl flex items-center gap-1.5 backdrop-blur-md max-w-[calc(100vw-36px)] overflow-x-auto scrollbar-none whitespace-nowrap ${m.senderRole === role ? 'right-0' : 'left-0'}`}
                                         onClick={(e) => e.stopPropagation()}
                                       >
                                         {HOVER_REACTIONS.map((emoji, eIdx) => (
