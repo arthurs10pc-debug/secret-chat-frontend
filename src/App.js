@@ -25,6 +25,8 @@ import {
   ROMANTIC_REGEX,
   ARCADE_GAMES,
   DEFAULT_DAILY_SLOTS,
+  sortSlotsByTime,
+  normalizeSlotTimeRange,
   DEFAULT_RECENT_CHATS,
   DEFAULT_LOVE_LEDGER,
   ROMANTIC_WISH_STORE,
@@ -280,7 +282,7 @@ export default function App() {
           }
           if (Array.isArray(data.slots)) {
             const activeDel = Array.isArray(data.deletedSlotIds) ? data.deletedSlotIds : JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
-            const cleanSlots = data.slots.filter(s => s && !activeDel.includes(s.id)).sort((a, b) => (a.order || 0) - (b.order || 0));
+            const cleanSlots = sortSlotsByTime(data.slots.filter(s => s && !activeDel.includes(s.id)));
             setDailySlots(cleanSlots);
             try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
           }
@@ -628,11 +630,11 @@ export default function App() {
           parsed.forEach(s => { if (s && s.id && !savedDeleted.includes(s.id)) map.set(s.id, s); });
         }
       }
-      return Array.from(map.values())
-        .filter(s => s && !savedDeleted.includes(s.id))
-        .sort((a, b) => (a.order || 0) - (b.order || 0));
+      return sortSlotsByTime(
+        Array.from(map.values()).filter(s => s && !savedDeleted.includes(s.id))
+      );
     } catch(e) {
-      return DEFAULT_DAILY_SLOTS;
+      return sortSlotsByTime(DEFAULT_DAILY_SLOTS);
     }
   });
   const [dailySubmissions, setDailySubmissions] = useState(() => {
@@ -756,7 +758,7 @@ export default function App() {
           }
           if (Array.isArray(data.slots)) {
             const activeDel = Array.isArray(data.deletedSlotIds) ? data.deletedSlotIds : JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
-            const cleanSlots = data.slots.filter(s => s && !activeDel.includes(s.id)).sort((a, b) => (a.order || 0) - (b.order || 0));
+            const cleanSlots = sortSlotsByTime(data.slots.filter(s => s && !activeDel.includes(s.id)));
             setDailySlots(cleanSlots);
             try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
           }
@@ -3153,7 +3155,7 @@ export default function App() {
       .then(data => {
         if (data && data.success && Array.isArray(data.slots)) {
           const activeDel = Array.isArray(data.deletedSlotIds) ? data.deletedSlotIds : JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
-          const cleanSlots = data.slots.filter(s => s && !activeDel.includes(s.id)).sort((a, b) => (a.order || 0) - (b.order || 0));
+          const cleanSlots = sortSlotsByTime(data.slots.filter(s => s && !activeDel.includes(s.id)));
           setDailySlots(cleanSlots);
           try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
         }
@@ -5512,7 +5514,7 @@ export default function App() {
       }
       const activeDel = JSON.parse(localStorage.getItem('stealth_deleted_slot_ids') || '[]');
       if (Array.isArray(slots)) {
-        const cleanSlots = slots.filter(s => s && !activeDel.includes(s.id));
+        const cleanSlots = sortSlotsByTime(slots.filter(s => s && !activeDel.includes(s.id)));
         setDailySlots(cleanSlots);
         try { localStorage.setItem('stealth_daily_slots', JSON.stringify(cleanSlots)); } catch(e) {}
       }
@@ -9690,7 +9692,7 @@ export default function App() {
 
                       {/* HORIZONTAL SCROLLING PILLS */}
                       <div className="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none pt-1">
-                        {dailySlots.filter(s => s.isActive).map((slot) => {
+                        {sortSlotsByTime(dailySlots.filter(s => s.isActive)).map((slot) => {
                           const sub = getSlotSubmission(slot.id, dailySelectedDate);
                           const isSelected = dailySelectedSlotId === slot.id;
                           const isApproved = sub && sub.status === 'APPROVED';
@@ -9915,7 +9917,7 @@ export default function App() {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                        {dailySlots.filter(s => s.isActive).map((slot) => {
+                        {sortSlotsByTime(dailySlots.filter(s => s.isActive)).map((slot) => {
                           const sub = getSlotSubmission(slot.id, dailySelectedDate);
                           const isApproved = sub && sub.status === 'APPROVED';
                           const isPending = sub && sub.status === 'PENDING';
@@ -10055,7 +10057,7 @@ export default function App() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {dailySlots.map((slot) => (
+                      {sortSlotsByTime(dailySlots).map((slot) => (
                         <div key={slot.id} className="bg-[#181818] border border-[#2a2a2a] p-3 rounded-2xl flex items-center justify-between gap-2">
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-1.5">
