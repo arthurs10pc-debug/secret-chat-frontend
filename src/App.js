@@ -10275,88 +10275,6 @@ export default function App() {
                       );
                     })}
                   </div>
-
-                  {/* DEDICATED SELECTED TASK DETAILS CARD (FOR DORA) */}
-                  {(() => {
-                    const activeSlot = dailySlots.find(s => s.id === dailySelectedSlotId) || dailySlots.find(s => s.isActive);
-                    if (!activeSlot) return null;
-                    const sub = getSlotSubmission(activeSlot.id, dailySelectedDate);
-                    const isApproved = sub && sub.status === 'APPROVED';
-                    const isPending = sub && sub.status === 'PENDING';
-                    const isRejected = sub && sub.status === 'REJECTED';
-                    const isOverdue = checkSlotOverdue(activeSlot, dailySelectedDate);
-
-                    return (
-                      <div className="bg-[#131b2e] border border-blue-500/40 rounded-2xl p-3.5 sm:p-4 space-y-2.5 shadow-xl animate-in fade-in duration-200 text-left mt-3">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-blue-900/60 pb-2.5">
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-mono font-bold bg-blue-500/20 text-blue-300 border border-blue-400/40 px-2 py-0.5 rounded-full">
-                                ⏰ {activeSlot.timeRange}
-                              </span>
-                              <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-400/40 px-2 py-0.5 rounded-full">
-                                🏷️ {activeSlot.tag || 'Routine Task'}
-                              </span>
-                              <span className="text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 px-2 py-0.5 rounded-full">
-                                +₹{(activeSlot.points || 2.0).toFixed(2)}
-                              </span>
-                            </div>
-                            <h4 className="text-sm sm:text-base font-black text-white pt-1">
-                              {activeSlot.title}
-                            </h4>
-                            <p className="text-xs text-blue-200/80">
-                              Task assigned by Darsh: Complete and upload proof before deadline to earn Love Balance reward!
-                            </p>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            {(!sub || !sub.image || isRejected) ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setDailySelectedSlotId(activeSlot.id);
-                                  if (dailyFileInputRef.current) {
-                                    dailyFileInputRef.current.value = "";
-                                    dailyFileInputRef.current.click();
-                                  }
-                                }}
-                                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl cursor-pointer shadow-lg active:scale-95 transition-all flex items-center gap-1.5"
-                              >
-                                <Plus size={14} />
-                                <span>{isRejected ? 'Retake Photo Proof' : 'Upload Proof (+)'}</span>
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => setDailyPreviewModalImg(sub.image)}
-                                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl cursor-pointer shadow-lg active:scale-95 transition-all flex items-center gap-1.5"
-                              >
-                                <Eye size={14} />
-                                <span>View Submitted Proof</span>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between text-[11px] font-mono">
-                          <span className="text-gray-400">Current Status:</span>
-                          <span className={`px-2 py-0.5 rounded-full font-bold ${
-                            isApproved 
-                              ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/40' 
-                              : isPending 
-                                ? 'bg-amber-950/80 text-amber-300 border border-amber-500/40 animate-pulse'
-                                : isRejected 
-                                  ? 'bg-rose-950/80 text-rose-300 border border-rose-500/40'
-                                  : isOverdue 
-                                    ? 'bg-rose-950/80 text-rose-300 border border-rose-500/40'
-                                    : 'bg-zinc-800 text-zinc-300 border border-zinc-700'
-                          }`}>
-                            {isApproved ? '✅ Approved by Darsh (+₹' + (activeSlot.points || 2.0).toFixed(2) + ')' : (isPending ? '⏳ Under Review by Darsh' : (isRejected ? '❌ Photo Rejected: Re-upload' : (isOverdue ? '⏰ Overdue: Deduction Risk' : '📸 Pending Photo Proof')))}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })()}
                 </div>
 
                 {/* HIDDEN FILE INPUT FOR DIRECT HOURLY REPORT PROOF UPLOAD */}
@@ -11418,7 +11336,8 @@ export default function App() {
           submission={getSlotSubmission(dailySelectedSlotId || (dailySlots[0] && dailySlots[0].id), dailySelectedDate)}
           selectedDate={dailySelectedDate}
           role={role}
-          onTriggerUpload={() => {
+          onTriggerUpload={(slotId) => {
+            if (slotId) setDailySelectedSlotId(slotId);
             if (dailyFileInputRef.current) {
               dailyFileInputRef.current.value = "";
               dailyFileInputRef.current.click();

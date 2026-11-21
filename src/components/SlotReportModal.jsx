@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Check, Clock, Plus, Eye, Image as ImageIcon, Calendar, Briefcase, FileText, Sparkles, AlertCircle } from 'lucide-react';
+import React from 'react';
+import { X, Check, Clock, Plus, Eye } from 'lucide-react';
 
 export default function SlotReportModal({
   isOpen,
@@ -14,14 +14,13 @@ export default function SlotReportModal({
   onReject,
   isOverdue
 }) {
-  const [workDoneNote, setWorkDoneNote] = useState('');
-
   if (!isOpen || !slot) return null;
 
   const isParentAdmin = role === 'parent' || role === 'admin';
   const isApproved = submission && submission.status === 'APPROVED';
   const isPending = submission && submission.status === 'PENDING';
   const isRejected = submission && submission.status === 'REJECTED';
+  const isMissed = isOverdue && !isApproved;
 
   // Format date nicely e.g. "Sat, 21 Nov 2026"
   const formatDatePretty = (dStr) => {
@@ -40,126 +39,134 @@ export default function SlotReportModal({
 
   const formattedDate = formatDatePretty(selectedDate);
 
-  // Status label & styling
-  const statusLabel = isApproved 
-    ? 'Completed' 
-    : isPending 
-      ? 'Under Review' 
-      : isRejected 
-        ? 'Rejected (Needs Retake)' 
-        : isOverdue 
-          ? 'Late (50%)' 
-          : 'Pending';
-
-  const statusBg = isApproved
-    ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-    : isPending
-      ? 'bg-amber-50 text-amber-700 border-amber-300'
-      : isRejected
-        ? 'bg-rose-50 text-rose-700 border-rose-300'
-        : isOverdue
-          ? 'bg-rose-50 text-rose-700 border-rose-300'
-          : 'bg-blue-50 text-blue-700 border-blue-300';
-
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+    <div 
+      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200"
+      onClick={onClose}
+    >
       <div 
-        className="bg-white text-gray-900 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden border border-gray-200 flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-150"
+        className={`rounded-3xl max-w-sm sm:max-w-md w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150 transition-colors ${
+          isMissed 
+            ? 'bg-[#1c080f] border-2 border-rose-500/80 text-rose-100 shadow-rose-950/60' 
+            : 'bg-white border border-gray-200 text-gray-900'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* MODAL HEADER (MATCHING USER'S SCREENSHOT 2) */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
+        {/* MODAL HEADER */}
+        <div className={`flex items-center justify-between px-5 py-3.5 border-b ${
+          isMissed ? 'border-rose-900/60' : 'border-gray-100'
+        }`}>
           <div className="flex items-center gap-2">
-            <h3 className="text-base sm:text-lg font-black text-gray-900 tracking-tight">Report</h3>
+            <h3 className={`text-base sm:text-lg font-black tracking-tight ${
+              isMissed ? 'text-rose-100' : 'text-gray-900'
+            }`}>
+              {isMissed ? '⏰ Late Routine Task' : 'Daily Routine Task'}
+            </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-800 flex items-center justify-center transition-all cursor-pointer"
+            className={`w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+              isMissed 
+                ? 'text-rose-400 hover:text-white hover:bg-rose-900/50' 
+                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+            }`}
             title="Close"
           >
             <X size={18} />
           </button>
         </div>
 
-        {/* MODAL BODY */}
+        {/* MODAL BODY (ONLY 4 ELEMENTS: TIME/DATE, TAG, TITLE, AND NICHE PLUS BUTTON) */}
         <div className="p-5 space-y-4 overflow-y-auto scrollbar-none text-left">
-          {/* TOP GREEN/BLUE TIME & DATE BANNER */}
-          <div className="bg-emerald-50/80 border border-emerald-300/80 rounded-2xl p-3 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-              <Check size={16} strokeWidth={3} />
+          
+          {/* 1. TIME & DATE BANNER */}
+          <div className={`rounded-2xl p-3 flex items-center gap-3 border ${
+            isMissed 
+              ? 'bg-rose-950/70 border-rose-500/40 text-rose-200' 
+              : 'bg-emerald-50/90 border-emerald-300/90 text-emerald-950'
+          }`}>
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
+              isMissed ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'
+            }`}>
+              {isMissed ? <Clock size={18} strokeWidth={2.5} /> : <Check size={18} strokeWidth={3} />}
             </div>
             <div className="min-w-0">
-              <div className="text-sm font-black text-emerald-900 font-mono tracking-tight">
+              <div className={`text-sm sm:text-base font-black font-mono tracking-tight ${
+                isMissed ? 'text-rose-100' : 'text-emerald-950'
+              }`}>
                 {slot.timeRange}
               </div>
-              <div className="text-xs font-semibold text-emerald-700">
+              <div className={`text-xs font-semibold ${
+                isMissed ? 'text-rose-300' : 'text-emerald-700'
+              }`}>
                 {formattedDate}
               </div>
             </div>
           </div>
 
-          {/* PROJECT FIELD */}
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-gray-800 flex items-center gap-1">
-              <span>Project</span>
-              <span className="text-red-500">*</span>
-            </label>
-            <div className="w-full bg-white border border-blue-500/70 rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-800 shadow-xs">
-              {slot.tag || 'Daily Routine Task'}
-            </div>
+          {/* 2. TAG / CATEGORY (TEA, WORKOUT, ETC.) */}
+          <div className="flex items-center gap-2">
+            <span className={`text-xs font-bold px-3.5 py-1.5 rounded-xl shadow-xs inline-flex items-center gap-1.5 ${
+              isMissed 
+                ? 'bg-rose-900/60 text-rose-200 border border-rose-500/40' 
+                : 'bg-blue-600 text-white'
+            }`}>
+              <span>🏷️</span>
+              <span>{slot.tag || 'Routine Task'}</span>
+            </span>
+
+            {/* Reward point pill */}
+            <span className={`text-xs font-mono font-bold px-2.5 py-1.5 rounded-xl border ${
+              isMissed 
+                ? 'bg-rose-950/50 text-rose-300 border-rose-500/30' 
+                : 'bg-emerald-50 text-emerald-700 border-emerald-300'
+            }`}>
+              +₹{Number(slot.points || slot.rewardPoints || 2.0).toFixed(2)}
+            </span>
           </div>
 
-          {/* TITLE FIELD (PURPOSE OF THE SLOT - FULLY DISPLAYED) */}
+          {/* 3. TITLE OF THE SLOT */}
           <div className="space-y-1">
-            <label className="text-xs font-bold text-gray-800 flex items-center gap-1">
-              <span>Title</span>
-              <span className="text-red-500">*</span>
-            </label>
-            <div className="w-full bg-white border border-blue-500/70 rounded-xl px-3.5 py-2 text-xs font-bold text-gray-900 shadow-xs leading-relaxed">
+            <h4 className={`text-base sm:text-lg font-black leading-snug ${
+              isMissed ? 'text-amber-300' : 'text-gray-900'
+            }`}>
               {slot.title}
-            </div>
+            </h4>
           </div>
 
-          {/* WORK DONE & PROOF SECTION */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-gray-800 flex items-center justify-between">
-              <span className="flex items-center gap-1">
-                <span>Work done</span>
-                <span className="text-red-500">*</span>
-              </span>
-              <span className="text-[10px] text-gray-400 font-mono">
-                {submission && submission.note ? `${submission.note.length}/5000` : `${workDoneNote.length}/5000`}
-              </span>
-            </label>
-
-            {/* IF SUBMISSION EXISTS: SHOW PHOTO THUMBNAIL & NOTE */}
+          {/* 4. NICHE PLUS (+) BUTTON OR SUBMITTED PROOF */}
+          <div className="pt-2">
             {submission && submission.image ? (
-              <div className="space-y-2 border border-gray-200 rounded-2xl p-3 bg-gray-50/70">
+              /* IF PROOF IS ALREADY SUBMITTED */
+              <div className={`space-y-3 rounded-2xl p-3 border ${
+                isMissed ? 'bg-rose-950/40 border-rose-800/50' : 'bg-gray-50 border-gray-200'
+              }`}>
                 <div className="flex items-center gap-3">
                   <img
                     src={submission.image}
                     alt="Proof"
-                    className="w-20 h-20 object-cover rounded-xl border border-gray-300 shadow-sm cursor-pointer hover:scale-105 transition-transform shrink-0"
+                    className="w-20 h-20 object-cover rounded-xl border border-gray-300 shadow-md cursor-pointer hover:scale-105 transition-transform shrink-0"
                     onClick={() => onPreviewImage && onPreviewImage(submission.image)}
                     title="Click to zoom proof"
                   />
                   <div className="space-y-1 text-xs flex-1 min-w-0">
-                    <div className="font-bold text-gray-800 flex items-center gap-1">
+                    <div className="font-bold flex items-center gap-1.5">
                       <span>📸 Attached Proof</span>
-                      <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
-                        isApproved ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                      <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${
+                        isApproved 
+                          ? 'bg-emerald-600 text-white' 
+                          : isPending 
+                            ? 'bg-amber-500 text-black animate-pulse' 
+                            : 'bg-rose-600 text-white'
                       }`}>
-                        {isApproved ? 'Verified' : 'Reviewing'}
+                        {isApproved ? 'Verified ✓' : (isPending ? 'Under Review ⏳' : 'Retake Needed ❌')}
                       </span>
                     </div>
-                    {submission.note && (
-                      <p className="text-gray-600 italic line-clamp-2">{submission.note}</p>
-                    )}
                     <button
                       type="button"
                       onClick={() => onPreviewImage && onPreviewImage(submission.image)}
-                      className="text-blue-600 hover:text-blue-700 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                      className="text-blue-500 hover:text-blue-600 font-bold text-xs flex items-center gap-1 cursor-pointer pt-0.5"
                     >
                       <Eye size={12} />
                       <span>View Full Image</span>
@@ -167,14 +174,18 @@ export default function SlotReportModal({
                   </div>
                 </div>
 
-                {/* RETAKE OPTION IF USER WANTS TO UPDATE */}
+                {/* DORA RETAKE / CHANGE PHOTO (+) */}
                 {!isParentAdmin && (
                   <button
                     type="button"
                     onClick={() => {
-                      if (onTriggerUpload) onTriggerUpload();
+                      if (onTriggerUpload) onTriggerUpload(slot.id);
                     }}
-                    className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-98"
+                    className={`w-full font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-98 ${
+                      isMissed 
+                        ? 'bg-rose-800 hover:bg-rose-700 text-white' 
+                        : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200'
+                    }`}
                   >
                     <Plus size={14} />
                     <span>Change / Re-upload Photo Proof (+)</span>
@@ -182,100 +193,80 @@ export default function SlotReportModal({
                 )}
               </div>
             ) : (
-              /* IF NO PROOF YET: UPLOAD BUTTON & NOTE */
-              <div className="space-y-2">
-                <div className="relative">
-                  <textarea
-                    rows={3}
-                    value={workDoneNote}
-                    onChange={(e) => setWorkDoneNote(e.target.value)}
-                    placeholder={`Enter details about ${slot.title}...`}
-                    className="w-full bg-white border border-blue-500/70 focus:border-blue-600 rounded-xl p-3 text-xs text-gray-900 outline-none resize-none shadow-xs font-medium"
-                    maxLength={5000}
-                  />
-                </div>
-
-                {/* THE "+" BUTTON OPTION TO UPLOAD PROOF */}
-                {!isParentAdmin && (
+              /* IF NO PROOF SUBMITTED YET: LARGE PLUS BUTTON */
+              <div>
+                {!isParentAdmin ? (
                   <button
                     type="button"
                     onClick={() => {
-                      if (onTriggerUpload) onTriggerUpload();
+                      if (onTriggerUpload) onTriggerUpload(slot.id);
                     }}
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg active:scale-98 transition-all cursor-pointer"
+                    className={`w-full font-black text-sm py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg active:scale-98 transition-all cursor-pointer ${
+                      isMissed 
+                        ? 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-rose-950/50' 
+                        : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/30'
+                    }`}
                   >
-                    <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
-                      <Plus size={14} />
+                    <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
+                      <Plus size={16} strokeWidth={3} />
                     </div>
                     <span>Upload Proof (+)</span>
                   </button>
+                ) : (
+                  <div className={`p-3 rounded-xl text-center text-xs font-semibold ${
+                    isMissed ? 'text-rose-300 bg-rose-950/40' : 'text-gray-500 bg-gray-100'
+                  }`}>
+                    No proof submitted by Dora yet.
+                  </div>
                 )}
               </div>
             )}
-          </div>
 
-          {/* STATUS FIELD */}
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-gray-800 flex items-center gap-1">
-              <span>Status</span>
-              <span className="text-red-500">*</span>
-            </label>
-            <div className={`w-full border rounded-xl px-3.5 py-2 text-xs font-bold shadow-xs ${statusBg}`}>
-              {statusLabel}
-            </div>
-          </div>
-
-          {/* REMARKS (OPTIONAL) */}
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-gray-700">Remarks (optional)</label>
-            <div className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-[11px] text-gray-600 leading-relaxed">
-              Task assigned by Darsh: Complete and upload proof before deadline to earn +₹{Number(slot.rewardPoints || 2.0).toFixed(2)} Love Balance reward!
-              {submission && submission.adminFeedback && (
-                <div className="mt-1 text-rose-600 font-semibold border-t border-gray-200 pt-1">
-                  Feedback from Darsh: {submission.adminFeedback}
+            {/* ADMIN REVIEW ACTIONS (IF PROOF PENDING) */}
+            {isParentAdmin && submission && isPending && (
+              <div className="mt-3 bg-amber-500/10 border border-amber-500/40 rounded-2xl p-3 space-y-2">
+                <span className="text-xs font-black text-amber-400 block">Admin Action Required:</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onApprove) onApprove(submission.id, slot);
+                      onClose();
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow cursor-pointer active:scale-95"
+                  >
+                    <Check size={14} />
+                    <span>Approve & Grant ❤️</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onReject) onReject(submission.id, slot);
+                      onClose();
+                    }}
+                    className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow cursor-pointer active:scale-95"
+                  >
+                    <X size={14} />
+                    <span>Reject & Retake</span>
+                  </button>
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* ADMIN APPROVAL ACTIONS */}
-          {isParentAdmin && submission && isPending && (
-            <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3 space-y-2">
-              <span className="text-xs font-black text-amber-900 block">Admin Action Required:</span>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onApprove) onApprove(submission.id, slot);
-                    onClose();
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 shadow cursor-pointer active:scale-95"
-                >
-                  <Check size={14} />
-                  <span>Approve & Grant ❤️</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onReject) onReject(submission.id, slot);
-                    onClose();
-                  }}
-                  className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 shadow cursor-pointer active:scale-95"
-                >
-                  <X size={14} />
-                  <span>Reject & Retake</span>
-                </button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* MODAL FOOTER WITH CANCEL BUTTON (MATCHING USER'S SCREENSHOT 2) */}
-        <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/50 flex justify-center">
+        {/* MODAL FOOTER WITH CANCEL BUTTON */}
+        <div className={`px-5 py-3 border-t flex justify-center ${
+          isMissed ? 'border-rose-900/60 bg-rose-950/40' : 'border-gray-100 bg-gray-50/50'
+        }`}>
           <button
             type="button"
             onClick={onClose}
-            className="w-32 bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold py-2 rounded-xl transition-all cursor-pointer shadow-sm active:scale-95"
+            className={`w-32 text-xs font-bold py-2 rounded-xl transition-all cursor-pointer shadow-sm active:scale-95 ${
+              isMissed 
+                ? 'bg-rose-900/80 hover:bg-rose-800 text-rose-100 border border-rose-700/60' 
+                : 'bg-slate-700 hover:bg-slate-800 text-white'
+            }`}
           >
             Cancel
           </button>
