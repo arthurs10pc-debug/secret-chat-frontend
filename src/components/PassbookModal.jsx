@@ -588,13 +588,13 @@ export default function PassbookModal({
 
               {/* ACTION ROW: PASSBOOK HEADER & COMPACT CALENDAR FILTER BUTTON */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-[#181818] border border-[#282828] p-3 rounded-2xl gap-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse shrink-0" />
                   <span className="text-xs sm:text-sm font-bold text-white">Love Balance Passbook</span>
-                  <span className="text-[10px] text-gray-500 font-mono">({visibleLoveLedger.length} Records)</span>
+                  <span className="text-[10px] text-gray-500 font-mono shrink-0">({visibleLoveLedger.length} Records)</span>
 
                   {/* COMPACT CALENDAR FILTER BUTTON (ZERO CLUTTER) */}
-                  <div className="relative ml-1">
+                  <div className="relative">
                     <button
                       type="button"
                       onClick={() => setShowDateFilter(!showDateFilter)}
@@ -772,17 +772,17 @@ export default function PassbookModal({
                       return (
                         <div key={dayKey} className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden shadow-md">
                           {/* DAY SECTION HEADER */}
-                          <div className="bg-[#141414] px-4 py-2.5 border-b border-[#252525] flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
+                          <div className="bg-[#141414] px-3.5 py-2.5 border-b border-[#252525] flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                              <span className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 whitespace-nowrap">
                                 {formatDayHeader(dayKey)}
                               </span>
-                              <span className="text-[10px] font-mono font-bold bg-[#222] text-gray-400 px-2 py-0.5 rounded-full border border-[#333]">
+                              <span className="text-[10px] font-mono font-bold bg-[#222] text-gray-400 px-2 py-0.5 rounded-full border border-[#333] shrink-0">
                                 {dayEntries.length} {dayEntries.length === 1 ? 'record' : 'records'}
                               </span>
                             </div>
-                            <div>
-                              <span className={`text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full ${
+                            <div className="shrink-0 ml-auto">
+                              <span className={`text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap ${
                                 dayNet >= 0 
                                   ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-500/30' 
                                   : 'bg-rose-950/70 text-rose-300 border border-rose-500/30'
@@ -792,8 +792,103 @@ export default function PassbookModal({
                             </div>
                           </div>
 
-                          {/* DAY TRANSACTIONS TABLE */}
-                          <div className="overflow-x-auto">
+                          {/* MOBILE VIEW: CLEAN CARD LIST (sm:hidden) */}
+                          <div className="sm:hidden divide-y divide-[#222]">
+                            {dayEntries.map((row, rowIdx) => {
+                              const rawDesc = !isParentAdmin ? (row.description || '').replace(/^\[Dora\]\s*/i, '') : (row.description || '');
+                              const cleanDesc = rawDesc.replace(/\s*\(\d{4}-\d{2}-\d{2}\)$/, '').trim();
+
+                              let slotBadge = null;
+                              const matchTask = (row.description || '').match(/(?:Routine Task|Approved Task|Task):\s*([^(]+)/i);
+                              if (matchTask) {
+                                slotBadge = matchTask[1].trim();
+                              } else if ((row.description || '').toLowerCase().includes('morning greeting')) {
+                                slotBadge = 'Morning Sweet Text';
+                              } else if ((row.description || '').toLowerCase().includes('good night') || (row.description || '').toLowerCase().includes('night skin')) {
+                                slotBadge = 'Night Care / Good Night';
+                              } else if (row.remarks && row.remarks.includes('Deadline')) {
+                                slotBadge = 'Routine Habit';
+                              }
+
+                              const isDeduction = row.type === 'debit' || row.points < 0;
+
+                              return (
+                                <div key={row.id || rowIdx} className="p-3 space-y-1.5 hover:bg-[#1f1f1f] transition-colors">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex items-start gap-2 min-w-0">
+                                      <span className="font-mono text-[10px] text-gray-400 font-bold bg-[#111] px-1.5 py-0.5 rounded border border-[#262626] shrink-0 mt-0.5">
+                                        #{rowIdx + 1}
+                                      </span>
+                                      <div className="min-w-0">
+                                        <h5 className="text-xs font-bold text-white leading-snug break-words">
+                                          {cleanDesc}
+                                        </h5>
+                                        <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                          <span className="text-[11px] font-mono text-gray-300 font-semibold">
+                                            🕒 {formatRowTimeOnly(row)}
+                                          </span>
+                                          {slotBadge && (
+                                            <span className="text-[10px] font-sans font-bold text-blue-400">
+                                              📍 {slotBadge}
+                                            </span>
+                                          )}
+                                          <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold ${
+                                            isDeduction 
+                                              ? 'bg-rose-950/80 text-rose-300 border border-rose-500/30' 
+                                              : 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'
+                                          }`}>
+                                            {isDeduction ? 'Cut' : 'Earned'}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold inline-block ${
+                                        row.points > 0 
+                                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                                          : (row.status === 'Redeemed'
+                                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                              : 'bg-rose-500/20 text-rose-400 border border-rose-500/30')
+                                      }`}>
+                                        {row.points > 0 ? '+' + Number(row.points).toFixed(2) : Number(row.points).toFixed(2)}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {row.remarks && row.remarks !== '—' && (
+                                    <div className="text-[11px] text-gray-400 bg-[#121212] px-2.5 py-1.5 rounded-lg border border-[#222] break-words">
+                                      <span className="text-gray-500 font-medium">Remarks: </span>
+                                      {row.remarks}
+                                    </div>
+                                  )}
+
+                                  <div className="flex items-center justify-between pt-0.5">
+                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                      row.status === 'Confirmed' 
+                                        ? 'bg-emerald-600/90 text-white' 
+                                        : (row.status === 'Redeemed' ? 'bg-amber-600/90 text-white' : 'bg-rose-600/90 text-white')
+                                    }`}>
+                                      {row.status}
+                                    </span>
+                                    {isParentAdmin && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteTransaction(row.id)}
+                                        className="text-gray-500 hover:text-rose-400 p-1 rounded hover:bg-rose-950/40 cursor-pointer flex items-center gap-1 text-[11px]"
+                                        title="Delete this record"
+                                      >
+                                        <Trash2 size={12} />
+                                        <span>Delete</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* DESKTOP VIEW: TRANSACTIONS TABLE (hidden sm:block) */}
+                          <div className="hidden sm:block overflow-x-auto">
                             <table className="w-full text-left text-xs font-sans min-w-[620px]">
                               <thead className="bg-[#101010] text-gray-400 uppercase text-[10px] font-mono border-b border-[#222]">
                                 <tr>

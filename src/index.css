@@ -2,14 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ULTRA-SMOOTH INSTAGRAM/GOOGLE/FACEBOOK PERFORMANCE STYLES */
+/* ULTRA-SMOOTH PERFORMANCE STYLES */
 
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  /* Eliminate 300ms tap delay on mobile & touchscreen devices */
-  touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -49,8 +47,9 @@ html, body, #root {
   overscroll-behavior: contain;
 }
 
-/* Tactile Micro-Interactions (Instagram & Google app feel) */
-button, a, [role="button"], input[type="submit"], input[type="button"] {
+/* Fast tap response specifically for interactive elements */
+button, a, [role="button"], input[type="submit"], input[type="button"], label {
+  touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
   transition: transform 0.12s cubic-bezier(0.2, 0, 0, 1), opacity 0.12s cubic-bezier(0.2, 0, 0, 1), background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
@@ -58,12 +57,6 @@ button, a, [role="button"], input[type="submit"], input[type="button"] {
 
 button:active:not(:disabled), a:active, [role="button"]:active:not([aria-disabled="true"]) {
   transform: scale(0.975);
-}
-
-/* Hardware GPU layer acceleration for fixed headers & modals */
-.fixed, .sticky, [role="dialog"] {
-  transform: translateZ(0);
-  backface-visibility: hidden;
 }
 
 /* High performance image rendering */

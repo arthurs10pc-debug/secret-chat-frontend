@@ -10,7 +10,8 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown, ChevronUp,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
-  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2, Heart, Coins, Award, Scale, Gift, SlidersHorizontal, Bell, BellRing, Filter, CheckCircle2, XCircle, ArrowLeft, MoreVertical, Paperclip, Camera, Briefcase, Calendar, CheckCircle, Users, UserCheck, Mail, Pin, Star, CornerUpLeft
+  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2, Heart, Coins, Award, Scale, Gift, SlidersHorizontal, Bell, BellRing, Filter, CheckCircle2, XCircle, ArrowLeft, MoreVertical, Paperclip, Camera, Briefcase, Calendar, CheckCircle, Users, UserCheck, Mail, Pin, Star, CornerUpLeft,
+  Menu, Sliders, Laptop, LayoutGrid
 } from 'lucide-react';
 
 import {
@@ -963,8 +964,12 @@ export default function App() {
   }, []);
 
   const [notificationPermission, setNotificationPermission] = useState(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      return Notification.permission;
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        return Notification.permission;
+      }
+    } catch (e) {
+      return 'default';
     }
     return 'default';
   });
@@ -2029,9 +2034,11 @@ export default function App() {
         socketRef.current.emit('join_room', { room: GLOBAL_ROOM, role: 'parent' });
         socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: 'parent' });
       }
-      if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
+      try {
+        if ('Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission().catch(() => {});
+        }
+      } catch (e) {}
       setInput('');
       setReplyTarget(null);
       return;
@@ -2913,19 +2920,22 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission().then(perm => {
-          setNotificationPermission(perm);
-        }).catch(() => {});
-      } else {
-        setNotificationPermission(Notification.permission);
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        if (Notification.permission === 'default') {
+          Notification.requestPermission().then(perm => {
+            setNotificationPermission(perm);
+          }).catch(() => {});
+        } else {
+          setNotificationPermission(Notification.permission);
+        }
       }
-    }
+    } catch (e) {}
   }, []);
 
   const triggerMobileNotification = useCallback((incomingText, senderRole) => {
-    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    try {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
     const senderTag = senderRole === 'parent' ? 'Darsh' : 'Dora';
     const title = `ChatGPT • ${senderTag}`;
@@ -2950,6 +2960,9 @@ export default function App() {
         new Notification(title, options);
       } catch (e) {}
     }
+  } catch (err) {
+    console.warn("triggerMobileNotification failed:", err);
+  }
   }, []);
 
   const handleLoveBalanceTransaction = useCallback((amount, type, reason, isBroadcast = false, target = 'user', extraData = null) => {
@@ -6525,61 +6538,108 @@ export default function App() {
         <aside 
           className={`
             fixed md:static inset-y-0 left-0 z-40
-            w-64 md:w-60 max-w-[85vw]
-            transition-transform md:transition-[width] duration-250 ease-in-out
-            bg-[#000000] flex flex-col border-r border-[#171717] overflow-hidden select-none shrink-0
+            w-72 md:w-60 max-w-[82vw]
+            transition-transform md:transition-[width] duration-300 ease-out
+            bg-[#171717] md:bg-[#000000] flex flex-col border-r border-[#262626] md:border-[#171717] overflow-hidden select-none shrink-0 shadow-2xl md:shadow-none
             ${sidebarOpen ? 'translate-x-0 md:w-60' : '-translate-x-full md:translate-x-0 md:w-0'}
           `}
         >
-          <div className="h-14 flex items-center justify-between px-3.5 pt-1.5 shrink-0">
-            <span className="font-semibold text-base tracking-tight text-white flex items-center gap-2">
-              <span className="w-7 h-7 rounded-full bg-white text-black flex items-center justify-center p-1 shadow-sm shrink-0">
-                <ChatGPTLogo className="w-4 h-4 text-black" />
+          {/* SIDEBAR HEADER MATCHING OFFICIAL CHATGPT (IMAGE 2) */}
+          <div className="h-16 flex items-center justify-between px-4 pt-2 shrink-0">
+            <span className="font-serif sm:font-sans font-bold text-xl tracking-tight text-white flex items-center gap-2">
+              <span className="md:hidden">ChatGPT</span>
+              <span className="hidden md:flex items-center gap-2">
+                <span className="w-7 h-7 rounded-full bg-white text-black flex items-center justify-center p-1 shadow-sm shrink-0">
+                  <ChatGPTLogo className="w-4 h-4 text-black" />
+                </span>
+                <span>ChatGPT</span>
               </span>
-              <span>ChatGPT</span>
             </span>
-            <div className="flex items-center gap-2.5 text-[#9b9b9b]">
-              <Search size={18} className="cursor-pointer hover:text-white" />
+            <div className="flex items-center gap-2">
+              <button 
+                type="button"
+                className="w-9 h-9 rounded-full bg-[#262626] hover:bg-[#333] flex items-center justify-center text-gray-200 hover:text-white transition-all cursor-pointer"
+                title="Search Chats"
+              >
+                <Search size={16} />
+              </button>
               <button 
                 onClick={() => setSidebarOpen(false)} 
-                className="p-1.5 rounded-lg hover:bg-[#1a1a1a] text-[#9b9b9b] hover:text-white cursor-pointer"
+                className="w-9 h-9 rounded-full bg-[#262626] hover:bg-[#333] text-[#9b9b9b] hover:text-white flex items-center justify-center cursor-pointer"
+                title="Close"
               >
-                <PanelLeft size={18} />
+                <PanelLeft size={16} />
               </button>
             </div>
           </div>
 
-          <div className="px-2.5 py-1 space-y-1 shrink-0 text-xs md:text-[13px]">
-            <div 
-              onClick={handleNewChat}
-              className="flex items-center justify-between py-2 px-3 rounded-xl text-[#ececf1] hover:bg-[#1a1a1a] transition-colors cursor-pointer font-medium"
-            >
-              <span className="flex items-center gap-2.5">
-                <SquarePen size={16} /> New chat
-              </span>
-              {role === 'parent' && <ShieldCheck size={14} className="text-emerald-400" />}
-            </div>
-
+          <div className="px-3 py-1 space-y-1 shrink-0 text-sm">
+            {/* Images */}
             <div 
               onClick={() => { setViewMode('images_archive'); closeSidebarOnMobile(); }}
-              className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${viewMode === 'images_archive' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
+              className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${viewMode === 'images_archive' ? 'bg-[#262626] text-white font-medium' : 'text-gray-200 hover:bg-[#222]'}`}
             >
-              <span className="flex items-center gap-2.5">
-                <ImageIcon size={16} className={viewMode === 'images_archive' ? 'text-blue-400' : 'text-[#9b9b9b]'} /> Images
+              <span className="flex items-center gap-3 font-serif sm:font-sans text-[15px]">
+                <ImageIcon size={18} className="text-gray-300" /> Images
               </span>
               <span className="text-[11px] text-gray-400 font-mono">{archivedImages.length}</span>
             </div>
 
-            <div className="flex items-center gap-2.5 text-[#ececf1] hover:bg-[#1a1a1a] py-2 px-3 rounded-xl cursor-pointer transition-colors">
-              <BookOpen size={16} className="text-[#9b9b9b]" /> Library
+            {/* Library */}
+            <div 
+              onClick={() => { setLoveModalTab('redeem'); setShowLoveBalanceModal(true); closeSidebarOnMobile(); }}
+              className="flex items-center gap-3 py-2 px-3 rounded-xl cursor-pointer text-gray-200 hover:bg-[#222] transition-colors"
+            >
+              <BookOpen size={18} className="text-gray-300" />
+              <span className="font-serif sm:font-sans text-[15px]">Library</span>
             </div>
 
+            {/* Customize */}
+            <div 
+              onClick={() => { setShowGamesHubModal(true); closeSidebarOnMobile(); }}
+              className="flex items-center gap-3 py-2 px-3 rounded-xl cursor-pointer text-gray-200 hover:bg-[#222] transition-colors"
+            >
+              <Sliders size={18} className="text-gray-300" />
+              <span className="font-serif sm:font-sans text-[15px]">Customize</span>
+            </div>
+
+            {/* Projects */}
+            <div 
+              onClick={() => { 
+                setViewMode('daily_projects');
+                setDailyAdminTab('review');
+                closeSidebarOnMobile(); 
+              }}
+              className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${
+                viewMode === 'daily_projects' ? 'bg-[#262626] text-white font-medium' : 'text-gray-200 hover:bg-[#222]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <FolderGit2 size={18} className="text-gray-300" />
+                <span className="font-serif sm:font-sans text-[15px]">Projects</span>
+              </div>
+              <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold ${
+                role === 'parent'
+                  ? (dailySubmissions.filter(s => s.status === 'PENDING').length > 0 
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse' 
+                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30')
+                  : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+              }`}>
+                {role === 'parent' 
+                  ? (dailySubmissions.filter(s => s.status === 'PENDING').length > 0 
+                      ? `${dailySubmissions.filter(s => s.status === 'PENDING').length} PENDING` 
+                      : 'CHECK') 
+                  : 'HOURLY'}
+              </span>
+            </div>
+
+            {/* Remote */}
             <div 
               onClick={() => { setViewMode('scheduled'); closeSidebarOnMobile(); }}
-              className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${viewMode === 'scheduled' ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
+              className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${viewMode === 'scheduled' ? 'bg-[#262626] text-white font-medium' : 'text-gray-200 hover:bg-[#222]'}`}
             >
-              <span className="flex items-center gap-2.5">
-                <Clock size={16} className={viewMode === 'scheduled' ? 'text-amber-400' : 'text-[#9b9b9b]'} /> Scheduled
+              <span className="flex items-center gap-3 font-serif sm:font-sans text-[15px]">
+                <Laptop size={18} className="text-gray-300" /> Remote
               </span>
               {syncStatus === 'connected' ? (
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" title="Joint Synced" />
@@ -6588,18 +6648,17 @@ export default function App() {
               )}
             </div>
 
-            {/* PLUGINS MENU ITEM */}
+            {/* Explore */}
             <div 
               onClick={() => {
                 setShowArcadePlugins(!showArcadePlugins);
               }}
               className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${
-                incomingGameRequest ? 'bg-amber-500/20 border border-amber-500/50 animate-pulse' : (showArcadePlugins ? 'bg-[#212121] text-white' : 'text-[#ececf1] hover:bg-[#1a1a1a]')
+                incomingGameRequest ? 'bg-amber-500/20 border border-amber-500/50 animate-pulse' : (showArcadePlugins ? 'bg-[#262626] text-white font-medium' : 'text-gray-200 hover:bg-[#222]')
               }`}
             >
-              <span className="flex items-center gap-2.5">
-                <ToyBrick size={16} className={incomingGameRequest ? 'text-amber-400 animate-spin' : (showArcadePlugins ? 'text-emerald-400' : 'text-[#9b9b9b]')} /> 
-                <span>Plugins</span>
+              <span className="flex items-center gap-3 font-serif sm:font-sans text-[15px]">
+                <LayoutGrid size={18} className={incomingGameRequest ? 'text-amber-400 animate-spin' : 'text-gray-300'} /> Explore
               </span>
               <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
                 incomingGameRequest ? 'bg-amber-500 text-black animate-bounce' : (showArcadePlugins ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-400')
@@ -6681,37 +6740,6 @@ export default function App() {
             )}
 
             <div 
-              onClick={() => { 
-                setViewMode('daily_projects');
-                setDailyAdminTab('review');
-                closeSidebarOnMobile(); 
-              }}
-              className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors ${
-                viewMode === 'daily_projects'
-                  ? 'bg-[#212121] text-white font-medium' 
-                  : 'text-[#ececf1] hover:bg-[#1a1a1a]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <FolderGit2 size={16} className={viewMode === 'daily_projects' ? 'text-blue-400' : 'text-[#9b9b9b]'} />
-                <span>{role === 'parent' ? "Project Submission" : "Projects"}</span>
-              </div>
-              <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold ${
-                role === 'parent'
-                  ? (dailySubmissions.filter(s => s.status === 'PENDING').length > 0 
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse' 
-                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30')
-                  : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-              }`}>
-                {role === 'parent' 
-                  ? (dailySubmissions.filter(s => s.status === 'PENDING').length > 0 
-                      ? `${dailySubmissions.filter(s => s.status === 'PENDING').length} PENDING` 
-                      : 'CHECK') 
-                  : 'HOURLY'}
-              </span>
-            </div>
-
-            <div 
               onClick={() => { setViewMode('codex'); closeSidebarOnMobile(); }}
               className={`flex items-center gap-2.5 py-2 px-3 rounded-xl cursor-pointer transition-colors ${viewMode === 'codex' ? 'bg-[#212121] text-white font-medium' : 'text-[#ececf1] hover:bg-[#1a1a1a]'}`}
             >
@@ -6724,8 +6752,11 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5 border-t border-[#1a1a1a] mt-1 scrollbar-none text-xs">
-            <div className="text-[11px] text-[#737373] px-3 py-1.5 font-semibold uppercase tracking-wider">Recents</div>
+          {/* DIVIDER MATCHING IMAGE 2 */}
+          <div className="border-t border-[#262626] mx-3 my-2" />
+
+          {/* RECENTS CHAT LIST */}
+          <div className="flex-1 overflow-y-auto px-3 py-1 space-y-0.5 scrollbar-none text-[15px]">
             {roomList.map((roomName, idx) => (
               <div 
                 key={idx}
@@ -6735,30 +6766,68 @@ export default function App() {
                   setReplyTarget(null);
                   closeSidebarOnMobile();
                 }}
-                className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors group ${currentRoom === roomName && viewMode === 'real_gpt' ? 'bg-[#212121] text-white font-medium' : 'text-[#b4b4b4] hover:bg-[#171717] hover:text-white'}`}
+                className={`flex items-center justify-between py-2 px-3 rounded-xl cursor-pointer transition-colors group font-serif sm:font-sans ${currentRoom === roomName && viewMode === 'real_gpt' ? 'bg-[#262626] text-white font-medium' : 'text-gray-300 hover:bg-[#202020] hover:text-white'}`}
               >
-                <span className="truncate max-w-[190px]">{roomName}</span>
+                <span className="truncate max-w-[210px]">{roomName}</span>
               </div>
             ))}
+            <div 
+              onClick={() => {}}
+              className="text-xs text-gray-400 font-serif px-3 py-2 cursor-pointer hover:text-gray-200"
+            >
+              See all...
+            </div>
           </div>
 
-          
-
           {!isAppInstalled && (
-            <div className="px-3 py-2 border-t border-[#171717] bg-[#0c0c0c]">
+            <div className="px-3 py-2 border-t border-[#262626] bg-[#121212]">
               <button
                 onClick={() => { handleInstallApp(); closeSidebarOnMobile(); }}
-                className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white p-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg cursor-pointer active:scale-95 transition-all"
+                className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white p-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg cursor-pointer active:scale-95 transition-all"
                 title="Install ChatGPT on your phone"
               >
-                <Download size={15} className="animate-bounce" />
+                <Download size={14} className="animate-bounce" />
                 <span>Install App on Mobile</span>
               </button>
             </div>
           )}
 
-          {/* GOOGLE SIGN IN & USER PROFILE BOTTOM BAR */}
-          <div className="p-2.5 border-t border-[#171717] bg-[#000000] space-y-2">
+          {/* MOBILE BOTTOM FLOATING BAR MATCHING IMAGE 2: [✏️ Chat] BLUE PILL + AVATAR HS */}
+          <div className="md:hidden p-3 border-t border-[#262626] bg-[#171717] flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => {
+                handleNewChat();
+                closeSidebarOnMobile();
+              }}
+              className="bg-[#2563eb] hover:bg-blue-600 active:bg-blue-700 text-white font-medium text-sm px-4 py-2 rounded-full flex items-center gap-2 shadow-lg active:scale-95 transition-all cursor-pointer"
+            >
+              <SquarePen size={16} />
+              <span>Chat</span>
+            </button>
+
+            <div 
+              onClick={() => {
+                if (role === 'parent') {
+                  setViewMode('admin_dashboard');
+                  closeSidebarOnMobile();
+                } else if (handleUpgradeClick) {
+                  handleUpgradeClick();
+                }
+              }}
+              className="w-10 h-10 rounded-full bg-[#d97706] text-white font-bold flex items-center justify-center text-sm shadow cursor-pointer active:scale-95 transition-transform"
+              title={role === 'parent' ? "Admin Dashboard (Darsh)" : (googleUser?.email || "User Profile")}
+            >
+              {googleUser?.picture ? (
+                <img src={googleUser.picture} alt="Avatar" className="w-full h-full object-cover rounded-full" />
+              ) : (
+                role === 'parent' ? 'HS' : 'A'
+              )}
+            </div>
+          </div>
+
+          {/* DESKTOP GOOGLE SIGN IN & USER PROFILE BOTTOM BAR (hidden md:block) */}
+          <div className="hidden md:block p-2.5 border-t border-[#171717] bg-[#000000] space-y-2">
             {!googleUser && (
               <button
                 type="button"
@@ -6919,61 +6988,45 @@ export default function App() {
                 <VideoIcon size={16} />
               </button>
 
-              {/* DUAL BALANCE PILL: EXPANDED ON SM+, COMPACT ON MOBILE */}
+              {/* DUAL BALANCE PILL: ADMIN GETS BOTH (DESKTOP & MOBILE), DORA GETS HER OWN */}
               {role === 'parent' ? (
-                <>
-                  {/* Desktop / Tablet view */}
-                  <div
-                    className={`hidden md:flex items-center gap-1.5 backdrop-blur-xl text-white px-2.5 py-1 rounded-2xl text-xs font-mono font-bold shrink-0 shadow-md transition-all ${
-                      hasIncomingPendingWish 
-                        ? 'bg-pink-600/30 border-2 border-pink-400 animate-pulse ring-2 ring-pink-500 shadow-[0_0_16px_rgba(244,63,94,0.8)]' 
-                        : 'bg-white/[0.08] hover:bg-white/[0.12] border border-white/20'
-                    }`}
-                    title={hasIncomingPendingWish ? "Incoming Wish Request Waiting! Tap to Review & Approve" : `${activeDoraName}: 💕 Love Balance | Darsh: 👑 Love Balance`}
-                  >
-                    {hasIncomingPendingWish && (
-                      <span className="w-2 h-2 rounded-full bg-pink-400 animate-ping mr-0.5 shrink-0" />
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab(hasIncomingPendingWish ? 'claimed' : 'passbook'); }}
-                      className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
-                    >
-                      <span className="text-[10px] text-pink-400/90 font-sans font-semibold">{activeDoraName}:</span>
-                      <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💕'}</span>
-                      <span>{formatLoveBalance(doraNetBalance)}</span>
-                    </button>
-                    <span className="text-white/20">|</span>
-                    <button
-                      type="button"
-                      onClick={() => { setActiveLbTarget('admin'); setShowLoveBalanceModal(true); setLoveModalTab(hasIncomingPendingWish ? 'claimed' : 'passbook'); }}
-                      className={`flex items-center gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(adminNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}
-                    >
-                      <span className="text-[10px] text-blue-400/90 font-sans font-semibold">Darsh:</span>
-                      <span>{Number(adminNetBalance || 0) < 0 ? '💔' : '👑'}</span>
-                      <span>{formatLoveBalance(adminNetBalance)}</span>
-                    </button>
-                  </div>
-
-                  {/* Compact Mobile Pill (fits without overflowing) */}
+                <div
+                  className={`flex items-center gap-1 sm:gap-1.5 backdrop-blur-xl text-white px-2 sm:px-2.5 py-1 rounded-full sm:rounded-2xl text-[10.5px] sm:text-xs font-mono font-bold shrink-0 shadow-md transition-all ${
+                    hasIncomingPendingWish 
+                      ? 'bg-pink-600/30 border-2 border-pink-400 animate-pulse ring-2 ring-pink-500 shadow-[0_0_16px_rgba(244,63,94,0.8)]' 
+                      : 'bg-white/[0.08] hover:bg-white/[0.12] border border-white/20'
+                  }`}
+                  title={hasIncomingPendingWish ? "Incoming Wish Request Waiting! Tap to Review & Approve" : `${activeDoraName}: 💕 Love Balance | Darsh: 👑 Love Balance`}
+                >
+                  {hasIncomingPendingWish && (
+                    <span className="w-2 h-2 rounded-full bg-pink-400 animate-ping mr-0.5 shrink-0" />
+                  )}
+                  {/* Dora's points */}
                   <button
                     type="button"
                     onClick={() => { setActiveLbTarget('user'); setShowLoveBalanceModal(true); setLoveModalTab(hasIncomingPendingWish ? 'claimed' : 'passbook'); }}
-                    className={`md:hidden flex items-center gap-1 backdrop-blur-md px-2 py-1 rounded-full text-[11px] font-mono font-bold cursor-pointer shrink-0 transition-all ${
-                      hasIncomingPendingWish
-                        ? 'bg-pink-600/40 border-2 border-pink-400 text-white animate-pulse ring-2 ring-pink-500 shadow-[0_0_16px_rgba(244,63,94,0.8)]'
-                        : 'bg-pink-500/15 border border-pink-400/30 text-pink-300'
-                    }`}
-                    title={hasIncomingPendingWish ? "Incoming Wish Request Waiting! Tap to Review & Approve" : "Tap to view Love Balances & Passbook"}
+                    className={`flex items-center gap-0.5 sm:gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
+                    title={`${activeDoraName}: 💕`}
                   >
-                    {hasIncomingPendingWish && (
-                      <span className="w-2 h-2 rounded-full bg-pink-400 animate-ping mr-0.5 shrink-0" />
-                    )}
-                    <span>💕</span>
+                    <span className="text-[9px] text-pink-400/90 font-sans font-semibold">Dora:</span>
+                    <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💕'}</span>
                     <span>{formatLoveBalance(doraNetBalance)}</span>
                   </button>
-                </>
+                  <span className="text-white/20">|</span>
+                  {/* Darsh's points */}
+                  <button
+                    type="button"
+                    onClick={() => { setActiveLbTarget('admin'); setShowLoveBalanceModal(true); setLoveModalTab(hasIncomingPendingWish ? 'claimed' : 'passbook'); }}
+                    className={`flex items-center gap-0.5 sm:gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(adminNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-blue-300'}`}
+                    title="Darsh: 👑"
+                  >
+                    <span className="text-[9px] text-blue-400/90 font-sans font-semibold">Darsh:</span>
+                    <span>{Number(adminNetBalance || 0) < 0 ? '💔' : '👑'}</span>
+                    <span>{formatLoveBalance(adminNetBalance)}</span>
+                  </button>
+                </div>
               ) : (
+                /* Dora's side: Show ONLY Dora's points */
                 <button
                   type="button"
                   onClick={() => { setShowLoveBalanceModal(true); setLoveModalTab(hasIncomingPendingWish ? 'claimed' : 'passbook'); }}
@@ -7045,7 +7098,9 @@ export default function App() {
                       className="w-full text-left px-4 py-2 hover:bg-white/10 transition-colors flex items-center justify-between text-pink-300 font-bold"
                     >
                       <span>💖 Love Passbook</span>
-                      <span className="font-mono text-[11px]">{formatLoveBalance(doraNetBalance)}</span>
+                      <span className="font-mono text-[11px]">
+                        {role === 'parent' ? `Darsh: ${formatLoveBalance(adminNetBalance)}` : formatLoveBalance(doraNetBalance)}
+                      </span>
                     </button>
                     <button 
                       type="button"
@@ -7312,13 +7367,17 @@ export default function App() {
                     <div className={`flex w-full ${isMine ? 'justify-end' : 'justify-start'}`}>
                       <div 
                         onTouchStart={(e) => {
-                          touchStartXRef.current = e.touches[0].clientX;
-                          activeSwipeMsgIdRef.current = m;
+                          if (e.touches && e.touches[0]) {
+                            touchStartXRef.current = e.touches[0].clientX;
+                            activeSwipeMsgIdRef.current = m;
+                          }
                         }}
                         onTouchEnd={(e) => {
-                          const diffX = e.changedTouches[0].clientX - touchStartXRef.current;
-                          if (diffX > 60 && activeSwipeMsgIdRef.current) {
-                            handleStartReply(activeSwipeMsgIdRef.current);
+                          if (e.changedTouches && e.changedTouches[0]) {
+                            const diffX = e.changedTouches[0].clientX - (touchStartXRef.current || 0);
+                            if (diffX > 60 && activeSwipeMsgIdRef.current) {
+                              handleStartReply(activeSwipeMsgIdRef.current);
+                            }
                           }
                         }}
                         onContextMenu={(e) => {
@@ -7815,7 +7874,55 @@ export default function App() {
           onTouchEnd={handleSidebarTouchEnd}
           title="Swipe right from edge to open chats"
         />
-        <header className="h-14 flex items-center justify-between px-4 shrink-0 z-10 border-b border-[#141414]">
+        {/* MOBILE CHATGPT HEADER (MATCHING OFFICIAL CHATGPT APP - IMAGE 1) */}
+        <header className="md:hidden h-14 bg-black flex items-center justify-between px-4 shrink-0 z-20 select-none">
+          {/* LEFT: CIRCULAR HAMBURGER BUTTON */}
+          <button 
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="w-10 h-10 rounded-full bg-[#212121] active:bg-[#2c2c2c] text-white flex items-center justify-center transition-transform active:scale-95 shadow cursor-pointer shrink-0"
+            title="Open Menu"
+          >
+            <Menu size={20} className="text-white" />
+          </button>
+
+          {/* CENTER: GET PLUS PILL BUTTON */}
+          <button
+            type="button"
+            onClick={() => {
+              setShowLoveBalanceModal(true);
+              setLoveModalTab(hasIncomingPendingWish ? 'claimed' : 'passbook');
+            }}
+            onContextMenu={(e) => {
+              if (role === 'parent') {
+                e.preventDefault();
+                setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
+              }
+            }}
+            className={`px-4 py-1.5 rounded-full flex items-center gap-1.5 transition-all active:scale-95 shadow cursor-pointer ${
+              hasIncomingPendingWish 
+                ? 'bg-pink-900/80 text-pink-200 border border-pink-400 animate-pulse' 
+                : 'bg-[#1e2430] hover:bg-[#283244] text-[#8cb2ea] border border-[#2d3a4f]/50'
+            }`}
+            title="Get Plus (Love Balance & Vouchers)"
+          >
+            <Sparkles size={14} className={hasIncomingPendingWish ? "text-pink-300 animate-spin" : "text-[#8cb2ea] fill-[#8cb2ea]/30"} />
+            <span className="text-sm font-semibold tracking-wide">Get Plus</span>
+          </button>
+
+          {/* RIGHT: CIRCULAR NEW CHAT BUTTON */}
+          <button
+            type="button"
+            onClick={handleNewChat}
+            className="w-10 h-10 rounded-full bg-[#212121] active:bg-[#2c2c2c] text-white flex items-center justify-center transition-transform active:scale-95 shadow cursor-pointer shrink-0"
+            title="New Chat"
+          >
+            <SquarePen size={18} className="text-gray-200" />
+          </button>
+        </header>
+
+        {/* DESKTOP CHATGPT HEADER (hidden md:flex) */}
+        <header className="hidden md:flex h-14 items-center justify-between px-4 shrink-0 z-10 border-b border-[#141414]">
           <div className="flex items-center gap-2.5 overflow-hidden">
             {!sidebarOpen && (
               <button 
@@ -10976,6 +11083,34 @@ export default function App() {
                 </div>
               )}
 
+              {/* PROMPT SUGGESTIONS (MATCHING OFFICIAL CHATGPT APP - IMAGE 1) */}
+              {viewMode !== 'stealth' && (!messages || messages.length === 0 || viewMode === 'real_gpt') && (
+                <div className="flex flex-col gap-2.5 mb-3 px-2 select-none">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInput("Create an image or sticker of ");
+                      if (inputRef.current) inputRef.current.focus();
+                    }}
+                    className="flex items-center gap-3 text-gray-200 hover:text-white text-sm font-serif sm:font-sans transition-colors cursor-pointer text-left py-1"
+                  >
+                    <ImageIcon size={20} className="text-gray-400 shrink-0" />
+                    <span>Create an image or sticker</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInput("Write or edit ");
+                      if (inputRef.current) inputRef.current.focus();
+                    }}
+                    className="flex items-center gap-3 text-gray-200 hover:text-white text-sm font-serif sm:font-sans transition-colors cursor-pointer text-left py-1"
+                  >
+                    <SquarePen size={20} className="text-gray-400 shrink-0" />
+                    <span>Write or edit</span>
+                  </button>
+                </div>
+              )}
+
               <form onSubmit={handleSubmit} className="w-full relative">
                 <div className="w-full bg-[#212121] rounded-full border border-[#2e2e2e] focus-within:border-[#444] px-3 sm:px-4 py-2 sm:py-2.5 flex items-center gap-2 sm:gap-3 shadow-2xl min-h-[48px]">
                   <button 
@@ -10999,7 +11134,7 @@ export default function App() {
                     placeholder={
                       viewMode === 'stealth' 
                         ? (replyTarget ? `Reply to ${replyTarget.senderRole}...` : "Schema entry... (/gpt to exit)") 
-                        : "Ask anything"
+                        : "Ask ChatGPT"
                     }
                     className="flex-1 bg-transparent text-base sm:text-[13.5px] text-white placeholder-[#8e8e8e] outline-none min-w-0"
                   />
@@ -11042,9 +11177,10 @@ export default function App() {
 
                   <button 
                     type="submit" 
-                    className="bg-[#1c3a6b] hover:bg-[#254d8f] text-white w-8 h-8 rounded-full cursor-pointer flex items-center justify-center shadow shrink-0 active:scale-95 transition-transform"
+                    className="bg-[#3b82f6] hover:bg-blue-600 text-white w-9 h-9 rounded-full cursor-pointer flex items-center justify-center shadow-lg shrink-0 active:scale-95 transition-transform"
+                    title={input.trim() ? "Send message" : "Voice mode"}
                   >
-                    {input.trim() ? <ArrowUp size={16} /> : <AudioLines size={16} />}
+                    {input.trim() ? <ArrowUp size={18} /> : <AudioLines size={18} />}
                   </button>
                 </div>
               </form>
