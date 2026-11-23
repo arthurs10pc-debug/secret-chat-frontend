@@ -475,10 +475,10 @@ export default function App() {
   const [adminLoveBalance, setAdminLoveBalance] = useState(() => {
     try {
       const saved = localStorage.getItem('stealth_admin_love_balance');
-      const val = saved !== null ? parseFloat(saved) : 71.00;
-      return !isNaN(val) && val > 0 ? val : 71.00;
+      const val = saved !== null ? parseFloat(saved) : 0;
+      return !isNaN(val) ? val : 0;
     } catch {
-      return 71.00;
+      return 0;
     }
   });
 
@@ -496,20 +496,6 @@ export default function App() {
     }
     return false;
   }, []);
-
-  const DARSH_BASE_TX_ID = 'lb_darsh_base_points_71';
-  const DARSH_BASE_ENTRY = {
-    id: DARSH_BASE_TX_ID,
-    sl: 1,
-    target: 'admin',
-    description: '[Darsh] Love Balance Base Reserve (+71.00)',
-    earnedAt: '23/11/2026, 03:00 PM',
-    expireDate: '',
-    points: 71.00,
-    type: 'credit',
-    remarks: 'Darsh Love Balance Base Reserve',
-    status: 'Confirmed'
-  };
 
   const [loveLedger, setLoveLedger] = useState(() => {
     try {
@@ -536,17 +522,12 @@ export default function App() {
               }
               return res;
             });
-
-          // Ensure Darsh permanently has his 71.00 base reserve entry
-          if (!cleaned.some(e => e && (e.id === DARSH_BASE_TX_ID || (e.target === 'admin' && Number(e.points) >= 71)))) {
-            cleaned = [DARSH_BASE_ENTRY, ...cleaned];
-          }
           return cleaned;
         }
       }
-      return [DARSH_BASE_ENTRY];
+      return [];
     } catch {
-      return [DARSH_BASE_ENTRY];
+      return [];
     }
   });
 
@@ -593,13 +574,12 @@ export default function App() {
   const adminNetBalance = useMemo(() => {
     const adminEntries = (loveLedger || []).filter(e => e && !isLegacyMockEntry(e) && (e.target === 'admin' || (e.description && e.description.includes('[Darsh]'))));
     if (adminEntries.length > 0) {
-      const net = getNetLedgerBalance(loveLedger, 'admin');
-      return net > 0 ? net : 71.00;
+      return getNetLedgerBalance(loveLedger, 'admin');
     }
-    if (typeof adminLoveBalance === 'number' && adminLoveBalance > 0) return adminLoveBalance;
+    if (typeof adminLoveBalance === 'number') return adminLoveBalance;
     const saved = localStorage.getItem('stealth_admin_love_balance');
-    if (saved !== null && parseFloat(saved) > 0) return parseFloat(saved);
-    return 71.00;
+    if (saved !== null && !isNaN(parseFloat(saved))) return parseFloat(saved);
+    return 0;
   }, [loveLedger, getNetLedgerBalance, adminLoveBalance, isLegacyMockEntry]);
 
   // Synchronize loveBalance and adminLoveBalance state with pure mathematical ledger totals
@@ -3552,10 +3532,24 @@ export default function App() {
         action: 'CLEAR_LEDGER',
         target: target,
         resetBalance: true,
-        senderRole: roleRef.current || role || 'user',
+        senderRole: 'parent',
+        role: 'parent',
+        userEmail: googleUser?.email || 'arthurs10pc@gmail.com',
         timestamp: Date.now()
       });
     }
+
+    // Call backend API endpoint for guaranteed persistence
+    try {
+      fetch(`${BACKEND_URL}/api/admin/clear-ledger`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target,
+          adminEmail: googleUser?.email || 'arthurs10pc@gmail.com'
+        })
+      }).catch(() => {});
+    } catch(e) {}
 
     setShowClearConfirmModal(false);
   }, [clearModalTarget, role, dailySlots]);
