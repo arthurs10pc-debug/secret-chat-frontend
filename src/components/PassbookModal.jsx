@@ -753,9 +753,40 @@ export default function PassbookModal({
                   );
                 }
 
+                // Filter out rapid duplicate awards (e.g. repeated instant reply spam within minutes)
+                const deduplicated = [];
+                const instantReplySeen = {};
+                for (const entry of filteredEntries) {
+                  if (entry && entry.description && entry.description.includes('Instant Reply')) {
+                    const dKey = getEntryDateKey(entry.earnedAt);
+                    const groupKey = `${entry.target || 'user'}_${dKey}`;
+                    let entryMs = 0;
+                    if (entry.id && entry.id.startsWith('lb_instant_')) {
+                      entryMs = parseInt(entry.id.split('_')[2], 10);
+                    }
+                    if (isNaN(entryMs) || entryMs === 0) {
+                      try { entryMs = new Date(entry.earnedAt).getTime(); } catch (e) {}
+                    }
+                    if (entryMs > 0) {
+                      if (!instantReplySeen[groupKey]) {
+                        instantReplySeen[groupKey] = [entryMs];
+                        deduplicated.push(entry);
+                      } else {
+                        const isClose = instantReplySeen[groupKey].some(prevMs => Math.abs(prevMs - entryMs) < 30 * 60 * 1000);
+                        if (!isClose) {
+                          instantReplySeen[groupKey].push(entryMs);
+                          deduplicated.push(entry);
+                        }
+                      }
+                      continue;
+                    }
+                  }
+                  deduplicated.push(entry);
+                }
+
                 // Bucket entries by Day
                 const dayBuckets = {};
-                filteredEntries.forEach(entry => {
+                deduplicated.forEach(entry => {
                   const dKey = getEntryDateKey(entry.earnedAt);
                   if (!dayBuckets[dKey]) dayBuckets[dKey] = [];
                   dayBuckets[dKey].push(entry);
