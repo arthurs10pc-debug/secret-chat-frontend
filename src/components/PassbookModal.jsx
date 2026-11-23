@@ -84,36 +84,109 @@ export default function PassbookModal({
   const openerRole = isDarsh ? 'admin' : 'user';
   const currentOpenerBalance = isDarsh ? adminNetBalance : doraNetBalance;
 
-  // Day formatting helper for passbook day-wise groups
-  const getEntryDateKey = (earnedAt) => {
-    if (!earnedAt) return 'Other';
-    const str = String(earnedAt).trim();
-    const mIso = str.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (mIso) return mIso[1];
-    const mDmy = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (mDmy) return `${mDmy[3]}-${mDmy[2].padStart(2, '0')}-${mDmy[1].padStart(2, '0')}`;
-    return str.split(',')[0].trim() || 'Other';
+  // Parse entry timestamps and dates strictly into Indian Standard Time (IST / Asia/Kolkata)
+  const parseEntryIstInfo = (entry) => {
+    if (!entry) {
+      return { dateKey: 'Other', hour: 0, displayTime: '—', fullKey: 'Other_00' };
+    }
+
+    // 1. Check if entry.id has a millisecond timestamp (e.g. lb_instant_1763877876123_user or 1763877876123)
+    const idMatch = String(entry.id || '').match(/(\d{12,13})/);
+    if (idMatch) {
+      const ts = Number(idMatch[1]);
+      if (!isNaN(ts) && ts > 1600000000000 && ts < 2500000000000) {
+        const d = new Date(ts);
+        const dateKey = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        const hourStr = d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', timeZone: 'Asia/Kolkata' });
+        const displayTime = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }).toLowerCase();
+        const hNum = parseInt(hourStr, 10) || 0;
+        return { dateKey, hour: hNum, displayTime, fullKey: `${dateKey}_${String(hNum).padStart(2, '0')}` };
+      }
+    }
+
+    const rawEarned = String(entry.earnedAt || '').trim();
+
+    // 2. Check if rawEarned is DD/MM/YYYY, HH:mm:ss (UTC toLocaleString('en-GB') from cloud server)
+    const gbMatch = rawEarned.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (gbMatch) {
+      const [, day, month, year, h, m, s] = gbMatch;
+      // Cloud server created this in UTC -> convert to IST
+      const utcDate = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(h), Number(m), Number(s || 0)));
+      const dateKey = utcDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const hourStr = utcDate.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', timeZone: 'Asia/Kolkata' });
+      const displayTime = utcDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }).toLowerCase();
+      const hNum = parseInt(hourStr, 10) || 0;
+      return { dateKey, hour: hNum, displayTime, fullKey: `${dateKey}_${String(hNum).padStart(2, '0')}` };
+    }
+
+    // 3. Check if rawEarned has YYYY-MM-DD, h:mm am/pm (our IST helper getNowIstEarnedAt)
+    const istMatch = rawEarned.match(/^(\d{4}-\d{2}-\d{2}),?\s+([0-9]{1,2}):([0-9]{2})(?::[0-9]{2})?\s*(am|pm)?/i);
+    if (istMatch) {
+      const dateKey = istMatch[1];
+      let hNum = parseInt(istMatch[2], 10);
+      const mNum = istMatch[3];
+      const ampm = (istMatch[4] || '').toLowerCase();
+      if (ampm === 'pm' && hNum < 12) hNum += 12;
+      if (ampm === 'am' && hNum === 12) hNum = 0;
+      const displayTime = `${istMatch[2]}:${mNum} ${ampm || (hNum >= 12 ? 'pm' : 'am')}`.trim();
+      return { dateKey, hour: hNum, displayTime, fullKey: `${dateKey}_${String(hNum).padStart(2, '0')}` };
+    }
+
+    // 4. Check if remarks has slot time like "(17:00 - 17:30)" or "(09:00 am)"
+    const remarks = String(entry.remarks || '').trim();
+    const slotMatch = remarks.match(/\b([0-9]{1,2}):([0-9]{2})\b/);
+    let hFromRemarks = null;
+    if (slotMatch) {
+      hFromRemarks = parseInt(slotMatch[1], 10);
+    }
+
+    // Fallback: standard date parsing
+    const d = new Date(rawEarned);
+    if (!isNaN(d.getTime())) {
+      const dateKey = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const hourStr = d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', timeZone: 'Asia/Kolkata' });
+      const displayTime = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }).toLowerCase();
+      const hNum = hFromRemarks !== null ? hFromRemarks : (parseInt(hourStr, 10) || 0);
+      return { dateKey, hour: hNum, displayTime, fullKey: `${dateKey}_${String(hNum).padStart(2, '0')}` };
+    }
+
+    return { dateKey: 'Other', hour: 0, displayTime: rawEarned || '—', fullKey: 'Other_00' };
   };
 
-  const formatDayHeader = (dateKey) => {
-    if (!dateKey || dateKey === 'Other') return 'Earlier Records';
-    try {
-      const todayStr = new Date().toISOString().split('T')[0];
-      const yestDate = new Date();
-      yestDate.setDate(yestDate.getDate() - 1);
-      const yestStr = yestDate.toISOString().split('T')[0];
+  const formatHourRange = (hour24) => {
+    const h = Number(hour24) || 0;
+    const nextH = (h + 1) % 24;
+    const formatH = (val) => {
+      const ampm = val >= 12 ? 'PM' : 'AM';
+      const h12 = val % 12 === 0 ? 12 : val % 12;
+      return `${h12}:00 ${ampm}`;
+    };
+    return `${formatH(h)} - ${formatH(nextH)}`;
+  };
 
+  const formatHourHeader = (fullHourKey) => {
+    if (!fullHourKey || fullHourKey.startsWith('Other')) return '🕒 Earlier Records';
+    try {
+      const [dateKey, hourStr] = fullHourKey.split('_');
+      const hourRange = formatHourRange(parseInt(hourStr, 10));
+
+      const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const yest = new Date();
+      yest.setDate(yest.getDate() - 1);
+      const yestStr = yest.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+      let dayLabel = dateKey;
       const parts = dateKey.split('-');
       if (parts.length === 3) {
         const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-        const formatted = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-        if (dateKey === todayStr) return `📅 Today • ${formatted}`;
-        if (dateKey === yestStr) return `📅 Yesterday • ${formatted}`;
-        return `📅 ${formatted}`;
+        const formatted = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+        if (dateKey === todayStr) dayLabel = 'Today';
+        else if (dateKey === yestStr) dayLabel = 'Yesterday';
+        else dayLabel = formatted;
       }
-      return `📅 ${dateKey}`;
+      return `🕒 ${dayLabel} • ${hourRange}`;
     } catch (e) {
-      return `📅 ${dateKey}`;
+      return `🕒 ${fullHourKey}`;
     }
   };
 
@@ -145,19 +218,10 @@ export default function PassbookModal({
       return '11:00 pm';
     }
 
-    // 2. Extract clean time from row.earnedAt (strip date portion)
-    const rawEarned = String(row.earnedAt || '').trim();
-    if (rawEarned) {
-      let timeOnly = rawEarned;
-      if (timeOnly.includes(',')) {
-        const parts = timeOnly.split(',');
-        timeOnly = parts.slice(1).join(',').trim();
-      } else {
-        timeOnly = timeOnly.replace(/^\d{4}-\d{2}-\d{2}\s*/, '').replace(/^\d{1,2}\/\d{1,2}\/\d{4}\s*/, '').trim();
-      }
-      if (timeOnly && timeOnly.toLowerCase() !== '12:00 pm') {
-        return timeOnly;
-      }
+    // 2. Extract clean IST time using parseEntryIstInfo
+    const istInfo = parseEntryIstInfo(row);
+    if (istInfo && istInfo.displayTime && istInfo.displayTime !== '—') {
+      return istInfo.displayTime;
     }
 
     return '10:00 am';
@@ -758,14 +822,18 @@ export default function PassbookModal({
                 const instantReplySeen = {};
                 for (const entry of filteredEntries) {
                   if (entry && entry.description && entry.description.includes('Instant Reply')) {
-                    const dKey = getEntryDateKey(entry.earnedAt);
-                    const groupKey = `${entry.target || 'user'}_${dKey}`;
+                    const ist = parseEntryIstInfo(entry);
+                    const groupKey = `${entry.target || 'user'}_${ist.dateKey}`;
                     let entryMs = 0;
-                    if (entry.id && entry.id.startsWith('lb_instant_')) {
-                      entryMs = parseInt(entry.id.split('_')[2], 10);
+                    if (entry.id) {
+                      const idMatch = String(entry.id).match(/(\d{12,13})/);
+                      if (idMatch) entryMs = Number(idMatch[1]);
                     }
-                    if (isNaN(entryMs) || entryMs === 0) {
-                      try { entryMs = new Date(entry.earnedAt).getTime(); } catch (e) {}
+                    if (!entryMs) {
+                      const gbMatch = String(entry.earnedAt || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+                      if (gbMatch) {
+                        entryMs = Date.UTC(Number(gbMatch[3]), Number(gbMatch[2]) - 1, Number(gbMatch[1]), Number(gbMatch[4]), Number(gbMatch[5]), Number(gbMatch[6] || 0));
+                      }
                     }
                     if (entryMs > 0) {
                       if (!instantReplySeen[groupKey]) {
@@ -784,50 +852,51 @@ export default function PassbookModal({
                   deduplicated.push(entry);
                 }
 
-                // Bucket entries by Day
-                const dayBuckets = {};
+                // Bucket entries by Hour
+                const hourBuckets = {};
                 deduplicated.forEach(entry => {
-                  const dKey = getEntryDateKey(entry.earnedAt);
-                  if (!dayBuckets[dKey]) dayBuckets[dKey] = [];
-                  dayBuckets[dKey].push(entry);
+                  const istInfo = parseEntryIstInfo(entry);
+                  const hKey = istInfo.fullKey || 'Other_00';
+                  if (!hourBuckets[hKey]) hourBuckets[hKey] = [];
+                  hourBuckets[hKey].push(entry);
                 });
 
-                const sortedDayKeys = Object.keys(dayBuckets).sort((a, b) => b.localeCompare(a));
+                const sortedHourKeys = Object.keys(hourBuckets).sort((a, b) => b.localeCompare(a));
 
                 return (
                   <div className="space-y-4">
-                    {sortedDayKeys.map((dayKey) => {
-                      const dayEntries = dayBuckets[dayKey];
-                      const dayNet = dayEntries.reduce((sum, r) => sum + (Number(r.points) || 0), 0);
+                    {sortedHourKeys.map((hourKey) => {
+                      const hourEntries = hourBuckets[hourKey];
+                      const hourNet = hourEntries.reduce((sum, r) => sum + (Number(r.points) || 0), 0);
 
                       return (
-                        <div key={dayKey} className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden shadow-md">
-                          {/* DAY SECTION HEADER */}
+                        <div key={hourKey} className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden shadow-md">
+                          {/* HOUR SECTION HEADER */}
                           <div className="bg-[#141414] px-3.5 py-2.5 border-b border-[#252525] flex flex-wrap items-center justify-between gap-2">
                             <div className="flex items-center gap-2 flex-wrap min-w-0">
                               <span className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 whitespace-nowrap">
-                                {formatDayHeader(dayKey)}
+                                {formatHourHeader(hourKey)}
                               </span>
                               <span className="text-[10px] font-mono font-bold bg-[#222] text-gray-400 px-2 py-0.5 rounded-full border border-[#333] shrink-0">
-                                {dayEntries.length} {dayEntries.length === 1 ? 'record' : 'records'}
+                                {hourEntries.length} {hourEntries.length === 1 ? 'record' : 'records'}
                               </span>
                             </div>
                             <div className="shrink-0 ml-auto">
                               <span className={`text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap ${
-                                dayNet >= 0 
+                                hourNet >= 0 
                                   ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-500/30' 
                                   : 'bg-rose-950/70 text-rose-300 border border-rose-500/30'
                               }`}>
-                                Day Net: {dayNet >= 0 ? `+${dayNet.toFixed(2)}` : dayNet.toFixed(2)} pts
+                                Hour Net: {hourNet >= 0 ? `+${hourNet.toFixed(2)}` : hourNet.toFixed(2)} pts
                               </span>
                             </div>
                           </div>
 
                           {/* MOBILE VIEW: CLEAN CARD LIST (sm:hidden) */}
                           <div className="sm:hidden divide-y divide-[#222]">
-                            {dayEntries.map((row, rowIdx) => {
+                            {hourEntries.map((row, rowIdx) => {
                               const rawDesc = !isParentAdmin ? (row.description || '').replace(/^\[Dora\]\s*/i, '') : (row.description || '');
-                              const cleanDesc = rawDesc.replace(/\s*\(\d{4}-\d{2}-\d{2}\)$/, '').trim();
+                              const cleanDesc = rawDesc.replace(/\s*\(\d{4}-\d{2}-\d{2}\)$/, '').replace(/Within 5 Mins?/gi, 'Within 1 Min').trim();
 
                               let slotBadge = null;
                               const matchTask = (row.description || '').match(/(?:Routine Task|Approved Task|Task):\s*([^(]+)/i);
@@ -889,7 +958,7 @@ export default function PassbookModal({
                                   {row.remarks && row.remarks !== '—' && (
                                     <div className="text-[11px] text-gray-400 bg-[#121212] px-2.5 py-1.5 rounded-lg border border-[#222] break-words">
                                       <span className="text-gray-500 font-medium">Remarks: </span>
-                                      {row.remarks}
+                                      {(row.remarks || '').replace(/Within 5 Mins?/gi, 'Within 1 Min')}
                                     </div>
                                   )}
 
@@ -933,9 +1002,9 @@ export default function PassbookModal({
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-[#222] text-gray-300">
-                                {dayEntries.map((row, rowIdx) => {
+                                {hourEntries.map((row, rowIdx) => {
                                   const rawDesc = !isParentAdmin ? (row.description || '').replace(/^\[Dora\]\s*/i, '') : (row.description || '');
-                                  const cleanDesc = rawDesc.replace(/\s*\(\d{4}-\d{2}-\d{2}\)$/, '').trim();
+                                  const cleanDesc = rawDesc.replace(/\s*\(\d{4}-\d{2}-\d{2}\)$/, '').replace(/Within 5 Mins?/gi, 'Within 1 Min').trim();
 
                                   let slotBadge = null;
                                   const matchTask = (row.description || '').match(/(?:Routine Task|Approved Task|Task):\s*([^(]+)/i);
@@ -982,7 +1051,7 @@ export default function PassbookModal({
                                         </span>
                                       </td>
                                       <td className="py-2.5 px-3 text-gray-400 text-[11px] max-w-[220px] truncate" title={row.remarks}>
-                                        {row.remarks || '—'}
+                                        {(row.remarks || '—').replace(/Within 5 Mins?/gi, 'Within 1 Min')}
                                       </td>
                                       <td className="py-2.5 px-3 text-right">
                                         <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (
