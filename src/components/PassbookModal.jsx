@@ -86,8 +86,9 @@ export default function PassbookModal({
 
   // Parse entry timestamps and dates strictly into Indian Standard Time (IST / Asia/Kolkata)
   const parseEntryIstInfo = (entry) => {
+    const todayIstStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     if (!entry) {
-      return { dateKey: 'Other', hour: 0, displayTime: '—', fullKey: 'Other_00' };
+      return { dateKey: todayIstStr, hour: 12, displayTime: '—', fullKey: `${todayIstStr}_12`, entryMs: 0 };
     }
 
     // 1. Check if entry.id has a millisecond timestamp (e.g. lb_instant_1763877876123_user or 1763877876123)
@@ -100,23 +101,24 @@ export default function PassbookModal({
         const hourStr = d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', timeZone: 'Asia/Kolkata' });
         const displayTime = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }).toLowerCase();
         const hNum = parseInt(hourStr, 10) || 0;
-        return { dateKey, hour: hNum, displayTime, fullKey: `${dateKey}_${String(hNum).padStart(2, '0')}` };
+        return { dateKey, hour: hNum, displayTime, fullKey: `${dateKey}_${String(hNum).padStart(2, '0')}`, entryMs: ts };
       }
     }
 
     const rawEarned = String(entry.earnedAt || '').trim();
+    const remarks = String(entry.remarks || '').trim();
+    const desc = String(entry.description || '').trim();
 
     // 2. Check if rawEarned is DD/MM/YYYY, HH:mm:ss (UTC toLocaleString('en-GB') from cloud server)
     const gbMatch = rawEarned.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
     if (gbMatch) {
       const [, day, month, year, h, m, s] = gbMatch;
-      // Cloud server created this in UTC -> convert to IST
       const utcDate = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(h), Number(m), Number(s || 0)));
       const dateKey = utcDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       const hourStr = utcDate.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', timeZone: 'Asia/Kolkata' });
       const displayTime = utcDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }).toLowerCase();
       const hNum = parseInt(hourStr, 10) || 0;
-      return { dateKey, hour: hNum, displayTime, fullKey: `${dateKey}_${String(hNum).padStart(2, '0')}` };
+      return { dateKey, hour: hNum, displayTime, fullKey: `${dateKey}_${String(hNum).padStart(2, '0')}`, entryMs: utcDate.getTime() };
     }
 
     // 3. Check if rawEarned has YYYY-MM-DD, h:mm am/pm (our IST helper getNowIstEarnedAt)
@@ -129,15 +131,46 @@ export default function PassbookModal({
       if (ampm === 'pm' && hNum < 12) hNum += 12;
       if (ampm === 'am' && hNum === 12) hNum = 0;
       const displayTime = `${istMatch[2]}:${mNum} ${ampm || (hNum >= 12 ? 'pm' : 'am')}`.trim();
-      return { dateKey, hour: hNum, displayTime, fullKey: `${dateKey}_${String(hNum).padStart(2, '0')}` };
+      const approxMs = new Date(`${dateKey}T${String(hNum).padStart(2, '0')}:${mNum}:00+05:30`).getTime();
+      return { dateKey, hour: hNum, displayTime, fullKey: `${dateKey}_${String(hNum).padStart(2, '0')}`, entryMs: isNaN(approxMs) ? 0 : approxMs };
     }
 
-    // 4. Check if remarks has slot time like "(17:00 - 17:30)" or "(09:00 am)"
-    const remarks = String(entry.remarks || '').trim();
-    const slotMatch = remarks.match(/\b([0-9]{1,2}):([0-9]{2})\b/);
-    let hFromRemarks = null;
-    if (slotMatch) {
-      hFromRemarks = parseInt(slotMatch[1], 10);
+    // 4. Check if rawEarned is just "HH:mm:ss" (UTC string without date, e.g. "06:04:36")
+    const timeUtcMatch = rawEarned.match(/^(\d{1,2}):(\d{2}):(\d{2})$/);
+    if (timeUtcMatch) {
+      const [, h, m] = timeUtcMatch;
+      // Add 5 hours 30 mins to convert UTC to IST
+      let totalMins = parseInt(h, 10) * 60 + parseInt(m, 10) + 330;
+      if (totalMins >= 1440) totalMins -= 1440;
+      const istH = Math.floor(totalMins / 60);
+      const istM = totalMins % 60;
+      const ampm = istH >= 12 ? 'pm' : 'am';
+      const h12 = istH % 12 === 0 ? 12 : istH % 12;
+      const displayTime = `${h12}:${String(istM).padStart(2, '0')} ${ampm}`;
+      const approxMs = new Date(`${todayIstStr}T${String(istH).padStart(2, '0')}:${String(istM).padStart(2, '0')}:00+05:30`).getTime();
+      return { dateKey: todayIstStr, hour: istH, displayTime, fullKey: `${todayIstStr}_${String(istH).padStart(2, '0')}`, entryMs: isNaN(approxMs) ? 0 : approxMs };
+    }
+
+    // 5. Check if rawEarned is just "h:mm am/pm" (e.g. "11:32 am")
+    const time12Match = rawEarned.match(/^([0-9]{1,2}):([0-9]{2})\s*(am|pm)?/i);
+    if (time12Match) {
+      let hNum = parseInt(time12Match[1], 10);
+      const mNum = time12Match[2];
+      const ampm = (time12Match[3] || '').toLowerCase();
+      if (ampm === 'pm' && hNum < 12) hNum += 12;
+      if (ampm === 'am' && hNum === 12) hNum = 0;
+      const displayTime = `${time12Match[1]}:${mNum} ${ampm || (hNum >= 12 ? 'pm' : 'am')}`.trim();
+      const approxMs = new Date(`${todayIstStr}T${String(hNum).padStart(2, '0')}:${mNum}:00+05:30`).getTime();
+      return { dateKey: todayIstStr, hour: hNum, displayTime, fullKey: `${todayIstStr}_${String(hNum).padStart(2, '0')}`, entryMs: isNaN(approxMs) ? 0 : approxMs };
+    }
+
+    // 6. Check slot time range from remarks or description (e.g. "10:00 - 11:00" or "(10:00 am - 10:30 am)")
+    const slotRangeMatch = (remarks + ' ' + rawEarned + ' ' + desc).match(/\b([0-9]{1,2}):([0-9]{2})\s*(?:-\s*([0-9]{1,2}):([0-9]{2}))?\b/);
+    if (slotRangeMatch) {
+      let hNum = parseInt(slotRangeMatch[1], 10);
+      const slotTimeDisplay = slotRangeMatch[3] ? `${slotRangeMatch[1]}:${slotRangeMatch[2]} - ${slotRangeMatch[3]}:${slotRangeMatch[4]}` : `${slotRangeMatch[1]}:${slotRangeMatch[2]}`;
+      const approxMs = new Date(`${todayIstStr}T${String(hNum).padStart(2, '0')}:${slotRangeMatch[2]}:00+05:30`).getTime();
+      return { dateKey: todayIstStr, hour: hNum, displayTime: slotTimeDisplay, fullKey: `${todayIstStr}_${String(hNum).padStart(2, '0')}`, entryMs: isNaN(approxMs) ? 0 : approxMs };
     }
 
     // Fallback: standard date parsing
@@ -146,11 +179,33 @@ export default function PassbookModal({
       const dateKey = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       const hourStr = d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', timeZone: 'Asia/Kolkata' });
       const displayTime = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }).toLowerCase();
-      const hNum = hFromRemarks !== null ? hFromRemarks : (parseInt(hourStr, 10) || 0);
-      return { dateKey, hour: hNum, displayTime, fullKey: `${dateKey}_${String(hNum).padStart(2, '0')}` };
+      const hNum = parseInt(hourStr, 10) || 0;
+      return { dateKey, hour: hNum, displayTime, fullKey: `${dateKey}_${String(hNum).padStart(2, '0')}`, entryMs: d.getTime() };
     }
 
-    return { dateKey: 'Other', hour: 0, displayTime: rawEarned || '—', fullKey: 'Other_00' };
+    return { dateKey: todayIstStr, hour: 12, displayTime: rawEarned || '—', fullKey: `${todayIstStr}_12`, entryMs: 0 };
+  };
+
+  const formatDayHeader = (dateKey) => {
+    if (!dateKey || dateKey === 'Other') return '📅 Earlier Records';
+    try {
+      const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const yest = new Date();
+      yest.setDate(yest.getDate() - 1);
+      const yestStr = yest.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+      const parts = dateKey.split('-');
+      if (parts.length === 3) {
+        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        const formatted = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+        if (dateKey === todayStr) return `📅 Today • ${formatted}`;
+        if (dateKey === yestStr) return `📅 Yesterday • ${formatted}`;
+        return `📅 ${formatted}`;
+      }
+      return `📅 ${dateKey}`;
+    } catch (e) {
+      return `📅 ${dateKey}`;
+    }
   };
 
   const formatHourRange = (hour24) => {
@@ -824,23 +879,17 @@ export default function PassbookModal({
                   if (entry && entry.description && entry.description.includes('Instant Reply')) {
                     const ist = parseEntryIstInfo(entry);
                     const groupKey = `${entry.target || 'user'}_${ist.dateKey}`;
-                    let entryMs = 0;
-                    if (entry.id) {
+                    let entryMs = ist.entryMs || 0;
+                    if (!entryMs && entry.id) {
                       const idMatch = String(entry.id).match(/(\d{12,13})/);
                       if (idMatch) entryMs = Number(idMatch[1]);
-                    }
-                    if (!entryMs) {
-                      const gbMatch = String(entry.earnedAt || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-                      if (gbMatch) {
-                        entryMs = Date.UTC(Number(gbMatch[3]), Number(gbMatch[2]) - 1, Number(gbMatch[1]), Number(gbMatch[4]), Number(gbMatch[5]), Number(gbMatch[6] || 0));
-                      }
                     }
                     if (entryMs > 0) {
                       if (!instantReplySeen[groupKey]) {
                         instantReplySeen[groupKey] = [entryMs];
                         deduplicated.push(entry);
                       } else {
-                        const isClose = instantReplySeen[groupKey].some(prevMs => Math.abs(prevMs - entryMs) < 30 * 60 * 1000);
+                        const isClose = instantReplySeen[groupKey].some(prevMs => Math.abs(prevMs - entryMs) < 60 * 60 * 1000);
                         if (!isClose) {
                           instantReplySeen[groupKey].push(entryMs);
                           deduplicated.push(entry);
@@ -852,233 +901,286 @@ export default function PassbookModal({
                   deduplicated.push(entry);
                 }
 
-                // Bucket entries by Hour
-                const hourBuckets = {};
+                // Bucket entries by Day first, and inside each Day by Hour
+                const dayBuckets = {};
                 deduplicated.forEach(entry => {
                   const istInfo = parseEntryIstInfo(entry);
-                  const hKey = istInfo.fullKey || 'Other_00';
-                  if (!hourBuckets[hKey]) hourBuckets[hKey] = [];
-                  hourBuckets[hKey].push(entry);
+                  const dKey = istInfo.dateKey || 'Other';
+                  const hNum = istInfo.hour !== undefined ? istInfo.hour : 12;
+                  const hKey = String(hNum).padStart(2, '0');
+
+                  if (!dayBuckets[dKey]) {
+                    dayBuckets[dKey] = {
+                      dateKey: dKey,
+                      entries: [],
+                      hourGroups: {}
+                    };
+                  }
+                  dayBuckets[dKey].entries.push(entry);
+
+                  if (!dayBuckets[dKey].hourGroups[hKey]) {
+                    dayBuckets[dKey].hourGroups[hKey] = {
+                      hour: hNum,
+                      hourKey: hKey,
+                      entries: []
+                    };
+                  }
+                  dayBuckets[dKey].hourGroups[hKey].entries.push(entry);
                 });
 
-                const sortedHourKeys = Object.keys(hourBuckets).sort((a, b) => b.localeCompare(a));
+                const sortedDayKeys = Object.keys(dayBuckets).sort((a, b) => b.localeCompare(a));
 
                 return (
-                  <div className="space-y-4">
-                    {sortedHourKeys.map((hourKey) => {
-                      const hourEntries = hourBuckets[hourKey];
-                      const hourNet = hourEntries.reduce((sum, r) => sum + (Number(r.points) || 0), 0);
+                  <div className="space-y-6">
+                    {sortedDayKeys.map((dayKey) => {
+                      const dayData = dayBuckets[dayKey];
+                      const dayEntries = dayData.entries;
+                      const dayNet = dayEntries.reduce((sum, r) => sum + (Number(r.points) || 0), 0);
+                      const sortedHourKeys = Object.keys(dayData.hourGroups).sort((a, b) => Number(b) - Number(a));
 
                       return (
-                        <div key={hourKey} className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden shadow-md">
-                          {/* HOUR SECTION HEADER */}
-                          <div className="bg-[#141414] px-3.5 py-2.5 border-b border-[#252525] flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <div key={dayKey} className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden shadow-lg">
+                          {/* DAY MAIN HEADER */}
+                          <div className="bg-[#141414] px-4 py-3 border-b border-[#252525] flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5 flex-wrap min-w-0">
                               <span className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 whitespace-nowrap">
-                                {formatHourHeader(hourKey)}
+                                {formatDayHeader(dayKey)}
                               </span>
-                              <span className="text-[10px] font-mono font-bold bg-[#222] text-gray-400 px-2 py-0.5 rounded-full border border-[#333] shrink-0">
-                                {hourEntries.length} {hourEntries.length === 1 ? 'record' : 'records'}
+                              <span className="text-[10px] font-mono font-bold bg-[#222] text-gray-400 px-2.5 py-0.5 rounded-full border border-[#333] shrink-0">
+                                {dayEntries.length} {dayEntries.length === 1 ? 'record' : 'records'}
                               </span>
                             </div>
                             <div className="shrink-0 ml-auto">
-                              <span className={`text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap ${
-                                hourNet >= 0 
-                                  ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-500/30' 
-                                  : 'bg-rose-950/70 text-rose-300 border border-rose-500/30'
+                              <span className={`text-[11px] font-mono font-bold px-3 py-1 rounded-full whitespace-nowrap ${
+                                dayNet >= 0 
+                                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/40' 
+                                  : 'bg-rose-950/80 text-rose-300 border border-rose-500/40'
                               }`}>
-                                Hour Net: {hourNet >= 0 ? `+${hourNet.toFixed(2)}` : hourNet.toFixed(2)} pts
+                                Day Net: {dayNet >= 0 ? `+${dayNet.toFixed(2)}` : dayNet.toFixed(2)} pts
                               </span>
                             </div>
                           </div>
 
-                          {/* MOBILE VIEW: CLEAN CARD LIST (sm:hidden) */}
-                          <div className="sm:hidden divide-y divide-[#222]">
-                            {hourEntries.map((row, rowIdx) => {
-                              const rawDesc = !isParentAdmin ? (row.description || '').replace(/^\[Dora\]\s*/i, '') : (row.description || '');
-                              const cleanDesc = rawDesc.replace(/\s*\(\d{4}-\d{2}-\d{2}\)$/, '').replace(/Within 5 Mins?/gi, 'Within 1 Min').trim();
-
-                              let slotBadge = null;
-                              const matchTask = (row.description || '').match(/(?:Routine Task|Approved Task|Task):\s*([^(]+)/i);
-                              if (matchTask) {
-                                slotBadge = matchTask[1].trim();
-                              } else if ((row.description || '').toLowerCase().includes('morning greeting')) {
-                                slotBadge = 'Morning Sweet Text';
-                              } else if ((row.description || '').toLowerCase().includes('good night') || (row.description || '').toLowerCase().includes('night skin')) {
-                                slotBadge = 'Night Care / Good Night';
-                              } else if (row.remarks && row.remarks.includes('Deadline')) {
-                                slotBadge = 'Routine Habit';
-                              }
-
-                              const isDeduction = row.type === 'debit' || row.points < 0;
+                          {/* INSIDE DAY: HOURLY SECTIONS */}
+                          <div className="p-2 sm:p-3 space-y-3">
+                            {sortedHourKeys.map((hKey) => {
+                              const hourGroup = dayData.hourGroups[hKey];
+                              const hourEntries = hourGroup.entries;
+                              const hourNet = hourEntries.reduce((sum, r) => sum + (Number(r.points) || 0), 0);
+                              const hourRange = formatHourRange(hourGroup.hour);
 
                               return (
-                                <div key={row.id || rowIdx} className="p-3 space-y-1.5 hover:bg-[#1f1f1f] transition-colors">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div className="flex items-start gap-2 min-w-0">
-                                      <span className="font-mono text-[10px] text-gray-400 font-bold bg-[#111] px-1.5 py-0.5 rounded border border-[#262626] shrink-0 mt-0.5">
-                                        #{rowIdx + 1}
+                                <div key={hKey} className="bg-[#121212] border border-[#242424] rounded-xl overflow-hidden shadow-sm">
+                                  {/* HOUR SUB-HEADER */}
+                                  <div className="bg-[#191919] px-3.5 py-2 border-b border-[#252525] flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="text-xs font-bold text-amber-300/90 font-mono flex items-center gap-1.5">
+                                        🕒 {hourRange}
                                       </span>
-                                      <div className="min-w-0">
-                                        <h5 className="text-xs font-bold text-white leading-snug break-words">
-                                          {cleanDesc}
-                                        </h5>
-                                        <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                                          <span className="text-[11px] font-mono text-gray-300 font-semibold">
-                                            🕒 {formatRowTimeOnly(row)}
-                                          </span>
-                                          {slotBadge && (
-                                            <span className="text-[10px] font-sans font-bold text-blue-400">
-                                              📍 {slotBadge}
-                                            </span>
-                                          )}
-                                          <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold ${
-                                            isDeduction 
-                                              ? 'bg-rose-950/80 text-rose-300 border border-rose-500/30' 
-                                              : 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'
-                                          }`}>
-                                            {isDeduction ? 'Cut' : 'Earned'}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="text-right shrink-0">
-                                      <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold inline-block ${
-                                        row.points > 0 
-                                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                                          : (row.status === 'Redeemed'
-                                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                                              : 'bg-rose-500/20 text-rose-400 border border-rose-500/30')
-                                      }`}>
-                                        {row.points > 0 ? '+' + Number(row.points).toFixed(2) : Number(row.points).toFixed(2)}
+                                      <span className="text-[10px] font-mono text-gray-400 bg-[#222] px-2 py-0.2 rounded-full border border-[#333]">
+                                        {hourEntries.length} {hourEntries.length === 1 ? 'item' : 'items'}
                                       </span>
                                     </div>
+                                    <span className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full ${
+                                      hourNet >= 0 
+                                        ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30' 
+                                        : 'bg-rose-950/60 text-rose-300 border border-rose-500/30'
+                                    }`}>
+                                      Hour Net: {hourNet >= 0 ? `+${hourNet.toFixed(2)}` : hourNet.toFixed(2)} pts
+                                    </span>
                                   </div>
 
-                                  {row.remarks && row.remarks !== '—' && (
-                                    <div className="text-[11px] text-gray-400 bg-[#121212] px-2.5 py-1.5 rounded-lg border border-[#222] break-words">
-                                      <span className="text-gray-500 font-medium">Remarks: </span>
-                                      {(row.remarks || '').replace(/Within 5 Mins?/gi, 'Within 1 Min')}
-                                    </div>
-                                  )}
+                                  {/* MOBILE VIEW FOR THIS HOUR (sm:hidden) */}
+                                  <div className="sm:hidden divide-y divide-[#1e1e1e]">
+                                    {hourEntries.map((row, rowIdx) => {
+                                      const rawDesc = !isParentAdmin ? (row.description || '').replace(/^\[Dora\]\s*/i, '') : (row.description || '');
+                                      const cleanDesc = rawDesc.replace(/\s*\(\d{4}-\d{2}-\d{2}\)$/, '').replace(/Within 5 Mins?/gi, 'Within 1 Min').trim();
 
-                                  <div className="flex items-center justify-between pt-0.5">
-                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                                      row.status === 'Confirmed' 
-                                        ? 'bg-emerald-600/90 text-white' 
-                                        : (row.status === 'Redeemed' ? 'bg-amber-600/90 text-white' : 'bg-rose-600/90 text-white')
-                                    }`}>
-                                      {row.status}
-                                    </span>
-                                    {isParentAdmin && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteTransaction(row.id)}
-                                        className="text-gray-500 hover:text-rose-400 p-1 rounded hover:bg-rose-950/40 cursor-pointer flex items-center gap-1 text-[11px]"
-                                        title="Delete this record"
-                                      >
-                                        <Trash2 size={12} />
-                                        <span>Delete</span>
-                                      </button>
-                                    )}
+                                      let slotBadge = null;
+                                      const matchTask = (row.description || '').match(/(?:Routine Task|Approved Task|Task):\s*([^(]+)/i);
+                                      if (matchTask) {
+                                        slotBadge = matchTask[1].trim();
+                                      } else if ((row.description || '').toLowerCase().includes('morning greeting')) {
+                                        slotBadge = 'Morning Sweet Text';
+                                      } else if ((row.description || '').toLowerCase().includes('good night') || (row.description || '').toLowerCase().includes('night skin')) {
+                                        slotBadge = 'Night Care / Good Night';
+                                      } else if (row.remarks && row.remarks.includes('Deadline')) {
+                                        slotBadge = 'Routine Habit';
+                                      }
+
+                                      const isDeduction = row.type === 'debit' || row.points < 0;
+
+                                      return (
+                                        <div key={row.id || rowIdx} className="p-3 space-y-1.5 hover:bg-[#1a1a1a] transition-colors">
+                                          <div className="flex items-start justify-between gap-2">
+                                            <div className="flex items-start gap-2 min-w-0">
+                                              <span className="font-mono text-[10px] text-gray-400 font-bold bg-[#111] px-1.5 py-0.5 rounded border border-[#262626] shrink-0 mt-0.5">
+                                                #{rowIdx + 1}
+                                              </span>
+                                              <div className="min-w-0">
+                                                <h5 className="text-xs font-bold text-white leading-snug break-words">
+                                                  {cleanDesc}
+                                                </h5>
+                                                <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                                  <span className="text-[11px] font-mono text-gray-300 font-semibold">
+                                                    🕒 {formatRowTimeOnly(row)}
+                                                  </span>
+                                                  {slotBadge && (
+                                                    <span className="text-[10px] font-sans font-bold text-blue-400">
+                                                      📍 {slotBadge}
+                                                    </span>
+                                                  )}
+                                                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold ${
+                                                    isDeduction 
+                                                      ? 'bg-rose-950/80 text-rose-300 border border-rose-500/30' 
+                                                      : 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'
+                                                  }`}>
+                                                    {isDeduction ? 'Cut' : 'Earned'}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            </div>
+                                            <div className="text-right shrink-0">
+                                              <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold inline-block ${
+                                                row.points > 0 
+                                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                                                  : (row.status === 'Redeemed'
+                                                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                                      : 'bg-rose-500/20 text-rose-400 border border-rose-500/30')
+                                              }`}>
+                                                {row.points > 0 ? '+' + Number(row.points).toFixed(2) : Number(row.points).toFixed(2)}
+                                              </span>
+                                            </div>
+                                          </div>
+
+                                          {row.remarks && row.remarks !== '—' && (
+                                            <div className="text-[11px] text-gray-400 bg-[#141414] px-2.5 py-1.5 rounded-lg border border-[#222] break-words">
+                                              <span className="text-gray-500 font-medium">Remarks: </span>
+                                              {(row.remarks || '').replace(/Within 5 Mins?/gi, 'Within 1 Min')}
+                                            </div>
+                                          )}
+
+                                          <div className="flex items-center justify-between pt-0.5">
+                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                              row.status === 'Confirmed' 
+                                                ? 'bg-emerald-600/90 text-white' 
+                                                : (row.status === 'Redeemed' ? 'bg-amber-600/90 text-white' : 'bg-rose-600/90 text-white')
+                                            }`}>
+                                              {row.status}
+                                            </span>
+                                            {isParentAdmin && (
+                                              <button
+                                                type="button"
+                                                onClick={() => handleDeleteTransaction(row.id)}
+                                                className="text-gray-500 hover:text-rose-400 p-1 rounded hover:bg-rose-950/40 cursor-pointer flex items-center gap-1 text-[11px]"
+                                                title="Delete this record"
+                                              >
+                                                <Trash2 size={12} />
+                                                <span>Delete</span>
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+
+                                  {/* DESKTOP VIEW FOR THIS HOUR (hidden sm:block) */}
+                                  <div className="hidden sm:block overflow-x-auto">
+                                    <table className="w-full text-left text-xs font-sans min-w-[620px]">
+                                      <thead className="bg-[#151515] text-gray-400 uppercase text-[10px] font-mono border-b border-[#222]">
+                                        <tr>
+                                          <th className="py-2 px-3 w-10">SL</th>
+                                          <th className="py-2 px-3">Description</th>
+                                          <th className="py-2 px-3">Earned At</th>
+                                          <th className="py-2 px-3">Points</th>
+                                          <th className="py-2 px-3">Remarks</th>
+                                          <th className="py-2 px-3 text-right">Status</th>
+                                          {isParentAdmin && <th className="py-2 px-3 text-center w-10">Action</th>}
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-[#1e1e1e] text-gray-300">
+                                        {hourEntries.map((row, rowIdx) => {
+                                          const rawDesc = !isParentAdmin ? (row.description || '').replace(/^\[Dora\]\s*/i, '') : (row.description || '');
+                                          const cleanDesc = rawDesc.replace(/\s*\(\d{4}-\d{2}-\d{2}\)$/, '').replace(/Within 5 Mins?/gi, 'Within 1 Min').trim();
+
+                                          let slotBadge = null;
+                                          const matchTask = (row.description || '').match(/(?:Routine Task|Approved Task|Task):\s*([^(]+)/i);
+                                          if (matchTask) {
+                                            slotBadge = matchTask[1].trim();
+                                          } else if ((row.description || '').toLowerCase().includes('morning greeting')) {
+                                            slotBadge = 'Morning Sweet Text';
+                                          } else if ((row.description || '').toLowerCase().includes('good night') || (row.description || '').toLowerCase().includes('night skin')) {
+                                            slotBadge = 'Night Care / Good Night';
+                                          } else if (row.remarks && row.remarks.includes('Deadline')) {
+                                            slotBadge = 'Routine Habit';
+                                          }
+
+                                          const isDeduction = row.type === 'debit' || row.points < 0;
+
+                                          return (
+                                            <tr key={row.id || rowIdx} className="hover:bg-[#1c1c1c] transition-colors">
+                                              <td className="py-2 px-3 font-mono text-gray-400 font-bold">{rowIdx + 1}</td>
+                                              <td className="py-2 px-3 font-bold text-white max-w-[280px]">
+                                                <div>{cleanDesc}</div>
+                                              </td>
+                                              <td className="py-2 px-3 font-mono text-[11px] text-gray-300">
+                                                <div className="text-gray-200 font-semibold">{formatRowTimeOnly(row)}</div>
+                                                {slotBadge && (
+                                                  <div className="text-[10px] font-sans font-bold flex items-center gap-1 mt-0.5">
+                                                    <span className="text-blue-400">📍 {slotBadge}</span>
+                                                    <span className={`text-[9px] px-1 py-0.2 rounded font-mono ${
+                                                      isDeduction ? 'bg-rose-950/70 text-rose-300 border border-rose-500/30' : 'bg-emerald-950/70 text-emerald-300 border border-emerald-500/30'
+                                                    }`}>
+                                                      {isDeduction ? 'Cut' : 'Earned'}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                              </td>
+                                              <td className="py-2 px-3 font-mono font-bold">
+                                                <span className={'px-2 py-0.5 rounded-full text-[11px] ' + (
+                                                  row.points > 0 
+                                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                                                    : (row.status === 'Redeemed'
+                                                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                                        : 'bg-rose-500/20 text-rose-400 border border-rose-500/30')
+                                                )}>
+                                                  {row.points > 0 ? '+' + Number(row.points).toFixed(2) : Number(row.points).toFixed(2)}
+                                                </span>
+                                              </td>
+                                              <td className="py-2 px-3 text-gray-400 text-[11px] max-w-[220px] truncate" title={row.remarks}>
+                                                {(row.remarks || '—').replace(/Within 5 Mins?/gi, 'Within 1 Min')}
+                                              </td>
+                                              <td className="py-2 px-3 text-right">
+                                                <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (
+                                                  row.status === 'Confirmed' 
+                                                    ? 'bg-emerald-600 text-white' 
+                                                    : (row.status === 'Redeemed' ? 'bg-amber-600 text-white' : 'bg-rose-600 text-white')
+                                                )}>
+                                                  {row.status}
+                                                </span>
+                                              </td>
+                                              {isParentAdmin && (
+                                                <td className="py-2 px-3 text-center">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleDeleteTransaction(row.id)}
+                                                    className="p-1 text-gray-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg cursor-pointer transition-all"
+                                                    title="Delete this transaction permanently"
+                                                  >
+                                                    <Trash2 size={13} />
+                                                  </button>
+                                                </td>
+                                              )}
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
                                   </div>
                                 </div>
                               );
                             })}
-                          </div>
-
-                          {/* DESKTOP VIEW: TRANSACTIONS TABLE (hidden sm:block) */}
-                          <div className="hidden sm:block overflow-x-auto">
-                            <table className="w-full text-left text-xs font-sans min-w-[620px]">
-                              <thead className="bg-[#101010] text-gray-400 uppercase text-[10px] font-mono border-b border-[#222]">
-                                <tr>
-                                  <th className="py-2.5 px-3 w-10">SL</th>
-                                  <th className="py-2.5 px-3">Description</th>
-                                  <th className="py-2.5 px-3">Earned At</th>
-                                  <th className="py-2.5 px-3">Points</th>
-                                  <th className="py-2.5 px-3">Remarks</th>
-                                  <th className="py-2.5 px-3 text-right">Status</th>
-                                  {isParentAdmin && <th className="py-2.5 px-3 text-center w-10">Action</th>}
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-[#222] text-gray-300">
-                                {hourEntries.map((row, rowIdx) => {
-                                  const rawDesc = !isParentAdmin ? (row.description || '').replace(/^\[Dora\]\s*/i, '') : (row.description || '');
-                                  const cleanDesc = rawDesc.replace(/\s*\(\d{4}-\d{2}-\d{2}\)$/, '').replace(/Within 5 Mins?/gi, 'Within 1 Min').trim();
-
-                                  let slotBadge = null;
-                                  const matchTask = (row.description || '').match(/(?:Routine Task|Approved Task|Task):\s*([^(]+)/i);
-                                  if (matchTask) {
-                                    slotBadge = matchTask[1].trim();
-                                  } else if ((row.description || '').toLowerCase().includes('morning greeting')) {
-                                    slotBadge = 'Morning Sweet Text';
-                                  } else if ((row.description || '').toLowerCase().includes('good night') || (row.description || '').toLowerCase().includes('night skin')) {
-                                    slotBadge = 'Night Care / Good Night';
-                                  } else if (row.remarks && row.remarks.includes('Deadline')) {
-                                    slotBadge = 'Routine Habit';
-                                  }
-
-                                  const isDeduction = row.type === 'debit' || row.points < 0;
-
-                                  return (
-                                    <tr key={row.id || rowIdx} className="hover:bg-[#202020] transition-colors">
-                                      <td className="py-2.5 px-3 font-mono text-gray-400 font-bold">{rowIdx + 1}</td>
-                                      <td className="py-2.5 px-3 font-bold text-white max-w-[280px]">
-                                        <div>{cleanDesc}</div>
-                                      </td>
-                                      <td className="py-2.5 px-3 font-mono text-[11px] text-gray-300">
-                                        <div className="text-gray-200 font-semibold">{formatRowTimeOnly(row)}</div>
-                                        {slotBadge && (
-                                          <div className="text-[10px] font-sans font-bold flex items-center gap-1 mt-0.5">
-                                            <span className="text-blue-400">📍 {slotBadge}</span>
-                                            <span className={`text-[9px] px-1 py-0.2 rounded font-mono ${
-                                              isDeduction ? 'bg-rose-950/70 text-rose-300 border border-rose-500/30' : 'bg-emerald-950/70 text-emerald-300 border border-emerald-500/30'
-                                            }`}>
-                                              {isDeduction ? 'Cut' : 'Earned'}
-                                            </span>
-                                          </div>
-                                        )}
-                                      </td>
-                                      <td className="py-2.5 px-3 font-mono font-bold">
-                                        <span className={'px-2 py-0.5 rounded-full text-[11px] ' + (
-                                          row.points > 0 
-                                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                                            : (row.status === 'Redeemed'
-                                                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                                                : 'bg-rose-500/20 text-rose-400 border border-rose-500/30')
-                                        )}>
-                                          {row.points > 0 ? '+' + Number(row.points).toFixed(2) : Number(row.points).toFixed(2)}
-                                        </span>
-                                      </td>
-                                      <td className="py-2.5 px-3 text-gray-400 text-[11px] max-w-[220px] truncate" title={row.remarks}>
-                                        {(row.remarks || '—').replace(/Within 5 Mins?/gi, 'Within 1 Min')}
-                                      </td>
-                                      <td className="py-2.5 px-3 text-right">
-                                        <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (
-                                          row.status === 'Confirmed' 
-                                            ? 'bg-emerald-600 text-white' 
-                                            : (row.status === 'Redeemed' ? 'bg-amber-600 text-white' : 'bg-rose-600 text-white')
-                                        )}>
-                                          {row.status}
-                                        </span>
-                                      </td>
-                                      {isParentAdmin && (
-                                        <td className="py-2.5 px-3 text-center">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleDeleteTransaction(row.id)}
-                                            className="p-1 text-gray-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg cursor-pointer transition-all"
-                                            title="Delete this transaction permanently"
-                                          >
-                                            <Trash2 size={13} />
-                                          </button>
-                                        </td>
-                                      )}
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
                           </div>
                         </div>
                       );
