@@ -510,10 +510,21 @@ export default function App() {
             .filter(item => item && !isLegacyMockEntry(item))
             // Remove any accidental scratch card debit mistakenly charged to Dora
             .filter(item => !(item.target === 'user' && typeof item.description === 'string' && item.description.includes('Opened Surprise Scratch Card')))
-            .map(item => ({
-              ...item,
-              target: item.target || (item.description && item.description.includes('[Darsh]') ? 'admin' : 'user')
-            }));
+            .map(item => {
+              const res = {
+                ...item,
+                target: item.target || (item.description && item.description.includes('[Darsh]') ? 'admin' : 'user')
+              };
+              if (res.description && res.description.includes('Instant Reply')) {
+                res.description = res.description.replace(/Within (?:5|1) Mins?/gi, 'Within 30 Sec');
+                if (res.remarks) res.remarks = res.remarks.replace(/Within (?:5|1) Mins?/gi, 'Within 30 Sec');
+                res.points = 0.50;
+              }
+              if (res.description && (res.description.includes('Deep Romantic Long Message') || res.description.includes('Romantic Paragraph'))) {
+                res.points = 1.00;
+              }
+              return res;
+            });
 
           // Ensure Darsh permanently has his 71.00 base reserve entry
           if (!cleaned.some(e => e && (e.id === DARSH_BASE_TX_ID || (e.target === 'admin' && Number(e.points) >= 71)))) {
@@ -3321,8 +3332,8 @@ export default function App() {
       }
     }
 
-    // 3. Instant Reply within 5 minutes (+1 Point) - 5-MIN COOLDOWN
-    // Checked when either user replies to a message sent by counterpart within 5 mins
+    // 3. Instant Reply within 30 seconds (+0.50 Point) - 30-SEC WINDOW
+    // Checked when either user replies to a message sent by counterpart within 30 seconds
     const lastInstantKey = 'lb_last_instant_' + targetUser;
     const lastInstantTime = Number(localStorage.getItem(lastInstantKey) || 0);
     const isCounterpartMsg = prevMessage && (
@@ -3332,9 +3343,9 @@ export default function App() {
     );
     if (isCounterpartMsg && prevMessage.timestamp) {
       const diffMs = Math.abs(Date.now() - new Date(prevMessage.timestamp).getTime());
-      if (diffMs <= 5 * 60 * 1000 && (Date.now() - lastInstantTime >= 4 * 60 * 1000)) {
+      if (diffMs <= 30 * 1000 && (Date.now() - lastInstantTime >= 30 * 1000)) {
         localStorage.setItem(lastInstantKey, Date.now().toString());
-        handleLoveBalanceTransaction(1.00, 'credit', 'Instant Reply (Within 5 Mins)', false, targetUser);
+        handleLoveBalanceTransaction(0.50, 'credit', 'Instant Reply (Within 30 Sec)', false, targetUser);
       }
     }
 
@@ -3368,13 +3379,13 @@ export default function App() {
       }
     }
 
-    // 6. Long Romantic Paragraph (+10 Points) - 30-MIN COOLDOWN
+    // 6. Long Romantic Paragraph (+1.00 Point) - 30-MIN COOLDOWN
     const lastLongKey = 'lb_last_long_' + targetUser;
     const lastLongTime = Number(localStorage.getItem(lastLongKey) || 0);
     if (cleanText.length >= 70) {
       if (Date.now() - lastLongTime >= 30 * 60 * 1000) {
         localStorage.setItem(lastLongKey, Date.now().toString());
-        handleLoveBalanceTransaction(10.00, 'credit', 'Deep Romantic Long Message', false, targetUser);
+        handleLoveBalanceTransaction(1.00, 'credit', 'Deep Romantic Long Message', false, targetUser);
       }
     }
 
@@ -7857,10 +7868,10 @@ export default function App() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleAwardMessageKarma(m, 10.00, 'Deep Romantic Talk')}
+                                    onClick={() => handleAwardMessageKarma(m, 1.00, 'Deep Romantic Talk')}
                                     className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
                                   >
-                                    +10 ₹ Romantic Talk
+                                    +1 ₹ Romantic Talk
                                   </button>
                                 </div>
                               )}
@@ -9165,10 +9176,10 @@ export default function App() {
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => handleAwardMessageKarma(m, 10.00, 'Deep Romantic Talk')}
+                                            onClick={() => handleAwardMessageKarma(m, 1.00, 'Deep Romantic Talk')}
                                             className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
                                           >
-                                            +10 ₹ Romantic Talk
+                                            +1 ₹ Romantic Talk
                                           </button>
                                         </div>
                                       )}
@@ -9411,10 +9422,10 @@ export default function App() {
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-xs">
                             {[
                               { label: '+₹2 Morning Text', amount: 2, reason: 'Sweet Morning Wish' },
-                              { label: '+₹1 Fast Reply', amount: 1, reason: 'Instant Reply Under 30s' },
+                              { label: '+₹0.5 Fast Reply', amount: 0.5, reason: 'Instant Reply Under 30s' },
                               { label: '+₹3 Compliment', amount: 3, reason: 'Cute Romantic Compliment' },
                               { label: '+₹5 Song/Movie', amount: 5, reason: 'Recommended Good Music/Film' },
-                              { label: '+₹10 Paragraph', amount: 10, reason: 'Long Romantic Paragraph' },
+                              { label: '+₹1 Paragraph', amount: 1, reason: 'Long Romantic Paragraph' },
                               { label: '+₹15 Milestone', amount: 15, reason: 'Daily Relationship Milestone' },
                             ].map((preset, pIdx) => (
                               <button
