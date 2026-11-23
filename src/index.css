@@ -76,3 +76,16 @@ a {
   background: rgba(59, 130, 246, 0.4);
   color: #ffffff;
 }
+
+/* GPU-Accelerated Smooth 60fps Scrolling & Off-screen skipping */
+.will-change-transform {
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+
+/* Off-screen list optimization: Browser skips rendering until scrolled into view */
+.content-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 50px;
+}

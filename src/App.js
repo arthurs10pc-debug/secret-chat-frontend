@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import io from 'socket.io-client';
 import CryptoJS from 'crypto-js';
 import jsPDF from 'jspdf';
@@ -37,18 +37,19 @@ import {
   extractYouTubeId
 } from './constants';
 
-import PassbookModal from './components/PassbookModal';
-import WishApprovalModal from './components/WishApprovalModal';
-import ClearConfirmModal from './components/ClearConfirmModal';
-import AnswerPendingModal from './components/AnswerPendingModal';
-import RoutineSlotModal from './components/RoutineSlotModal';
-import SlotReportModal from './components/SlotReportModal';
-import ImagePreviewModal from './components/ImagePreviewModal';
+// Code-split heavy modals with React.lazy for instant initial page loading
+const PassbookModal = lazy(() => import('./components/PassbookModal'));
+const WishApprovalModal = lazy(() => import('./components/WishApprovalModal'));
+const ClearConfirmModal = lazy(() => import('./components/ClearConfirmModal'));
+const AnswerPendingModal = lazy(() => import('./components/AnswerPendingModal'));
+const RoutineSlotModal = lazy(() => import('./components/RoutineSlotModal'));
+const SlotReportModal = lazy(() => import('./components/SlotReportModal'));
+const ImagePreviewModal = lazy(() => import('./components/ImagePreviewModal'));
+const CoupleMiniGameModal = lazy(() => import('./components/CoupleMiniGameModal'));
+const LudoGameModal = lazy(() => import('./components/LudoGameModal'));
+const GamesHubModal = lazy(() => import('./components/GamesHubModal'));
 import DarshAssistantBot from './components/DarshAssistantBot';
 import StealthAlertBubble from './components/StealthAlertBubble';
-import CoupleMiniGameModal from './components/CoupleMiniGameModal';
-import LudoGameModal from './components/LudoGameModal';
-import GamesHubModal from './components/GamesHubModal';
 import WhatsAppMediaTray from './components/WhatsAppMediaTray';
 import CircularVideoNoteModal from './components/CircularVideoNoteModal';
 import AudioMessageBubble from './components/AudioMessageBubble';
@@ -11301,9 +11302,10 @@ export default function App() {
           </div>
         )}
 
-        {/* MODULAR COMPONENTS: PASSBOOK & WISH STORE */}
-        <PassbookModal
-          showLoveBalanceModal={showLoveBalanceModal}
+        {/* LAZY LOADED MODALS SUSPENSE WRAPPER */}
+        <Suspense fallback={null}>
+          <PassbookModal
+            showLoveBalanceModal={showLoveBalanceModal}
           setShowLoveBalanceModal={setShowLoveBalanceModal}
           displayedLoveBalance={displayedLoveBalance}
           formatLoveBalance={formatLoveBalance}
@@ -11457,9 +11459,12 @@ export default function App() {
           setSchedTime2={setSchedTime2}
           handleScheduleAlertSubmit={handleScheduleAlertSubmit}
         />
+        </Suspense>
 
       </main>
 
+        {/* LAZY LOADED MODALS OUTSIDE MAIN */}
+        <Suspense fallback={null}>
         {/* CLEAR ALL CONFIRMATION POPUP */}
         <ClearConfirmModal
           showClearConfirmModal={showClearConfirmModal}
@@ -11552,6 +11557,7 @@ export default function App() {
           }}
           isOverdue={checkSlotOverdue(dailySlots.find(s => s.id === dailySelectedSlotId), dailySelectedDate)}
         />
+        </Suspense>
     </div>
   );
 }
