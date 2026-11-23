@@ -37,6 +37,13 @@ import {
   extractYouTubeId
 } from './constants';
 
+import DarshAssistantBot from './components/DarshAssistantBot';
+import StealthAlertBubble from './components/StealthAlertBubble';
+import WhatsAppMediaTray from './components/WhatsAppMediaTray';
+import CircularVideoNoteModal from './components/CircularVideoNoteModal';
+import AudioMessageBubble from './components/AudioMessageBubble';
+import CircularVideoNoteBubble from './components/CircularVideoNoteBubble';
+
 // Code-split heavy modals with React.lazy for instant initial page loading
 const PassbookModal = lazy(() => import('./components/PassbookModal'));
 const WishApprovalModal = lazy(() => import('./components/WishApprovalModal'));
@@ -48,12 +55,6 @@ const ImagePreviewModal = lazy(() => import('./components/ImagePreviewModal'));
 const CoupleMiniGameModal = lazy(() => import('./components/CoupleMiniGameModal'));
 const LudoGameModal = lazy(() => import('./components/LudoGameModal'));
 const GamesHubModal = lazy(() => import('./components/GamesHubModal'));
-import DarshAssistantBot from './components/DarshAssistantBot';
-import StealthAlertBubble from './components/StealthAlertBubble';
-import WhatsAppMediaTray from './components/WhatsAppMediaTray';
-import CircularVideoNoteModal from './components/CircularVideoNoteModal';
-import AudioMessageBubble from './components/AudioMessageBubble';
-import CircularVideoNoteBubble from './components/CircularVideoNoteBubble';
 
 const getEmbedUrl = (server, imdbId) => {
   const cleanId = imdbId.trim();
@@ -7897,7 +7898,7 @@ export default function App() {
           title="Swipe right from edge to open chats"
         />
         {/* MOBILE CHATGPT HEADER (MATCHING OFFICIAL CHATGPT APP - IMAGE 1) */}
-        <header className="md:hidden h-14 bg-black flex items-center justify-between px-4 shrink-0 z-20 select-none">
+        <header className="md:hidden h-14 bg-black flex items-center justify-between px-3 shrink-0 z-20 select-none gap-2">
           {/* LEFT: CIRCULAR HAMBURGER BUTTON */}
           <button 
             type="button"
@@ -7908,29 +7909,73 @@ export default function App() {
             <Menu size={20} className="text-white" />
           </button>
 
-          {/* CENTER: GET PLUS PILL BUTTON */}
-          <button
-            type="button"
-            onClick={() => {
-              setShowLoveBalanceModal(true);
-              setLoveModalTab(hasIncomingPendingWish ? 'claimed' : 'passbook');
-            }}
-            onContextMenu={(e) => {
-              if (role === 'parent') {
-                e.preventDefault();
-                setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth');
-              }
-            }}
-            className={`px-4 py-1.5 rounded-full flex items-center gap-1.5 transition-all active:scale-95 shadow cursor-pointer ${
-              hasIncomingPendingWish 
-                ? 'bg-pink-900/80 text-pink-200 border border-pink-400 animate-pulse' 
-                : 'bg-[#1e2430] hover:bg-[#283244] text-[#8cb2ea] border border-[#2d3a4f]/50'
-            }`}
-            title="Get Plus (Love Balance & Vouchers)"
-          >
-            <Sparkles size={14} className={hasIncomingPendingWish ? "text-pink-300 animate-spin" : "text-[#8cb2ea] fill-[#8cb2ea]/30"} />
-            <span className="text-sm font-semibold tracking-wide">Get Plus</span>
-          </button>
+          {/* CENTER: GET PLUS (SLIGHTLY LEFT) & LOVE BALANCE PILL */}
+          <div className="flex items-center gap-1.5 min-w-0">
+            {/* GET PLUS PILL BUTTON -> OPENS WHATSAPP / STEALTH VIEW */}
+            <button
+              type="button"
+              onClick={() => setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth')}
+              className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 transition-all active:scale-95 shadow cursor-pointer shrink-0 ${
+                viewMode === 'stealth'
+                  ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/60 ring-1 ring-emerald-500/40'
+                  : 'bg-[#1e2430] hover:bg-[#283244] text-[#8cb2ea] border border-[#2d3a4f]/50'
+              }`}
+              title="Toggle Secret WhatsApp View"
+            >
+              <Sparkles size={13} className={viewMode === 'stealth' ? "text-emerald-400" : "text-[#8cb2ea] fill-[#8cb2ea]/30"} />
+              <span className="text-xs font-semibold tracking-wide whitespace-nowrap">Get Plus</span>
+            </button>
+
+            {/* LOVE BALANCE PILL BUTTON -> OPENS PASSBOOK */}
+            {role === 'parent' ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLoveBalanceModal(true);
+                  setLoveModalTab(hasIncomingPendingWish ? 'claimed' : 'passbook');
+                }}
+                className={`px-2.5 py-1 rounded-full flex items-center gap-1.5 bg-[#141414] hover:bg-[#1f1f1f] border text-white shadow active:scale-95 cursor-pointer shrink-0 ${
+                  hasIncomingPendingWish
+                    ? 'border-pink-500 animate-pulse bg-pink-950/40 ring-1 ring-pink-500'
+                    : 'border-[#2d3a4f]'
+                }`}
+                title="Admin: Dora & Darsh Love Balance"
+              >
+                <span className="flex items-center gap-0.5 text-[10px] font-mono whitespace-nowrap">
+                  <span className="text-xs">❤️</span>
+                  <span className={doraNetBalance >= 0 ? 'text-pink-300 font-bold' : 'text-rose-400 font-bold'}>
+                    ₹{formatLoveBalance(doraNetBalance)}
+                  </span>
+                </span>
+                <span className="text-gray-600 text-[10px]">|</span>
+                <span className="flex items-center gap-0.5 text-[10px] font-mono whitespace-nowrap">
+                  <span className="text-xs">👑</span>
+                  <span className={adminNetBalance >= 0 ? 'text-amber-300 font-bold' : 'text-rose-400 font-bold'}>
+                    ₹{formatLoveBalance(adminNetBalance)}
+                  </span>
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLoveBalanceModal(true);
+                  setLoveModalTab(hasIncomingPendingWish ? 'claimed' : 'passbook');
+                }}
+                className={`px-2.5 py-1.5 rounded-full flex items-center gap-1.5 bg-[#141414] hover:bg-[#1f1f1f] border text-white shadow active:scale-95 cursor-pointer shrink-0 ${
+                  hasIncomingPendingWish
+                    ? 'border-pink-500 animate-pulse bg-pink-950/40 ring-1 ring-pink-500'
+                    : 'border-pink-500/30'
+                }`}
+                title="Dora: My Love Balance"
+              >
+                <span className="text-xs">❤️</span>
+                <span className={`text-xs font-mono font-bold whitespace-nowrap ${doraNetBalance >= 0 ? 'text-pink-300' : 'text-rose-400'}`}>
+                  ₹{formatLoveBalance(doraNetBalance)}
+                </span>
+              </button>
+            )}
+          </div>
 
           {/* RIGHT: CIRCULAR NEW CHAT BUTTON */}
           <button

@@ -994,7 +994,7 @@ export default function PassbookModal({
                                   <div className="sm:hidden divide-y divide-[#1e1e1e]">
                                     {hourEntries.map((row, rowIdx) => {
                                       const rawDesc = !isParentAdmin ? (row.description || '').replace(/^\[Dora\]\s*/i, '') : (row.description || '');
-                                      const cleanDesc = rawDesc.replace(/\s*\(\d{4}-\d{2}-\d{2}\)$/, '').replace(/Within 5 Mins?/gi, 'Within 1 Min').trim();
+                                      const cleanDesc = rawDesc.replace(/\s*\(\d{4}-\d{2}-\d{2}\)$/, '').replace(/Within (?:5|1) Mins?/gi, 'Within 30 Sec').trim();
 
                                       let slotBadge = null;
                                       const matchTask = (row.description || '').match(/(?:Routine Task|Approved Task|Task):\s*([^(]+)/i);
@@ -1056,7 +1056,7 @@ export default function PassbookModal({
                                           {row.remarks && row.remarks !== '—' && (
                                             <div className="text-[11px] text-gray-400 bg-[#141414] px-2.5 py-1.5 rounded-lg border border-[#222] break-words">
                                               <span className="text-gray-500 font-medium">Remarks: </span>
-                                              {(row.remarks || '').replace(/Within 5 Mins?/gi, 'Within 1 Min')}
+                                              {(row.remarks || '').replace(/Within (?:5|1) Mins?/gi, 'Within 30 Sec')}
                                             </div>
                                           )}
 
@@ -1102,7 +1102,7 @@ export default function PassbookModal({
                                       <tbody className="divide-y divide-[#1e1e1e] text-gray-300">
                                         {hourEntries.map((row, rowIdx) => {
                                           const rawDesc = !isParentAdmin ? (row.description || '').replace(/^\[Dora\]\s*/i, '') : (row.description || '');
-                                          const cleanDesc = rawDesc.replace(/\s*\(\d{4}-\d{2}-\d{2}\)$/, '').replace(/Within 5 Mins?/gi, 'Within 1 Min').trim();
+                                          const cleanDesc = rawDesc.replace(/\s*\(\d{4}-\d{2}-\d{2}\)$/, '').replace(/Within (?:5|1) Mins?/gi, 'Within 30 Sec').trim();
 
                                           let slotBadge = null;
                                           const matchTask = (row.description || '').match(/(?:Routine Task|Approved Task|Task):\s*([^(]+)/i);
@@ -1149,7 +1149,7 @@ export default function PassbookModal({
                                                 </span>
                                               </td>
                                               <td className="py-2 px-3 text-gray-400 text-[11px] max-w-[220px] truncate" title={row.remarks}>
-                                                {(row.remarks || '—').replace(/Within 5 Mins?/gi, 'Within 1 Min')}
+                                                {(row.remarks || '—').replace(/Within (?:5|1) Mins?/gi, 'Within 30 Sec')}
                                               </td>
                                               <td className="py-2 px-3 text-right">
                                                 <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (
