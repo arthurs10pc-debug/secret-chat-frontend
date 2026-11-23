@@ -22,6 +22,7 @@ import {
   getLocalDateString,
   PUBLIC_VAPID_KEY,
   QUICK_EMOJIS,
+  EMOJI_CATEGORIES,
   HOVER_REACTIONS,
   ROMANTIC_REGEX,
   ARCADE_GAMES,
@@ -1160,6 +1161,8 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [showPendingModal, setShowPendingModal] = useState(false);
   const [showMiniEmojiBar, setShowMiniEmojiBar] = useState(false);
+  const [secretEmojiCategory, setSecretEmojiCategory] = useState(0);
+  const [secretEmojiSearch, setSecretEmojiSearch] = useState('');
   const [isThinking, setIsThinking] = useState(false);
 
   const touchStartXRef = useRef(0);
@@ -1758,6 +1761,11 @@ export default function App() {
         });
         try {
           localStorage.setItem('stealth_known_users', JSON.stringify(updated));
+          if (isDora) {
+            localStorage.setItem('stealth_assigned_dora_email', cleanEmail);
+          } else if (localStorage.getItem('stealth_assigned_dora_email') === cleanEmail) {
+            localStorage.removeItem('stealth_assigned_dora_email');
+          }
         } catch (e) {}
         return {
           ...prev,
@@ -4240,7 +4248,15 @@ export default function App() {
 
     socketRef.current.on('users_directory_update', (data) => {
       if (data && Array.isArray(data.users)) {
-        const cleanUsers = data.users.filter(u => u && u.email && u.email.toLowerCase() !== 'dora@gmail.com');
+        const savedDora = localStorage.getItem('stealth_assigned_dora_email');
+        const cleanUsers = data.users
+          .filter(u => u && u.email && u.email.toLowerCase() !== 'dora@gmail.com')
+          .map(u => {
+            if (savedDora && u.email && u.email.toLowerCase() === savedDora.toLowerCase()) {
+              return { ...u, isDora: true };
+            }
+            return u;
+          });
         setUsersDirectory({
           ...data,
           totalCount: cleanUsers.length,
@@ -4249,6 +4265,10 @@ export default function App() {
         });
         try {
           localStorage.setItem('stealth_known_users', JSON.stringify(cleanUsers));
+          const activeDora = cleanUsers.find(u => u.isDora);
+          if (activeDora && activeDora.email) {
+            localStorage.setItem('stealth_assigned_dora_email', activeDora.email.toLowerCase());
+          }
         } catch (e) {}
       }
     });
@@ -4272,6 +4292,11 @@ export default function App() {
         });
         try {
           localStorage.setItem('stealth_known_users', JSON.stringify(updated));
+          if (isDora) {
+            localStorage.setItem('stealth_assigned_dora_email', cleanEmail);
+          } else if (localStorage.getItem('stealth_assigned_dora_email') === cleanEmail) {
+            localStorage.removeItem('stealth_assigned_dora_email');
+          }
         } catch (e) {}
         return {
           ...prev,
@@ -6577,9 +6602,11 @@ export default function App() {
     setActiveAwardMsgId(null);
   };
 
-  const handleEmojiClick = (emoji) => {
+  const handleEmojiClick = (emoji, keepOpen = false) => {
     setInput(prev => prev + emoji);
-    setShowMiniEmojiBar(false);
+    if (!keepOpen) {
+      setShowMiniEmojiBar(false);
+    }
     if (inputRef.current) inputRef.current.focus();
   };
 
@@ -11378,7 +11405,7 @@ export default function App() {
           )}
 
             {viewMode !== 'admin_dashboard' && viewMode !== 'daily_projects' && (
-              <div className="px-3 sm:px-6 lg:px-8 pb-3 sm:pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative" onMouseLeave={() => setShowMiniEmojiBar(false)}>
+              <div className="px-3 sm:px-6 lg:px-8 pb-3 sm:pb-4 pt-1 max-w-4xl w-full mx-auto shrink-0 relative">
               {replyTarget && (
                 <div className="mb-2 bg-[#1a1a1a] border border-[#333] px-3.5 py-1.5 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-150">
                   <div className="flex items-center gap-2 overflow-hidden">
@@ -11402,18 +11429,77 @@ export default function App() {
                 </div>
               )}
 
+              {/* COMPREHENSIVE CATEGORIZED EMOJI PICKER FOR SECRET CHAT */}
               {showMiniEmojiBar && (
-                <div className="absolute right-12 bottom-16 z-30 bg-[#1e1e1e]/95 backdrop-blur-md border border-[#333] px-2 py-1 rounded-full shadow-2xl flex items-center gap-1.5 animate-in fade-in duration-150">
-                  {QUICK_EMOJIS.map((emoji, idx) => (
+                <div className="absolute right-2 sm:right-6 bottom-16 z-50 w-[92vw] sm:w-[380px] max-w-[420px] bg-[#1a1a1a]/98 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.8)] p-3 flex flex-col gap-2.5 animate-in fade-in zoom-in-95 duration-150 text-white select-none">
+                  {/* HEADER: Category tabs + Close button */}
+                  <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                    <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar pb-0.5 max-w-[85%]">
+                      {EMOJI_CATEGORIES.map((cat, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setSecretEmojiCategory(idx)}
+                          className={`text-lg p-1.5 rounded-lg transition-all cursor-pointer shrink-0 flex items-center justify-center ${
+                            secretEmojiCategory === idx
+                              ? 'bg-white/20 scale-105 shadow-sm ring-1 ring-white/30'
+                              : 'hover:bg-white/10 opacity-70 hover:opacity-100'
+                          }`}
+                          title={cat.name}
+                        >
+                          {cat.icon}
+                        </button>
+                      ))}
+                    </div>
                     <button
-                      key={idx}
                       type="button"
-                      onClick={() => handleEmojiClick(emoji)}
-                      className="text-base sm:text-lg p-1 hover:scale-125 active:scale-95 transition-transform cursor-pointer"
+                      onClick={() => setShowMiniEmojiBar(false)}
+                      className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                      title="Close"
                     >
-                      {emoji}
+                      <X size={16} />
                     </button>
-                  ))}
+                  </div>
+
+                  {/* QUICK ACCESS STRIP */}
+                  <div className="flex items-center justify-between px-2 py-1 bg-white/[0.04] rounded-xl border border-white/5">
+                    <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Quick:</span>
+                    <div className="flex items-center gap-1 overflow-x-auto">
+                      {["❤️", "🥰", "😘", "😂", "🔥", "✨", "👍", "🥺"].map((em, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => handleEmojiClick(em, true)}
+                          className="text-lg p-1 hover:scale-125 active:scale-95 transition-transform cursor-pointer"
+                        >
+                          {em}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* CATEGORY TITLE */}
+                  <div className="flex items-center justify-between text-xs text-gray-300 font-semibold px-1">
+                    <span>{EMOJI_CATEGORIES[secretEmojiCategory]?.name || 'Emojis'}</span>
+                    <span className="text-[10px] text-gray-500 font-normal">
+                      {EMOJI_CATEGORIES[secretEmojiCategory]?.emojis.length} emojis
+                    </span>
+                  </div>
+
+                  {/* SCROLLABLE EMOJI GRID */}
+                  <div className="grid grid-cols-7 sm:grid-cols-8 gap-1.5 max-h-[220px] overflow-y-auto p-1 custom-scrollbar">
+                    {(EMOJI_CATEGORIES[secretEmojiCategory]?.emojis || []).map((emoji, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleEmojiClick(emoji, true)}
+                        className="text-2xl p-1 hover:bg-white/15 active:scale-90 rounded-xl transition-all cursor-pointer flex items-center justify-center select-none"
+                        title={emoji}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
