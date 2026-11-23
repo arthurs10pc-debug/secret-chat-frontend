@@ -1736,6 +1736,7 @@ export default function App() {
   const handleSetDora = useCallback(async (targetEmail, isDora = true) => {
     if (!targetEmail) return;
     const cleanEmail = targetEmail.toLowerCase().trim();
+    const clean = cleanEmail;
     if (cleanEmail === 'arthurs10pc@gmail.com') {
       alert("Admin cannot be set as Dora.");
       return;
@@ -1761,9 +1762,9 @@ export default function App() {
         });
         try {
           localStorage.setItem('stealth_known_users', JSON.stringify(updated));
-          if (isDora) {
-            localStorage.setItem('stealth_assigned_dora_email', cleanEmail);
-          } else if (localStorage.getItem('stealth_assigned_dora_email') === cleanEmail) {
+          if (isDora && clean) {
+            localStorage.setItem('stealth_assigned_dora_email', clean);
+          } else if (clean && localStorage.getItem('stealth_assigned_dora_email') === clean) {
             localStorage.removeItem('stealth_assigned_dora_email');
           }
         } catch (e) {}
@@ -1809,6 +1810,7 @@ export default function App() {
   const handleDeleteUser = useCallback(async (targetEmail) => {
     if (!targetEmail) return;
     const cleanEmail = targetEmail.toLowerCase().trim();
+    const clean = cleanEmail;
     if (cleanEmail === 'arthurs10pc@gmail.com') {
       alert("Cannot delete primary Admin account.");
       return;
@@ -4292,9 +4294,9 @@ export default function App() {
         });
         try {
           localStorage.setItem('stealth_known_users', JSON.stringify(updated));
-          if (isDora) {
-            localStorage.setItem('stealth_assigned_dora_email', cleanEmail);
-          } else if (localStorage.getItem('stealth_assigned_dora_email') === cleanEmail) {
+          if (isDora && clean) {
+            localStorage.setItem('stealth_assigned_dora_email', clean);
+          } else if (clean && localStorage.getItem('stealth_assigned_dora_email') === clean) {
             localStorage.removeItem('stealth_assigned_dora_email');
           }
         } catch (e) {}
