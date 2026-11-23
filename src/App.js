@@ -2043,14 +2043,42 @@ export default function App() {
   };
 
   const markMessagesAsSeen = useCallback(() => {
-    const isChatOpen = viewModeRef.current === 'stealth' || isWhatsAppViewRef.current;
-    const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
+    const isChatOpen = viewModeRef.current === 'stealth' || isWhatsAppViewRef.current || isWhatsAppView;
+    const isVisible = typeof document !== 'undefined' ? document.visibilityState !== 'hidden' : true;
 
-    if (isChatOpen && isTabActive && socketRef.current) {
-      const currentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
-      socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: currentRole });
+    if (isChatOpen && isVisible) {
+      const currentRole = roleRef.current || role || localStorage.getItem('stealth_role') || 'user';
+      const isDora = (currentRole === 'user' || currentRole === 'A');
+
+      // 1. Immediately mark seen locally so unread red light turns solid green instantly
+      setStealthMessages(prev => {
+        let changed = false;
+        const next = prev.map(m => {
+          const isFromCounterpart = isDora 
+            ? (m.senderRole === 'parent' || m.senderRole === 'admin' || m.senderRole === 'H')
+            : (m.senderRole === 'user' || m.senderRole === 'A');
+          if (isFromCounterpart && !m.isSeen) {
+            changed = true;
+            return { ...m, isSeen: true, isDelivered: true };
+          }
+          return m;
+        });
+        return changed ? next : prev;
+      });
+
+      // 2. Emit mark_seen via socket
+      if (socketRef.current) {
+        socketRef.current.emit('mark_seen', { room: GLOBAL_ROOM, viewerRole: currentRole });
+      }
+
+      // 3. Fallback REST call
+      fetch(`${BACKEND_URL}/api/stealth-messages/mark-seen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room: GLOBAL_ROOM, viewerRole: currentRole })
+      }).catch(() => {});
     }
-  }, []);
+  }, [role, isWhatsAppView]);
 
   const handleStartReply = (msg) => {
     const pureText = msg.isMedia ? "[Photo Asset]" : cleanOriginalText(msg.text);
@@ -2803,10 +2831,11 @@ export default function App() {
 
   useEffect(() => {
     isWhatsAppViewRef.current = isWhatsAppView;
-    if (isWhatsAppView) {
+    viewModeRef.current = viewMode;
+    if (isWhatsAppView || viewMode === 'stealth') {
       markMessagesAsSeen();
     }
-  }, [isWhatsAppView, markMessagesAsSeen]);
+  }, [isWhatsAppView, viewMode, markMessagesAsSeen]);
 
   useEffect(() => {
     roleRef.current = role;
@@ -5093,7 +5122,7 @@ export default function App() {
       const text = decryptText(data.encryptedText);
       const myCurrentRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
       const isCurrentlyStealth = viewModeRef.current === 'stealth' || isWhatsAppViewRef.current;
-      const isTabActive = document.visibilityState === 'visible' && document.hasFocus();
+      const isTabActive = typeof document !== 'undefined' ? document.visibilityState !== 'hidden' : true;
       const shouldAutoSeen = isCurrentlyStealth && isTabActive && data.senderRole !== myCurrentRole;
 
       const formatted = {
@@ -5143,8 +5172,12 @@ export default function App() {
     });
 
     socketRef.current.on('messages_marked_seen', ({ viewerRole }) => {
+      const isViewerDora = (viewerRole === 'user' || viewerRole === 'A');
       setStealthMessages(prev => prev.map(m => {
-        if (m.senderRole !== viewerRole) {
+        const isFromCounterpart = isViewerDora
+          ? (m.senderRole === 'parent' || m.senderRole === 'admin' || m.senderRole === 'H')
+          : (m.senderRole === 'user' || m.senderRole === 'A');
+        if (isFromCounterpart) {
           return { ...m, isSeen: true, isDelivered: true };
         }
         return m;
@@ -6525,7 +6558,27 @@ export default function App() {
     return filteredWpMessages.findIndex(m => m.senderRole !== role && !m.isSeen);
   }, [filteredWpMessages, role]);
   const pendingMessages = stealthMessages.filter(m => m.flaggedPending);
-  const hasUnreadSecret = stealthMessages.some(m => m.senderRole !== role && !m.isSeen);
+  const hasUnreadSecret = useMemo(() => {
+    // If user is currently looking at the chat, there are no unseen messages!
+    if (isWhatsAppView || viewMode === 'stealth') {
+      return false;
+    }
+
+    const myRole = roleRef.current || role || localStorage.getItem('stealth_role') || 'user';
+    const isDora = (myRole === 'user' || myRole === 'A');
+
+    return stealthMessages.some(m => {
+      if (!m || m.isSeen) return false;
+      // Ignore system internal messages
+      if (typeof m.text === 'string' && m.text.startsWith('__')) return false;
+
+      const isFromCounterpart = isDora 
+        ? (m.senderRole === 'parent' || m.senderRole === 'admin' || m.senderRole === 'H')
+        : (m.senderRole === 'user' || m.senderRole === 'A');
+
+      return Boolean(isFromCounterpart && !m.isSeen);
+    });
+  }, [stealthMessages, role, isWhatsAppView, viewMode]);
 
   const alertText = incomingAlert?.text || '';
   const textLength = alertText.length;
@@ -8060,7 +8113,7 @@ export default function App() {
             <Menu size={20} className="text-white" />
           </button>
 
-          {/* CENTER: GET PLUS (SLIGHTLY LEFT) & LOVE BALANCE PILL */}
+          {/* CENTER: GET PLUS (SLIGHTLY LEFT), STATUS LIGHT & LOVE BALANCE PILL */}
           <div className="flex items-center gap-1.5 min-w-0">
             {/* GET PLUS PILL BUTTON -> OPENS PIN GATE FOR WHATSAPP UPGRADE VIEW */}
             <button
@@ -8071,6 +8124,29 @@ export default function App() {
             >
               <Sparkles size={13} className="text-[#8cb2ea] fill-[#8cb2ea]/30" />
               <span className="text-xs font-semibold tracking-wide whitespace-nowrap">Get Plus</span>
+            </button>
+
+            {/* STATUS LIGHT: GREEN = NORMAL / CONNECTED, RED BLINK = UNSEEN MESSAGE WAITING */}
+            <button
+              type="button"
+              onClick={handleUpgradeClick}
+              className="p-1 rounded-full hover:bg-white/5 active:scale-90 transition-all cursor-pointer shrink-0 flex items-center justify-center"
+              title={
+                !isConnected 
+                  ? 'Connecting...' 
+                  : (hasUnreadSecret ? 'Unread Secret Message Pending! Tap to open' : 'Connected (No Unseen Messages)')
+              }
+            >
+              {!isConnected ? (
+                <span className="w-2.5 h-2.5 rounded-full bg-zinc-600" />
+              ) : hasUnreadSecret ? (
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-80" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 shadow-[0_0_10px_#f43f5e]" />
+                </span>
+              ) : (
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" />
+              )}
             </button>
 
             {/* LOVE BALANCE PILL BUTTON -> OPENS PASSBOOK */}
@@ -8189,18 +8265,31 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1 sm:gap-2 text-xs md:text-sm text-[#9b9b9b] shrink-0">
-            <span 
-              className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                !isConnected 
-                  ? 'bg-zinc-600' 
-                  : (hasUnreadSecret ? 'bg-rose-500 animate-pulse shadow-[0_0_10px_#f43f5e]' : 'bg-emerald-500 shadow-[0_0_8px_#10b981]')
-              }`} 
+            <button 
+              type="button"
+              onClick={() => {
+                if (hasUnreadSecret) {
+                  setShowPinModal(true);
+                }
+              }}
+              className="relative flex items-center justify-center p-1 rounded-full cursor-pointer transition-transform active:scale-95 shrink-0"
               title={
                 !isConnected 
-                  ? 'Connecting...' 
-                  : (hasUnreadSecret ? 'Unread Secret Message Pending!' : 'Server Connected')
+                  ? 'Connecting to Server...' 
+                  : (hasUnreadSecret ? '🔥 Unread Secret Message Pending! Click to Open' : 'Server Connected (No Unseen Messages)')
               } 
-            />
+            >
+              {!isConnected ? (
+                <span className="w-3 h-3 rounded-full bg-zinc-600" />
+              ) : hasUnreadSecret ? (
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-80" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500 shadow-[0_0_12px_#f43f5e]" />
+                </span>
+              ) : (
+                <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981] transition-all duration-300" />
+              )}
+            </button>
             
             
             {/* VOICE CALL INITIATION BUTTON */}
