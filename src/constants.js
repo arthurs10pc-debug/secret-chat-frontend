@@ -124,35 +124,35 @@ export const ROMANTIC_WISH_STORE = [
   {
     id: 'wish_voicenote',
     title: 'Voice Note on Demand',
-    cost: 5.00,
+    cost: 20.00,
     icon: '🎙️',
     description: 'A personalized cute voice note with sweet romantic nicknames and compliments on demand.'
   },
   {
     id: 'wish_icecream',
     title: 'Ice Cream / Dessert Treat',
-    cost: 10.00,
+    cost: 30.00,
     icon: '🍦',
     description: 'Guaranteed favorite ice cream flavor or dessert delivered or enjoyed together.'
   },
   {
     id: 'wish_movie',
     title: 'Codex Cinema Movie Choice',
-    cost: 15.00,
+    cost: 50.00,
     icon: '🎬',
     description: 'Full sovereign pick of the next romantic movie or show to stream synchronized together.'
   },
   {
     id: 'wish_custom',
     title: 'Custom Romantic Wish',
-    cost: 20.00,
+    cost: 40.00,
     icon: '✨',
     description: 'Any personal cute favor, romantic request, or surprise granted without hesitation.'
   },
   {
     id: 'wish_dinner',
     title: 'Candlelight Dinner Date',
-    cost: 30.00,
+    cost: 120.00,
     icon: '🥂',
     description: 'A fully planned and organized romantic dinner date with VIP royal couple treatment.'
   }
@@ -160,18 +160,19 @@ export const ROMANTIC_WISH_STORE = [
 
 export const LOVE_EARNING_RULES = [
   { sno: 1, task: 'Daily Morning Sweet Text', criteria: 'Send sweet Good Morning message before 9:00 AM', reward: '+2.00' },
-  { sno: 2, task: 'Instant Reply', criteria: 'Reply within 30 seconds of incoming message', reward: '+0.75' },
+  { sno: 2, task: 'Instant Reply', criteria: 'Reply within 30 seconds of incoming message', reward: '+0.50' },
   { sno: 3, task: 'Compliment Drop', criteria: 'Spontaneous, genuine romantic compliment during conversation', reward: '+3.00' },
   { sno: 4, task: 'Meal Check-in', criteria: 'Caring "Had food?" reminder sent before 2:00 PM / 9:00 PM', reward: '+2.00' },
-  { sno: 5, task: 'Virtual Hug / Kiss Emoji', criteria: 'Sharing cute romantic emojis, stickers, or kisses in chat', reward: '+1.00' },
-  { sno: 6, task: 'Romantic Song / Movie Suggestion', criteria: 'Suggesting a quality romantic track or movie to enjoy together', reward: '+5.00' },
-  { sno: 7, task: 'Late Night Romantic Paragraph', criteria: 'Writing a heartfelt, emotional paragraph at night before bed', reward: '+10.00' },
-  { sno: 8, task: '100% Weekend Availability', criteria: 'Spending dedicated quality time without gaps on weekends', reward: '+10.00' },
-  { sno: 9, task: 'Anniversary / Milestone Reminder', criteria: 'Remembering and wishing special date or anniversary in advance', reward: '+15.00' },
-  { sno: 10, task: 'Apology without Ego', criteria: 'Promptly apologizing with love and zero ego after misunderstanding', reward: '+5.00' },
-  { sno: 11, task: 'Surprise Cute Selfie', criteria: 'Sending a spontaneous smile or cute picture', reward: '+3.00' },
-  { sno: 12, task: 'Patient Listening', criteria: 'Listening to full story/rant with empathy without interrupting', reward: '+5.00' },
-  { sno: 13, task: 'Future Date Planning', criteria: 'Suggesting and planning a fun upcoming date idea together', reward: '+8.00' }
+  { sno: 5, task: 'Virtual Hug / Kiss Emoji', criteria: 'Sharing cute romantic emojis, stickers, or kisses in chat', reward: '+0.40' },
+  { sno: 6, task: 'Message Reaction (Emoji)', criteria: 'Reacting to incoming messages with cute emoji or heart', reward: '+0.10' },
+  { sno: 7, task: 'Romantic Song / Movie Suggestion', criteria: 'Suggesting a quality romantic track or movie to enjoy together', reward: '+5.00' },
+  { sno: 8, task: 'Late Night Romantic Paragraph', criteria: 'Writing a heartfelt, emotional paragraph at night before bed', reward: '+10.00' },
+  { sno: 9, task: '100% Weekend Availability', criteria: 'Spending dedicated quality time without gaps on weekends', reward: '+10.00' },
+  { sno: 10, task: 'Anniversary / Milestone Reminder', criteria: 'Remembering and wishing special date or anniversary in advance', reward: '+15.00' },
+  { sno: 11, task: 'Apology without Ego', criteria: 'Promptly apologizing with love and zero ego after misunderstanding', reward: '+5.00' },
+  { sno: 12, task: 'Surprise Cute Selfie', criteria: 'Sending a spontaneous smile or cute picture', reward: '+3.00' },
+  { sno: 13, task: 'Patient Listening', criteria: 'Listening to full story/rant with empathy without interrupting', reward: '+5.00' },
+  { sno: 14, task: 'Future Date Planning', criteria: 'Suggesting and planning a fun upcoming date idea together', reward: '+8.00' }
 ];
 
 export const LOVE_DEDUCTION_RULES = [

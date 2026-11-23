@@ -3023,7 +3023,8 @@ export default function App() {
       expireDate: expStr,
       points: type === 'credit' ? numAmount : -numAmount,
       type: type,
-      remarks: cleanReason,
+      remarks: (extraData && extraData.remarks) || cleanReason,
+      messageSnippet: (extraData && extraData.messageSnippet) || undefined,
       status: type === 'credit' ? 'Confirmed' : (type === 'redeem' ? 'Redeemed' : 'Deducted'),
       wishTitle: (extraData && extraData.title) || (type === 'redeem' ? cleanReason.replace(/^Redeemed:\s*/i, '') : undefined),
       wishIcon: (extraData && extraData.icon) || '🎁',
@@ -3111,13 +3112,13 @@ export default function App() {
     const currentHour = now.getHours();
     const cleanLower = cleanText.toLowerCase();
 
-    // 1. Virtual Hug / Kiss / Heart Emoji (+1 Point) - 5-MIN COOLDOWN
+    // 1. Virtual Hug / Kiss / Heart Emoji (+0.40 Point) - 5-MIN COOLDOWN
     const lastHeartKey = 'lb_last_heart_' + targetUser;
     const lastHeartTime = Number(localStorage.getItem(lastHeartKey) || 0);
     if (ROMANTIC_REGEX.test(cleanText)) {
       if (Date.now() - lastHeartTime >= 5 * 60 * 1000) {
         localStorage.setItem(lastHeartKey, Date.now().toString());
-        handleLoveBalanceTransaction(1.00, 'credit', 'Virtual Hug / Heart Emoji Shared (❤️)', false, targetUser);
+        handleLoveBalanceTransaction(0.40, 'credit', 'Virtual Hug / Kiss / Heart Emoji Shared (❤️)', false, targetUser);
       }
     }
 
@@ -6307,14 +6308,13 @@ export default function App() {
     setStealthMessages(prev => prev.map(m => m._id === messageId ? { ...m, reaction: emoji } : m));
     setActiveReactionMsgId(null);
 
-    if (ROMANTIC_REGEX.test(emoji) || emoji === '❤️' || emoji === '🥰' || emoji === '❤') {
-      const targetUser = role === 'parent' ? 'admin' : 'user';
-      const lastReactKey = 'lb_last_heart_react_' + targetUser;
-      const lastReactTime = Number(localStorage.getItem(lastReactKey) || 0);
-      if (Date.now() - lastReactTime >= 5 * 60 * 1000) {
-        localStorage.setItem(lastReactKey, Date.now().toString());
-        handleLoveBalanceTransaction(1.00, 'credit', 'Heart Reaction on Message (❤️)', false, targetUser);
-      }
+    // Any reaction on message earns +0.10 points!
+    const targetUser = role === 'parent' ? 'admin' : 'user';
+    const lastReactKey = 'lb_last_react_' + targetUser;
+    const lastReactTime = Number(localStorage.getItem(lastReactKey) || 0);
+    if (Date.now() - lastReactTime >= 10 * 1000) {
+      localStorage.setItem(lastReactKey, Date.now().toString());
+      handleLoveBalanceTransaction(0.10, 'credit', `Reaction on Message (${emoji})`, false, targetUser);
     }
 
     if (socketRef.current) {
@@ -6324,6 +6324,28 @@ export default function App() {
         reaction: emoji
       });
     }
+  };
+
+  const handleAwardMessageKarma = (m, points, title) => {
+    if (!m) return;
+    // Always award to author of message m (the person who sent the message)
+    const isMsgFromAdmin = (m.senderRole === 'parent' || m.senderRole === 'admin' || m.senderRole === 'H');
+    const awardTarget = isMsgFromAdmin ? 'admin' : 'user';
+    const rawMsg = cleanOriginalText(m.text || m.encryptedText || '');
+    const snippet = rawMsg.length > 50 ? rawMsg.substring(0, 50) + '...' : rawMsg;
+
+    handleLoveBalanceTransaction(
+      points,
+      'credit',
+      `${title} (Message: "${snippet}")`,
+      false,
+      awardTarget,
+      {
+        messageSnippet: rawMsg || snippet,
+        remarks: `${title} on "${snippet}"`
+      }
+    );
+    setActiveAwardMsgId(null);
   };
 
   const handleEmojiClick = (emoji) => {
@@ -7577,44 +7599,28 @@ export default function App() {
                                   <p className="text-[10px] text-pink-400 font-bold uppercase tracking-wider px-1">💖 Award {partnerName} Karma</p>
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      const awardTarget = role === 'parent' ? 'user' : 'admin';
-                                      handleLoveBalanceTransaction(1.00, 'credit', 'Cute Gesture / Heart', false, awardTarget);
-                                      setActiveAwardMsgId(null);
-                                    }}
+                                    onClick={() => handleAwardMessageKarma(m, 1.00, 'Cute Reaction')}
                                     className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
                                   >
                                     +1 ₹ Cute Reaction
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      const awardTarget = role === 'parent' ? 'user' : 'admin';
-                                      handleLoveBalanceTransaction(3.00, 'credit', 'Romantic Compliment Drop', false, awardTarget);
-                                      setActiveAwardMsgId(null);
-                                    }}
+                                    onClick={() => handleAwardMessageKarma(m, 3.00, 'Romantic Compliment Drop')}
                                     className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
                                   >
                                     +3 ₹ Sweet Compliment
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      const awardTarget = role === 'parent' ? 'user' : 'admin';
-                                      handleLoveBalanceTransaction(5.00, 'credit', 'Movie / Song Recommendation', false, awardTarget);
-                                      setActiveAwardMsgId(null);
-                                    }}
+                                    onClick={() => handleAwardMessageKarma(m, 5.00, 'Movie / Song Recommendation')}
                                     className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
                                   >
                                     +5 ₹ Song/Movie Pick
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      const awardTarget = role === 'parent' ? 'user' : 'admin';
-                                      handleLoveBalanceTransaction(10.00, 'credit', 'Deep Romantic Talk', false, awardTarget);
-                                      setActiveAwardMsgId(null);
-                                    }}
+                                    onClick={() => handleAwardMessageKarma(m, 10.00, 'Deep Romantic Talk')}
                                     className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
                                   >
                                     +10 ₹ Romantic Talk
@@ -8865,44 +8871,28 @@ export default function App() {
                                           <p className="text-[10px] text-pink-400 font-bold uppercase tracking-wider px-1">💖 Award {partnerName} Karma</p>
                                           <button
                                             type="button"
-                                            onClick={() => {
-                                              const awardTarget = role === 'parent' ? 'user' : 'admin';
-                                              handleLoveBalanceTransaction(1.00, 'credit', 'Cute Gesture / Heart', false, awardTarget);
-                                              setActiveAwardMsgId(null);
-                                            }}
+                                            onClick={() => handleAwardMessageKarma(m, 1.00, 'Cute Reaction')}
                                             className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
                                           >
                                             +1 ₹ Cute Reaction
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => {
-                                              const awardTarget = role === 'parent' ? 'user' : 'admin';
-                                              handleLoveBalanceTransaction(3.00, 'credit', 'Romantic Compliment Drop', false, awardTarget);
-                                              setActiveAwardMsgId(null);
-                                            }}
+                                            onClick={() => handleAwardMessageKarma(m, 3.00, 'Romantic Compliment Drop')}
                                             className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
                                           >
                                             +3 ₹ Sweet Compliment
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => {
-                                              const awardTarget = role === 'parent' ? 'user' : 'admin';
-                                              handleLoveBalanceTransaction(5.00, 'credit', 'Movie / Song Recommendation', false, awardTarget);
-                                              setActiveAwardMsgId(null);
-                                            }}
+                                            onClick={() => handleAwardMessageKarma(m, 5.00, 'Movie / Song Recommendation')}
                                             className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
                                           >
                                             +5 ₹ Song/Movie Pick
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => {
-                                              const awardTarget = role === 'parent' ? 'user' : 'admin';
-                                              handleLoveBalanceTransaction(10.00, 'credit', 'Deep Romantic Talk', false, awardTarget);
-                                              setActiveAwardMsgId(null);
-                                            }}
+                                            onClick={() => handleAwardMessageKarma(m, 10.00, 'Deep Romantic Talk')}
                                             className="text-left px-2 py-1 rounded-lg hover:bg-pink-950/70 text-gray-200 hover:text-pink-200 transition-colors"
                                           >
                                             +10 ₹ Romantic Talk

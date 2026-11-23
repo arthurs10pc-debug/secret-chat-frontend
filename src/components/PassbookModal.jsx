@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, RefreshCw, Trash2, Gift, Filter, ShieldCheck, Sparkles, Calendar, CheckSquare, Square 
 } from 'lucide-react';
@@ -83,6 +83,22 @@ export default function PassbookModal({
   const openerName = isDarsh ? 'Darsh' : (activeDoraName || 'Dora');
   const openerRole = isDarsh ? 'admin' : 'user';
   const currentOpenerBalance = isDarsh ? adminNetBalance : doraNetBalance;
+  const currentViewerRole = isParentAdmin ? (activeLbTarget === 'admin' ? 'admin' : 'user') : 'user';
+
+  // Strictly isolate unlocked scratch vouchers by the owner who paid 6 points to scratch!
+  const displayedUnlockedVouchers = useMemo(() => {
+    return (unlockedVouchers || []).filter(uv => {
+      if (uv.openerRole) {
+        return uv.openerRole === currentViewerRole;
+      }
+      const unlBy = String(uv.unlockedBy || '').toLowerCase();
+      if (currentViewerRole === 'admin') {
+        return unlBy.includes('darsh') || unlBy.includes('admin');
+      } else {
+        return !unlBy.includes('darsh') && !unlBy.includes('admin');
+      }
+    });
+  }, [unlockedVouchers, currentViewerRole]);
 
   // Parse entry timestamps and dates strictly into Indian Standard Time (IST / Asia/Kolkata)
   const parseEntryIstInfo = (entry) => {
@@ -324,6 +340,7 @@ export default function PassbookModal({
     const cardData = {
       ...chosen,
       openerName: openerName,
+      openerRole: openerRole,
       openedAt: new Date().toLocaleString('en-GB')
     };
     setSelectedScratchVoucher(cardData);
@@ -341,6 +358,7 @@ export default function PassbookModal({
       points: voucher.points || voucher.value || 'Priceless',
       category: voucher.category || 'Surprise Voucher',
       unlockedBy: voucher.openerName || openerName,
+      openerRole: voucher.openerRole || openerRole,
       unlockedAt: voucher.openedAt || new Date().toLocaleString('en-GB'),
       status: 'Active'
     };
@@ -413,10 +431,10 @@ export default function PassbookModal({
   };
 
   const toggleSelectAllVouchers = () => {
-    if (selectedVoucherIds.length === unlockedVouchers.length) {
+    if (selectedVoucherIds.length === displayedUnlockedVouchers.length) {
       setSelectedVoucherIds([]);
     } else {
-      setSelectedVoucherIds(unlockedVouchers.map(v => v.code || v.id));
+      setSelectedVoucherIds(displayedUnlockedVouchers.map(v => v.code || v.id));
     }
   };
 
@@ -1008,10 +1026,15 @@ export default function PassbookModal({
                                         slotBadge = 'Routine Habit';
                                       }
 
+                                      const msgAwardMatch = (row.remarks || row.description || '').match(/(?:Message|on)\s*:\s*["“]([^"”]+)["”]/i);
+                                      const extractedMsg = row.messageSnippet || (msgAwardMatch ? msgAwardMatch[1] : null);
+                                      const isMessageAward = Boolean(extractedMsg || (row.description && (row.description.includes('Compliment Drop') || row.description.includes('Cute Gesture') || row.description.includes('Cute Reaction') || row.description.includes('Romantic Talk') || row.description.includes('Recommendation') || row.description.includes('Message:'))));
+                                      const tooltipText = extractedMsg ? `💬 Awarded for Message: "${extractedMsg}"` : (row.remarks && row.remarks !== '—' ? row.remarks : row.description);
+
                                       const isDeduction = row.type === 'debit' || row.points < 0;
 
                                       return (
-                                        <div key={row.id || rowIdx} className="p-3 space-y-1.5 hover:bg-[#1a1a1a] transition-colors">
+                                        <div key={row.id || rowIdx} className="p-3 space-y-1.5 hover:bg-[#1a1a1a] transition-colors" title={tooltipText}>
                                           <div className="flex items-start justify-between gap-2">
                                             <div className="flex items-start gap-2 min-w-0">
                                               <span className="font-mono text-[10px] text-gray-400 font-bold bg-[#111] px-1.5 py-0.5 rounded border border-[#262626] shrink-0 mt-0.5">
@@ -1054,9 +1077,20 @@ export default function PassbookModal({
                                           </div>
 
                                           {row.remarks && row.remarks !== '—' && (
-                                            <div className="text-[11px] text-gray-400 bg-[#141414] px-2.5 py-1.5 rounded-lg border border-[#222] break-words">
-                                              <span className="text-gray-500 font-medium">Remarks: </span>
-                                              {(row.remarks || '').replace(/Within (?:5|1) Mins?/gi, 'Within 30 Sec')}
+                                            <div className={`text-[11px] px-2.5 py-1.5 rounded-lg border break-words cursor-help ${
+                                              isMessageAward ? 'bg-pink-950/30 border-pink-500/40 text-pink-200' : 'text-gray-400 bg-[#141414] border-[#222]'
+                                            }`} title={tooltipText}>
+                                              <div className="flex items-center gap-1 font-semibold text-pink-400 mb-0.5">
+                                                <span>{isMessageAward ? '💖 Message Awarded:' : 'Remarks:'}</span>
+                                              </div>
+                                              <div>
+                                                {(row.remarks || '').replace(/Within (?:5|1) Mins?/gi, 'Within 30 Sec')}
+                                              </div>
+                                              {extractedMsg && (
+                                                <div className="mt-1 text-[10px] text-pink-300/90 italic border-t border-pink-500/20 pt-1">
+                                                  💬 "${extractedMsg}"
+                                                </div>
+                                              )}
                                             </div>
                                           )}
 
@@ -1116,13 +1150,18 @@ export default function PassbookModal({
                                             slotBadge = 'Routine Habit';
                                           }
 
+                                          const msgAwardMatch = (row.remarks || row.description || '').match(/(?:Message|on)\s*:\s*["“]([^"”]+)["”]/i);
+                                          const extractedMsg = row.messageSnippet || (msgAwardMatch ? msgAwardMatch[1] : null);
+                                          const isMessageAward = Boolean(extractedMsg || (row.description && (row.description.includes('Compliment Drop') || row.description.includes('Cute Gesture') || row.description.includes('Cute Reaction') || row.description.includes('Romantic Talk') || row.description.includes('Recommendation') || row.description.includes('Message:'))));
+                                          const tooltipText = extractedMsg ? `💬 Awarded for Message: "${extractedMsg}"` : (row.remarks && row.remarks !== '—' ? row.remarks : row.description);
+
                                           const isDeduction = row.type === 'debit' || row.points < 0;
 
                                           return (
                                             <tr key={row.id || rowIdx} className="hover:bg-[#1c1c1c] transition-colors">
                                               <td className="py-2 px-3 font-mono text-gray-400 font-bold">{rowIdx + 1}</td>
-                                              <td className="py-2 px-3 font-bold text-white max-w-[280px]">
-                                                <div>{cleanDesc}</div>
+                                              <td className="py-2 px-3 font-bold text-white max-w-[280px]" title={tooltipText}>
+                                                <div className={isMessageAward ? 'cursor-help text-pink-100 hover:text-pink-300 transition-colors' : ''}>{cleanDesc}</div>
                                               </td>
                                               <td className="py-2 px-3 font-mono text-[11px] text-gray-300">
                                                 <div className="text-gray-200 font-semibold">{formatRowTimeOnly(row)}</div>
@@ -1148,8 +1187,19 @@ export default function PassbookModal({
                                                   {row.points > 0 ? '+' + Number(row.points).toFixed(2) : Number(row.points).toFixed(2)}
                                                 </span>
                                               </td>
-                                              <td className="py-2 px-3 text-gray-400 text-[11px] max-w-[220px] truncate" title={row.remarks}>
-                                                {(row.remarks || '—').replace(/Within (?:5|1) Mins?/gi, 'Within 30 Sec')}
+                                              <td className="py-2 px-3 text-gray-400 text-[11px] max-w-[240px] truncate cursor-help" title={tooltipText}>
+                                                {isMessageAward ? (
+                                                  <div className="flex items-center gap-1.5 truncate">
+                                                    <span className="text-[9px] bg-pink-500/20 text-pink-300 border border-pink-500/40 px-1.5 py-0.2 rounded shrink-0 font-bold">
+                                                      💬 Award Msg
+                                                    </span>
+                                                    <span className="truncate text-pink-200/90">
+                                                      {(row.remarks || '—').replace(/Within (?:5|1) Mins?/gi, 'Within 30 Sec')}
+                                                    </span>
+                                                  </div>
+                                                ) : (
+                                                  (row.remarks || '—').replace(/Within (?:5|1) Mins?/gi, 'Within 30 Sec')
+                                                )}
                                               </td>
                                               <td className="py-2 px-3 text-right">
                                                 <span className={'px-2 py-0.5 rounded-full text-[10px] font-bold ' + (
@@ -1250,18 +1300,18 @@ export default function PassbookModal({
                 </button>
               </div>
 
-              {/* DEDICATED SECTION: UNLOCKED SURPRISE SCRATCH CARDS & VOUCHERS */}
-              {unlockedVouchers && unlockedVouchers.length > 0 && (
+              {/* DEDICATED SECTION: UNLOCKED SURPRISE SCRATCH CARDS & VOUCHERS (ISOLATED TO OWNER) */}
+              {displayedUnlockedVouchers && displayedUnlockedVouchers.length > 0 && (
                 <div className="bg-[#181818] border border-amber-500/50 rounded-2xl p-4 space-y-3 shadow-xl">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#2b2b2b] pb-2 gap-2">
                     <div>
                       <h4 className="text-sm font-black text-amber-300 flex items-center gap-2">
                         <span>✨ Unlocked Scratch Cards & Romantic Coupons</span>
                         <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.2 rounded-full font-mono font-bold">
-                          {unlockedVouchers.length} UNLOCKED
+                          {displayedUnlockedVouchers.length} UNLOCKED (EXCLUSIVE TO YOU)
                         </span>
                       </h4>
-                      <p className="text-[11px] text-gray-400 mt-0.5">Surprise rewards revealed via Scratch Card — redeemable with Love Balance!</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">Surprise rewards revealed via Scratch Card — redeemable exclusively with your Love Balance!</p>
                     </div>
 
                     {isParentAdmin && (
@@ -1271,7 +1321,7 @@ export default function PassbookModal({
                           onClick={toggleSelectAllVouchers}
                           className="text-[11px] font-bold bg-[#262626] hover:bg-[#333] text-gray-300 px-2.5 py-1 rounded-lg border border-[#3d3d3d] cursor-pointer transition-all"
                         >
-                          {selectedVoucherIds.length === unlockedVouchers.length ? 'Deselect All' : 'Select All'}
+                          {selectedVoucherIds.length === displayedUnlockedVouchers.length ? 'Deselect All' : 'Select All'}
                         </button>
                         {selectedVoucherIds.length > 0 && (
                           <button
@@ -1288,7 +1338,7 @@ export default function PassbookModal({
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {unlockedVouchers.map((uv, idx) => {
+                    {displayedUnlockedVouchers.map((uv, idx) => {
                       const vKey = uv.code || uv.id || String(idx);
                       const isSelected = selectedVoucherIds.includes(vKey) || (uv.id && selectedVoucherIds.includes(uv.id)) || (uv.code && selectedVoucherIds.includes(uv.code));
                       const availablePts = Math.max(0, displayedLoveBalance);
