@@ -522,6 +522,34 @@ export default function App() {
               }
               return res;
             });
+
+          const seenInstantMap = {};
+          cleaned = cleaned.filter(item => {
+            if (item && item.description && item.description.includes('Instant Reply')) {
+              const tgt = item.target || (item.description.includes('[Darsh]') ? 'admin' : 'user');
+              let tMs = 0;
+              const parts = (item.id || '').split('_');
+              if (parts.length >= 3 && parts[0] === 'lb' && parts[1] === 'instant') {
+                tMs = Number(parts[2]);
+              } else if (parts.length >= 2 && parts[0] === 'lb') {
+                tMs = Number(parts[1]);
+              }
+              if (isNaN(tMs) || tMs === 0) {
+                try { tMs = new Date(item.earnedAt).getTime(); } catch(e) {}
+              }
+              if (tMs > 0) {
+                if (!seenInstantMap[tgt]) {
+                  seenInstantMap[tgt] = [tMs];
+                } else {
+                  const isDup = seenInstantMap[tgt].some(prevT => Math.abs(prevT - tMs) < 5 * 60 * 1000);
+                  if (isDup) return false;
+                  seenInstantMap[tgt].push(tMs);
+                }
+              }
+            }
+            return true;
+          });
+
           return cleaned;
         }
       }
@@ -534,12 +562,34 @@ export default function App() {
   // Pure Mathematical Ledger Balance Calculation (Strict Single Source of Truth)
   const getNetLedgerBalance = useCallback((ledger, target = 'user') => {
     if (!Array.isArray(ledger)) return 0;
+    const instantSeenMap = [];
     const entries = ledger.filter(e => {
       if (!e || isLegacyMockEntry(e)) return false;
-      if (target === 'admin') {
-        return e.target === 'admin' || (e.description && e.description.includes('[Darsh]'));
+      const isTarget = target === 'admin'
+        ? (e.target === 'admin' || (e.description && e.description.includes('[Darsh]')))
+        : (e.target !== 'admin' && !(e.description && e.description.includes('[Darsh]')));
+      if (!isTarget) return false;
+
+      // Filter rapid duplicate instant reply entries within 5 minutes for identical target
+      if (e.description && e.description.includes('Instant Reply')) {
+        let tMs = 0;
+        const parts = (e.id || '').split('_');
+        if (parts.length >= 3 && parts[0] === 'lb' && parts[1] === 'instant') {
+          tMs = Number(parts[2]);
+        } else if (parts.length >= 2 && parts[0] === 'lb') {
+          tMs = Number(parts[1]);
+        }
+        if (isNaN(tMs) || tMs === 0) {
+          try { tMs = new Date(e.earnedAt).getTime(); } catch(err) {}
+        }
+        if (tMs > 0) {
+          if (instantSeenMap.some(prevT => Math.abs(prevT - tMs) < 5 * 60 * 1000)) {
+            return false;
+          }
+          instantSeenMap.push(tMs);
+        }
       }
-      return e.target !== 'admin' && !(e.description && e.description.includes('[Darsh]'));
+      return true;
     });
 
     const credits = entries
@@ -3348,7 +3398,7 @@ export default function App() {
 
       if (diffMs <= 30 * 1000 && (Date.now() - lastInstantTime >= FIVE_MIN_MS) && !hasRecentInstantInLedger) {
         localStorage.setItem(lastInstantKey, Date.now().toString());
-        handleLoveBalanceTransaction(0.50, 'credit', 'Instant Reply (Within 30 Sec)', false, targetUser);
+        // Instant Reply (+0.50 pts) evaluated authoritatively on backend server on message receive to prevent client double-minting
       }
     }
 
@@ -3786,8 +3836,10 @@ export default function App() {
   const handleApproveDailyTask = (sub) => {
     if (!sub) return;
     const slot = dailySlots.find(s => s.id === sub.slotId);
-    const pts = slot ? Number(slot.rewardPoints || 2.0) : 2.0;
-    const slotTitle = slot ? slot.title : 'Routine Task';
+    const isLate = checkSlotOverdue(slot, sub.date || dailySelectedDate);
+    const basePts = slot ? Number(slot.rewardPoints || 2.0) : 2.0;
+    const pts = isLate ? parseFloat((basePts / 2).toFixed(2)) : basePts;
+    const slotTitle = (slot ? slot.title : 'Routine Task') + (isLate ? ' (Late - 50% pts)' : '');
 
     // 1. Optimistic update (matches by id OR by slotId + date so retakes immediately turn green ✓ Done)
     setDailySubmissions(prev => {
@@ -3892,6 +3944,57 @@ export default function App() {
         room: GLOBAL_ROOM,
         senderRole: 'parent',
         text: '__TASK_REJECT__:' + JSON.stringify({ submissionId: sub.id, slotId: sub.slotId, date: sub.date }),
+        timestamp: Date.now()
+      });
+    }
+  };
+
+  const handleDeleteDailySubmission = (sub, slot) => {
+    if (!sub) return;
+    const confirmDelete = window.confirm(
+      `Delete submission for "${slot ? slot.title : 'this routine slot'}"? This will reset the slot to empty/missed and deduct any points awarded.`
+    );
+    if (!confirmDelete) return;
+
+    const targetDate = sub.date || dailySelectedDate;
+    const approvalId = 'lb_appr_' + (sub.id || `${targetDate}_${sub.slotId}`);
+
+    // 1. Remove from local dailySubmissions
+    setDailySubmissions(prev => {
+      const updated = prev.filter(s => s.id !== sub.id && !(s.slotId === sub.slotId && (!sub.date || s.date === targetDate)));
+      try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(updated)); } catch(e) {}
+      return updated;
+    });
+
+    // 2. Remove approval transaction from loveLedger
+    setLoveLedger(prev => {
+      const updated = (prev || []).filter(e => e && e.id !== approvalId && !(e.id.includes(sub.slotId) && e.type === 'credit' && e.description.includes('Approved Task')));
+      try { localStorage.setItem('stealth_love_ledger', JSON.stringify(updated)); } catch(e) {}
+      return updated;
+    });
+
+    // 3. Emit deletion to server and peers
+    if (socketRef.current) {
+      socketRef.current.emit('daily_task_delete_submission', {
+        submissionId: sub.id,
+        slotId: sub.slotId,
+        date: targetDate,
+        approvalId
+      });
+      socketRef.current.emit('love_balance_action', {
+        room: GLOBAL_ROOM,
+        action: 'DAILY_TASK_DELETED',
+        submissionId: sub.id,
+        slotId: sub.slotId,
+        date: targetDate,
+        approvalId,
+        senderRole: 'admin',
+        timestamp: Date.now()
+      });
+      socketRef.current.emit('togepi_movie_chat', {
+        room: GLOBAL_ROOM,
+        senderRole: 'parent',
+        text: '__TASK_DELETE_SUBMISSION__:' + JSON.stringify({ submissionId: sub.id, slotId: sub.slotId, date: targetDate, approvalId }),
         timestamp: Date.now()
       });
     }
@@ -4901,6 +5004,29 @@ export default function App() {
         return;
       }
 
+      // 8. Daily Task Deleted Real-time Broadcast
+      if (typeof text === 'string' && text.startsWith('__TASK_DELETE_SUBMISSION__:')) {
+        try {
+          const { submissionId, slotId, date, approvalId } = JSON.parse(text.substring(27));
+          setDailySubmissions(prev => {
+            const updated = prev.filter(s => 
+              !(submissionId && s.id === submissionId) &&
+              !(slotId && s.slotId === slotId && (!date || s.date === date))
+            );
+            try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(updated)); } catch (e) {}
+            return updated;
+          });
+          if (approvalId) {
+            setLoveLedger(prev => {
+              const updated = (prev || []).filter(e => e && e.id !== approvalId && !(slotId && e.id && e.id.includes(slotId)));
+              try { localStorage.setItem('stealth_love_ledger', JSON.stringify(updated)); } catch(e) {}
+              return updated;
+            });
+          }
+        } catch (e) {}
+        return;
+      }
+
       const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
       if (senderRole !== myRole) {
         setTogepiChatHistory(prev => [...prev, { 
@@ -5885,6 +6011,24 @@ export default function App() {
             alert(`Note: Darsh requested a retake on this task:\n"${(submission && submission.adminFeedback) || 'Please retake with clear proof'}"`);
           }
         }
+      }
+    });
+
+    socketRef.current.on('daily_task_submission_deleted', ({ submissionId, slotId, date, approvalId }) => {
+      setDailySubmissions(prev => {
+        const next = (prev || []).filter(s => 
+          !(submissionId && s.id === submissionId) &&
+          !(slotId && s.slotId === slotId && (!date || s.date === date))
+        );
+        try { localStorage.setItem('stealth_daily_submissions', JSON.stringify(next)); } catch(e) {}
+        return next;
+      });
+      if (approvalId) {
+        setLoveLedger(prev => {
+          const next = (prev || []).filter(e => e && e.id !== approvalId && !(slotId && e.id && e.id.includes(slotId)));
+          try { localStorage.setItem('stealth_love_ledger', JSON.stringify(next)); } catch(e) {}
+          return next;
+        });
       }
     });
 
@@ -8302,14 +8446,14 @@ export default function App() {
                 <span className="flex items-center gap-0.5 text-[10px] font-mono whitespace-nowrap">
                   <span className="text-xs">❤️</span>
                   <span className={doraNetBalance >= 0 ? 'text-pink-300 font-bold' : 'text-rose-400 font-bold'}>
-                    ₹{formatLoveBalance(doraNetBalance)}
+                    {formatLoveBalance(doraNetBalance)}
                   </span>
                 </span>
                 <span className="text-gray-600 text-[10px]">|</span>
                 <span className="flex items-center gap-0.5 text-[10px] font-mono whitespace-nowrap">
                   <span className="text-xs">👑</span>
                   <span className={adminNetBalance >= 0 ? 'text-amber-300 font-bold' : 'text-rose-400 font-bold'}>
-                    ₹{formatLoveBalance(adminNetBalance)}
+                    {formatLoveBalance(adminNetBalance)}
                   </span>
                 </span>
               </button>
@@ -8329,7 +8473,7 @@ export default function App() {
               >
                 <span className="text-xs">❤️</span>
                 <span className={`text-xs font-mono font-bold whitespace-nowrap ${doraNetBalance >= 0 ? 'text-pink-300' : 'text-rose-400'}`}>
-                  ₹{formatLoveBalance(doraNetBalance)}
+                  {formatLoveBalance(doraNetBalance)}
                 </span>
               </button>
             )}
@@ -10537,14 +10681,21 @@ export default function App() {
                                   <div className="pt-1 flex items-center gap-2">
                                     {isPending ? (
                                       <>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleApproveDailyTask(sub)}
-                                          className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 px-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all text-center flex items-center justify-center gap-1"
-                                        >
-                                          <Check size={13} />
-                                          <span>Approve & Award +₹{slot.rewardPoints}</span>
-                                        </button>
+                                        {(() => {
+                                          const isLate = checkSlotOverdue(slot, sub ? (sub.date || dailySelectedDate) : dailySelectedDate);
+                                          const basePts = Number(slot.rewardPoints || 2.0);
+                                          const awardPts = isLate ? parseFloat((basePts / 2).toFixed(2)) : basePts;
+                                          return (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleApproveDailyTask(sub)}
+                                              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 px-2 rounded-xl cursor-pointer shadow active:scale-95 transition-all text-center flex items-center justify-center gap-1"
+                                            >
+                                              <Check size={13} />
+                                              <span>Approve & Award +₹{awardPts.toFixed(2)}{isLate ? ' (50% Late)' : ''}</span>
+                                            </button>
+                                          );
+                                        })()}
                                         <button
                                           type="button"
                                           onClick={() => handleRejectDailyTask(sub)}
@@ -10554,8 +10705,18 @@ export default function App() {
                                         </button>
                                       </>
                                     ) : isApproved ? (
-                                      <div className="w-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-xs font-bold py-1 px-2 rounded-xl text-center flex items-center justify-center gap-1">
-                                        <span>✓ Approved & Awarded (+₹{sub.pointsAwarded})</span>
+                                      <div className="w-full flex items-center gap-2">
+                                        <div className="flex-1 bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-xs font-bold py-1 px-2 rounded-xl text-center flex items-center justify-center gap-1">
+                                          <span>✓ Approved & Awarded (+₹{sub.pointsAwarded})</span>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteDailySubmission(sub, slot)}
+                                          title="Delete submission and reset slot to empty / missed"
+                                          className="p-1.5 bg-rose-950/70 hover:bg-rose-900 border border-rose-500/40 text-rose-300 hover:text-white rounded-xl cursor-pointer active:scale-95 transition-all shadow shrink-0 flex items-center justify-center"
+                                        >
+                                          <Trash2 size={13} />
+                                        </button>
                                       </div>
                                     ) : isRejected ? (
                                       <div className="w-full bg-rose-950/60 border border-rose-500/30 text-rose-300 text-xs font-bold py-1 px-2 rounded-xl text-center">
@@ -12014,6 +12175,7 @@ export default function App() {
             const sub = getSlotSubmission(slot.id, dailySelectedDate);
             if (sub) handleRejectDailyTask(sub);
           }}
+          onDeleteSubmission={(sub, slot) => handleDeleteDailySubmission(sub, slot)}
           isOverdue={checkSlotOverdue(dailySlots.find(s => s.id === dailySelectedSlotId), dailySelectedDate)}
         />
         </Suspense>

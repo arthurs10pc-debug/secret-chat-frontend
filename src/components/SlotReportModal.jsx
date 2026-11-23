@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Check, Clock, Plus, Eye } from 'lucide-react';
+import { X, Check, Clock, Plus, Eye, Trash2 } from 'lucide-react';
 
 export default function SlotReportModal({
   isOpen,
@@ -12,6 +12,7 @@ export default function SlotReportModal({
   onPreviewImage,
   onApprove,
   onReject,
+  onDeleteSubmission,
   isOverdue
 }) {
   if (!isOpen || !slot) return null;
@@ -250,6 +251,25 @@ export default function SlotReportModal({
                     <span>Reject & Retake</span>
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* ADMIN DELETE & RESET (IF APPROVED) */}
+            {isParentAdmin && submission && isApproved && (
+              <div className="mt-3 bg-emerald-950/40 border border-emerald-500/30 rounded-2xl p-3 flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-emerald-300">✓ Awarded (+₹{submission.pointsAwarded})</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onDeleteSubmission) onDeleteSubmission(submission, slot);
+                    onClose();
+                  }}
+                  className="bg-rose-950/60 hover:bg-rose-900 border border-rose-500/50 text-rose-300 font-bold text-xs py-1.5 px-3 rounded-xl flex items-center gap-1.5 shadow cursor-pointer active:scale-95"
+                  title="Delete submission and reset slot to empty / missed"
+                >
+                  <Trash2 size={13} />
+                  <span>Delete & Reset Slot</span>
+                </button>
               </div>
             )}
           </div>
