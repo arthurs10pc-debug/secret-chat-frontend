@@ -1976,6 +1976,66 @@ export default function App() {
     } catch (e) {}
   }, []);
 
+  // --- CUSTOM LOW-VOLUME POINT EARNED REWARD SOUND (UPLOADED BY USER) ---
+  const playPointEarnedSound = useCallback(() => {
+    try {
+      const audio = new Audio(process.env.PUBLIC_URL + '/point_reward.wav');
+      audio.volume = 0.35; // Thoda kam volume par as requested by user
+      audio.play().catch(() => {
+        // Safe synth fallback if needed
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 0.18);
+          gain.gain.setValueAtTime(0.08, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.18);
+        } catch (err) {}
+      });
+    } catch(e) {}
+  }, []);
+
+  // --- ULTRA-RELIABLE DUAL-PATH MESSAGE DISPATCHER (WEBSOCKET + REST FALLBACK) ---
+  const dispatchStealthMessage = useCallback((msgPayload) => {
+    const activeRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
+    const payload = {
+      room: GLOBAL_ROOM,
+      role: activeRole,
+      ...msgPayload
+    };
+
+    let sentViaSocket = false;
+    if (socketRef.current && socketRef.current.connected) {
+      try {
+        socketRef.current.emit('send_stealth_msg', payload);
+        sentViaSocket = true;
+      } catch (e) {
+        console.warn("Socket send error:", e);
+      }
+    }
+
+    // If socket is disconnected, lagging, or drops, send via REST fallback immediately!
+    if (!sentViaSocket) {
+      fetch(`${BACKEND_URL}/api/stealth-messages/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(err => {
+        console.warn("REST message send error:", err);
+      });
+
+      if (socketRef.current && !socketRef.current.connected) {
+        try { socketRef.current.connect(); } catch (err) {}
+      }
+    }
+  }, []);
+
   const closeSidebarOnMobile = () => {
     if (window.innerWidth < 768) {
       setSidebarOpen(false);
@@ -2108,30 +2168,59 @@ export default function App() {
         replyRefId = replyTarget.id;
       }
 
+      const activeRole = roleRef.current || role || localStorage.getItem('stealth_role') || 'user';
+      const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+      const now = new Date();
       const encrypted = encryptText(finalMessageText);
-      if (socketRef.current) {
-        socketRef.current.emit('send_stealth_msg', {
-          room: GLOBAL_ROOM,
-          role,
-          encryptedText: encrypted,
-          isMedia: false,
-          replyRefId
-        });
-        playSentSound();
-      }
+
+      // 1. Instant Optimistic Rendering for Dora & Darsh!
+      const optimisticMsg = {
+        _id: tempId,
+        clientMsgId: tempId,
+        tempId: tempId,
+        room: GLOBAL_ROOM,
+        senderRole: activeRole,
+        encryptedText: encrypted,
+        text: finalMessageText,
+        timestamp: now.toISOString(),
+        timeFormatted: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        flaggedPending: false,
+        isSeen: false,
+        isDelivered: false,
+        isMedia: false,
+        mediaType: 'text',
+        mediaOpened: false,
+        reaction: null,
+        isPinned: false,
+        isStarred: false,
+        replyRefId: replyRefId || null
+      };
+
+      setStealthMessages(prev => [...prev, optimisticMsg]);
+      playSentSound();
+
+      // 2. Dual-Path Dispatch (Socket + REST Fallback)
+      dispatchStealthMessage({
+        encryptedText: encrypted,
+        isMedia: false,
+        replyRefId,
+        clientMsgId: tempId
+      });
 
       // --- AUTOMATIC LOVE KARMA REAL-TIME EVALUATION ---
       const prevMessage = stealthMessages[stealthMessages.length - 1] || null;
-      evaluateLoveKarmaMessageRules(val, role, prevMessage);
+      evaluateLoveKarmaMessageRules(val, activeRole, prevMessage);
       try { checkDailyHabitInfractions(stealthMessages); } catch(e) {}
       setInput('');
       setReplyTarget(null);
       if (wpInputRef.current) {
         wpInputRef.current.focus();
       }
-      if (wpChatScrollRef.current) {
-        wpChatScrollRef.current.scrollTop = wpChatScrollRef.current.scrollHeight;
-      }
+      setTimeout(() => {
+        if (wpChatScrollRef.current) {
+          wpChatScrollRef.current.scrollTop = wpChatScrollRef.current.scrollHeight;
+        }
+      }, 50);
       return;
     }
 
@@ -2265,46 +2354,82 @@ export default function App() {
   const handleSendVideoNote = (base64Video) => {
     if (!base64Video) return;
     const encrypted = encryptText(base64Video);
-    if (socketRef.current) {
-      socketRef.current.emit('send_stealth_msg', {
-        room: GLOBAL_ROOM,
-        role,
-        encryptedText: encrypted,
-        isMedia: true,
-        mediaType: 'video_note'
-      });
-      playSentSound();
-    }
+    const tempId = 'temp_vid_' + Date.now();
+    const activeRole = roleRef.current || role || 'user';
+    const optMsg = {
+      _id: tempId,
+      clientMsgId: tempId,
+      room: GLOBAL_ROOM,
+      senderRole: activeRole,
+      encryptedText: encrypted,
+      text: base64Video,
+      timestamp: new Date().toISOString(),
+      timeFormatted: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isMedia: true,
+      mediaType: 'video_note'
+    };
+    setStealthMessages(prev => [...prev, optMsg]);
+    playSentSound();
+    dispatchStealthMessage({
+      encryptedText: encrypted,
+      isMedia: true,
+      mediaType: 'video_note',
+      clientMsgId: tempId
+    });
   };
 
   const handleSendInstantPhoto = (base64Photo) => {
     if (!base64Photo) return;
     const encrypted = encryptText(base64Photo);
-    if (socketRef.current) {
-      socketRef.current.emit('send_stealth_msg', {
-        room: GLOBAL_ROOM,
-        role,
-        encryptedText: encrypted,
-        isMedia: true,
-        mediaType: 'photo'
-      });
-      playSentSound();
-    }
+    const tempId = 'temp_photo_' + Date.now();
+    const activeRole = roleRef.current || role || 'user';
+    const optMsg = {
+      _id: tempId,
+      clientMsgId: tempId,
+      room: GLOBAL_ROOM,
+      senderRole: activeRole,
+      encryptedText: encrypted,
+      text: base64Photo,
+      timestamp: new Date().toISOString(),
+      timeFormatted: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isMedia: true,
+      mediaType: 'photo'
+    };
+    setStealthMessages(prev => [...prev, optMsg]);
+    playSentSound();
+    dispatchStealthMessage({
+      encryptedText: encrypted,
+      isMedia: true,
+      mediaType: 'photo',
+      clientMsgId: tempId
+    });
   };
 
   const handleSendSticker = (stickerUrl) => {
     if (!stickerUrl) return;
     const encrypted = encryptText(stickerUrl);
-    if (socketRef.current) {
-      socketRef.current.emit('send_stealth_msg', {
-        room: GLOBAL_ROOM,
-        role,
-        encryptedText: encrypted,
-        isMedia: true,
-        mediaType: 'sticker'
-      });
-      playSentSound();
-    }
+    const tempId = 'temp_stk_' + Date.now();
+    const activeRole = roleRef.current || role || 'user';
+    const optMsg = {
+      _id: tempId,
+      clientMsgId: tempId,
+      room: GLOBAL_ROOM,
+      senderRole: activeRole,
+      encryptedText: encrypted,
+      text: stickerUrl,
+      timestamp: new Date().toISOString(),
+      timeFormatted: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isMedia: true,
+      mediaType: 'sticker'
+    };
+    setStealthMessages(prev => [...prev, optMsg]);
+    playSentSound();
+    dispatchStealthMessage({
+      encryptedText: encrypted,
+      isMedia: true,
+      mediaType: 'sticker',
+      clientMsgId: tempId
+    });
     setShowWhatsAppMediaTray(false);
   };
 
@@ -3042,6 +3167,7 @@ export default function App() {
     if (type === 'credit' && !isBroadcast) {
       try {
         confetti({ particleCount: 50, spread: 70, origin: { y: 0.4 } });
+        playPointEarnedSound();
       } catch (e) {}
     }
 
@@ -3988,9 +4114,21 @@ export default function App() {
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 30,
-      reconnectionDelay: 1000
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000
     });
+
+    const handleVisibilityRecovery = () => {
+      if (document.visibilityState === 'visible' || document.hasFocus()) {
+        if (socketRef.current && !socketRef.current.connected) {
+          socketRef.current.connect();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityRecovery);
+    window.addEventListener('focus', handleVisibilityRecovery);
 
     socketRef.current.on('connect', () => {
       setIsConnected(true);
@@ -4626,7 +4764,7 @@ export default function App() {
           const myCurrentRole = roleRef.current || role || localStorage.getItem('stealth_role');
           if (myCurrentRole !== 'parent' && myCurrentRole !== 'admin') {
             try { confetti({ particleCount: 80, spread: 90, origin: { y: 0.4 } }); } catch (e) {}
-            alert(`🎉 Task Approved by Darsh!\n\n+₹ ${points || 2.0} has been added to your Love Balance! 💖`);
+            playPointEarnedSound(); alert(`🎉 Task Approved by Darsh!\n\n+₹ ${points || 2.0} has been added to your Love Balance! 💖`);
           }
         } catch (e) {}
         return;
@@ -4972,7 +5110,17 @@ export default function App() {
       };
 
       setStealthMessages(prev => {
-        if (prev.some(m => m._id === formatted._id)) return prev;
+        // If this message matches an optimistic local message, replace it!
+        const existingIdx = prev.findIndex(m => 
+          m._id === formatted._id || 
+          (m.clientMsgId && (m.clientMsgId === data.clientMsgId || m.clientMsgId === formatted.clientMsgId)) ||
+          (m.tempId && (m.tempId === data.clientMsgId || (m.senderRole === formatted.senderRole && m.text === formatted.text)))
+        );
+        if (existingIdx !== -1) {
+          const copy = [...prev];
+          copy[existingIdx] = { ...formatted, tempId: undefined };
+          return copy;
+        }
         const next = [...prev, formatted];
         try { checkDailyHabitInfractions(next); } catch(e) {}
         return next;
@@ -5464,6 +5612,7 @@ export default function App() {
         if (data.type === 'credit') {
           try {
             confetti({ particleCount: 50, spread: 70, origin: { y: 0.4 } });
+            playPointEarnedSound();
           } catch (e) {}
         }
       }
