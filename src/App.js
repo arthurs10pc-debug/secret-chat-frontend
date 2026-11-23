@@ -3315,10 +3315,11 @@ export default function App() {
       }
     }
 
-    // 3. Instant Reply within 30 seconds (+0.50 Point) - 30-SEC WINDOW
-    // Checked when either user replies to a message sent by counterpart within 30 seconds
+    // 3. Instant Reply within 30 seconds (+0.50 Point) - 5-MIN COOLDOWN
+    // Checked when either user replies to a message sent by counterpart within 30 seconds (at most once every 5 minutes)
     const lastInstantKey = 'lb_last_instant_' + targetUser;
     const lastInstantTime = Number(localStorage.getItem(lastInstantKey) || 0);
+    const FIVE_MIN_MS = 5 * 60 * 1000;
     const isCounterpartMsg = prevMessage && (
       targetUser === 'user'
         ? (prevMessage.senderRole === 'parent' || prevMessage.senderRole === 'admin' || prevMessage.senderRole === 'H')
@@ -3326,7 +3327,26 @@ export default function App() {
     );
     if (isCounterpartMsg && prevMessage.timestamp) {
       const diffMs = Math.abs(Date.now() - new Date(prevMessage.timestamp).getTime());
-      if (diffMs <= 30 * 1000 && (Date.now() - lastInstantTime >= 30 * 1000)) {
+      const hasRecentInstantInLedger = (loveLedger || []).some(e => {
+        if (!e || !e.description || !e.description.includes('Instant Reply')) return false;
+        const isTarget = targetUser === 'admin'
+          ? (e.target === 'admin' || (e.description && e.description.includes('[Darsh]')))
+          : (e.target === 'user' || !(e.description && e.description.includes('[Darsh]')));
+        if (!isTarget) return false;
+        let txMs = 0;
+        const parts = (e.id || '').split('_');
+        if (parts.length >= 3 && parts[0] === 'lb' && parts[1] === 'instant') {
+          txMs = Number(parts[2]);
+        } else if (parts.length >= 2 && parts[0] === 'lb') {
+          txMs = Number(parts[1]);
+        }
+        if (isNaN(txMs) || txMs === 0) {
+          try { txMs = new Date(e.earnedAt).getTime(); } catch(err) {}
+        }
+        return txMs > 0 && Math.abs(Date.now() - txMs) < FIVE_MIN_MS;
+      });
+
+      if (diffMs <= 30 * 1000 && (Date.now() - lastInstantTime >= FIVE_MIN_MS) && !hasRecentInstantInLedger) {
         localStorage.setItem(lastInstantKey, Date.now().toString());
         handleLoveBalanceTransaction(0.50, 'credit', 'Instant Reply (Within 30 Sec)', false, targetUser);
       }
@@ -5472,6 +5492,12 @@ export default function App() {
 
       if (data.action === 'TRANSACTION' && data.newEntry) {
         const entry = data.newEntry;
+        if (entry.description && entry.description.includes('Instant Reply')) {
+          try {
+            const tgt = entry.target || (entry.description.includes('[Darsh]') ? 'admin' : 'user');
+            localStorage.setItem('lb_last_instant_' + tgt, Date.now().toString());
+          } catch(e) {}
+        }
         if (myRole !== 'parent' && myRole !== 'admin' && entry.target === 'admin' && entry.type !== 'redeem') {
           return;
         }

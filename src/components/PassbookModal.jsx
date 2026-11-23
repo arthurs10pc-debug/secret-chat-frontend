@@ -908,7 +908,7 @@ export default function PassbookModal({
                         instantReplySeen[groupKey] = [entryMs];
                         deduplicated.push(entry);
                       } else {
-                        const isClose = instantReplySeen[groupKey].some(prevMs => Math.abs(prevMs - entryMs) < 60 * 60 * 1000);
+                        const isClose = instantReplySeen[groupKey].some(prevMs => Math.abs(prevMs - entryMs) < 5 * 60 * 1000);
                         if (!isClose) {
                           instantReplySeen[groupKey].push(entryMs);
                           deduplicated.push(entry);

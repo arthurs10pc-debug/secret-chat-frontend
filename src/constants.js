@@ -219,7 +219,7 @@ export const ROMANTIC_WISH_STORE = [
 
 export const LOVE_EARNING_RULES = [
   { sno: 1, task: 'Daily Morning Sweet Text', criteria: 'Send sweet Good Morning message before 9:00 AM', reward: '+2.00' },
-  { sno: 2, task: 'Instant Reply', criteria: 'Reply within 30 seconds of incoming message', reward: '+0.50' },
+  { sno: 2, task: 'Instant Reply', criteria: 'Reply within 30 seconds of incoming message (Cooldown: 5 mins)', reward: '+0.50' },
   { sno: 3, task: 'Compliment Drop', criteria: 'Spontaneous, genuine romantic compliment during conversation', reward: '+3.00' },
   { sno: 4, task: 'Meal Check-in', criteria: 'Caring "Had food?" reminder sent before 2:00 PM / 9:00 PM', reward: '+2.00' },
   { sno: 5, task: 'Virtual Hug / Kiss Emoji', criteria: 'Sharing cute romantic emojis, stickers, or kisses in chat', reward: '+0.40' },
