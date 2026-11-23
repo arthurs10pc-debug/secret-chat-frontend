@@ -1847,10 +1847,6 @@ export default function App() {
 
   // --- INSTANT AUTO-UNLOCK & AUTO-CLEAR PIN GATE FOR WP UPGRADE VIEW ---
   const handleUpgradeClick = () => {
-    if (role !== 'parent' && !isCurrentUserDora) {
-      alert("🔒 Access Restricted: Upgrade is only available for accounts designated as Dora by Admin (Darsh).");
-      return;
-    }
     setPinInput('');
     setPinError(false);
     setShowPinModal(true);
@@ -7911,18 +7907,14 @@ export default function App() {
 
           {/* CENTER: GET PLUS (SLIGHTLY LEFT) & LOVE BALANCE PILL */}
           <div className="flex items-center gap-1.5 min-w-0">
-            {/* GET PLUS PILL BUTTON -> OPENS WHATSAPP / STEALTH VIEW */}
+            {/* GET PLUS PILL BUTTON -> OPENS PIN GATE FOR WHATSAPP UPGRADE VIEW */}
             <button
               type="button"
-              onClick={() => setViewMode(prev => prev === 'stealth' ? 'real_gpt' : 'stealth')}
-              className={`px-3 py-1.5 rounded-full flex items-center gap-1.5 transition-all active:scale-95 shadow cursor-pointer shrink-0 ${
-                viewMode === 'stealth'
-                  ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/60 ring-1 ring-emerald-500/40'
-                  : 'bg-[#1e2430] hover:bg-[#283244] text-[#8cb2ea] border border-[#2d3a4f]/50'
-              }`}
-              title="Toggle Secret WhatsApp View"
+              onClick={handleUpgradeClick}
+              className="px-3.5 py-1.5 rounded-full flex items-center gap-1.5 transition-all active:scale-95 shadow cursor-pointer shrink-0 bg-[#1e2430] hover:bg-[#283244] text-[#8cb2ea] border border-[#2d3a4f]/50"
+              title="Get Plus (Enter PIN for WhatsApp View)"
             >
-              <Sparkles size={13} className={viewMode === 'stealth' ? "text-emerald-400" : "text-[#8cb2ea] fill-[#8cb2ea]/30"} />
+              <Sparkles size={13} className="text-[#8cb2ea] fill-[#8cb2ea]/30" />
               <span className="text-xs font-semibold tracking-wide whitespace-nowrap">Get Plus</span>
             </button>
 
