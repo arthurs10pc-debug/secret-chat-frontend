@@ -276,12 +276,33 @@ export default function App() {
     const list = (displayUsers || []).filter(u => u && u.email && u.email.toLowerCase() !== 'dora@gmail.com');
     const designated = list.find(u => u && !u.isAdmin && u.isDora);
     if (designated) return designated;
+    // Fallback: any logged in non-admin user
+    const otherUser = list.find(u => u && !u.isAdmin && u.email && u.email.toLowerCase() !== 'arthurs10pc@gmail.com');
+    if (otherUser) return otherUser;
     return null;
   }, [displayUsers]);
 
   const activeDoraName = useMemo(() => {
     if (!activeDoraUser) return 'Dora';
-    return activeDoraUser.firstName || (activeDoraUser.name ? activeDoraUser.name.split(' ')[0] : 'Dora');
+    let candidate = activeDoraUser.firstName || '';
+    if (!candidate || candidate.toLowerCase() === 'user' || candidate.toLowerCase() === 'admin') {
+      candidate = activeDoraUser.name ? activeDoraUser.name.split(' ')[0] : '';
+    }
+    if (!candidate || candidate.toLowerCase() === 'user' || candidate.toLowerCase() === 'admin') {
+      candidate = activeDoraUser.fullName ? activeDoraUser.fullName.split(' ')[0] : '';
+    }
+    if (!candidate || candidate.toLowerCase() === 'user' || candidate.toLowerCase() === 'admin') {
+      candidate = activeDoraUser.originalName ? activeDoraUser.originalName.split(' ')[0] : '';
+    }
+    if (!candidate || candidate.toLowerCase() === 'user' || candidate.toLowerCase() === 'admin') {
+      if (activeDoraUser.email) {
+        const rawPrefix = activeDoraUser.email.split('@')[0].split('.')[0].replace(/[0-9_]/g, '');
+        if (rawPrefix && rawPrefix.length > 1) {
+          candidate = rawPrefix.charAt(0).toUpperCase() + rawPrefix.slice(1).toLowerCase();
+        }
+      }
+    }
+    return (candidate && candidate.toLowerCase() !== 'user' && candidate.toLowerCase() !== 'admin') ? candidate : 'Dora';
   }, [activeDoraUser]);
 
   const isCurrentUserDora = useMemo(() => {
@@ -7008,7 +7029,7 @@ export default function App() {
                     className={`flex items-center gap-0.5 sm:gap-1 hover:text-white cursor-pointer transition-all active:scale-95 ${Number(doraNetBalance || 0) < 0 ? 'text-rose-400 font-bold' : 'text-pink-300'}`}
                     title={`${activeDoraName}: 💕`}
                   >
-                    <span className="text-[9px] text-pink-400/90 font-sans font-semibold">Dora:</span>
+                    <span className="text-[9px] text-pink-400/90 font-sans font-semibold">{activeDoraName}:</span>
                     <span>{Number(doraNetBalance || 0) < 0 ? '💔' : '💕'}</span>
                     <span>{formatLoveBalance(doraNetBalance)}</span>
                   </button>
@@ -11084,7 +11105,7 @@ export default function App() {
               )}
 
               {/* PROMPT SUGGESTIONS (MATCHING OFFICIAL CHATGPT APP - IMAGE 1) */}
-              {viewMode !== 'stealth' && (!messages || messages.length === 0 || viewMode === 'real_gpt') && (
+              {viewMode !== 'stealth' && (!stealthMessages || stealthMessages.length === 0 || viewMode === 'real_gpt') && (
                 <div className="flex flex-col gap-2.5 mb-3 px-2 select-none">
                   <button
                     type="button"
