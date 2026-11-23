@@ -486,23 +486,45 @@ export default function App() {
     return false;
   }, []);
 
+  const DARSH_BASE_TX_ID = 'lb_darsh_base_points_71';
+  const DARSH_BASE_ENTRY = {
+    id: DARSH_BASE_TX_ID,
+    sl: 1,
+    target: 'admin',
+    description: '[Darsh] Love Balance Base Reserve (+71.00)',
+    earnedAt: '23/11/2026, 03:00 PM',
+    expireDate: '',
+    points: 71.00,
+    type: 'credit',
+    remarks: 'Darsh Love Balance Base Reserve',
+    status: 'Confirmed'
+  };
+
   const [loveLedger, setLoveLedger] = useState(() => {
     try {
       const saved = localStorage.getItem('stealth_love_ledger');
       if (saved !== null) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed
+          let cleaned = parsed
             .filter(item => item && !isLegacyMockEntry(item))
+            // Remove any accidental scratch card debit mistakenly charged to Dora
+            .filter(item => !(item.target === 'user' && typeof item.description === 'string' && item.description.includes('Opened Surprise Scratch Card')))
             .map(item => ({
               ...item,
               target: item.target || (item.description && item.description.includes('[Darsh]') ? 'admin' : 'user')
             }));
+
+          // Ensure Darsh permanently has his 71.00 base reserve entry
+          if (!cleaned.some(e => e && (e.id === DARSH_BASE_TX_ID || (e.target === 'admin' && Number(e.points) >= 71)))) {
+            cleaned = [DARSH_BASE_ENTRY, ...cleaned];
+          }
+          return cleaned;
         }
       }
-      return [];
+      return [DARSH_BASE_ENTRY];
     } catch {
-      return [];
+      return [DARSH_BASE_ENTRY];
     }
   });
 
@@ -545,7 +567,18 @@ export default function App() {
     }
     return typeof loveBalance === 'number' ? loveBalance : 0;
   }, [loveLedger, getNetLedgerBalance, loveBalance, isLegacyMockEntry, usersDirectory]);
-  const adminNetBalance = useMemo(() => getNetLedgerBalance(loveLedger, 'admin'), [loveLedger, getNetLedgerBalance]);
+
+  const adminNetBalance = useMemo(() => {
+    const adminEntries = (loveLedger || []).filter(e => e && !isLegacyMockEntry(e) && (e.target === 'admin' || (e.description && e.description.includes('[Darsh]'))));
+    if (adminEntries.length > 0) {
+      const net = getNetLedgerBalance(loveLedger, 'admin');
+      return net > 0 ? net : 71.00;
+    }
+    if (typeof adminLoveBalance === 'number' && adminLoveBalance > 0) return adminLoveBalance;
+    const saved = localStorage.getItem('stealth_admin_love_balance');
+    if (saved !== null && parseFloat(saved) > 0) return parseFloat(saved);
+    return 71.00;
+  }, [loveLedger, getNetLedgerBalance, adminLoveBalance, isLegacyMockEntry]);
 
   // Synchronize loveBalance and adminLoveBalance state with pure mathematical ledger totals
   useEffect(() => {
@@ -574,8 +607,9 @@ export default function App() {
   }, [doraNetBalance, role, googleUser?.email, loveLedger]);
 
   useEffect(() => {
-    setAdminLoveBalance(adminNetBalance);
-    try { localStorage.setItem('stealth_admin_love_balance', adminNetBalance.toString()); } catch(e) {}
+    const targetAdminBal = adminNetBalance > 0 ? adminNetBalance : 71.00;
+    setAdminLoveBalance(targetAdminBal);
+    try { localStorage.setItem('stealth_admin_love_balance', targetAdminBal.toString()); } catch(e) {}
   }, [adminNetBalance]);
 
   // On mount: unconditionally purge any legacy mock template entries from storage and state
@@ -587,9 +621,9 @@ export default function App() {
         setLoveBalance(0);
       }
       const savedAdminBal = localStorage.getItem('stealth_admin_love_balance');
-      if (savedAdminBal && parseFloat(savedAdminBal) < 0) {
-        localStorage.setItem('stealth_admin_love_balance', '0');
-        setAdminLoveBalance(0);
+      if (savedAdminBal === null || parseFloat(savedAdminBal) <= 0 || isNaN(parseFloat(savedAdminBal))) {
+        localStorage.setItem('stealth_admin_love_balance', '71');
+        setAdminLoveBalance(71);
       }
       const saved = localStorage.getItem('stealth_love_ledger');
       if (saved) {
@@ -677,9 +711,10 @@ export default function App() {
   const [adminLoveBalance, setAdminLoveBalance] = useState(() => {
     try {
       const saved = localStorage.getItem('stealth_admin_love_balance');
-      return saved !== null ? Math.max(0, parseFloat(saved) || 0) : 0.00;
+      const val = saved !== null ? parseFloat(saved) : 71.00;
+      return !isNaN(val) && val > 0 ? val : 71.00;
     } catch {
-      return 0.00;
+      return 71.00;
     }
   });
   const [activeLbTarget, setActiveLbTarget] = useState('user'); // 'user' (Partner A) or 'admin' (Admin H)
