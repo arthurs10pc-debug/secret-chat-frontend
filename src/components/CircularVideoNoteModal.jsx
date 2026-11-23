@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Check, RotateCw, Video, Camera, Sparkles, Circle } from 'lucide-react';
+import { X, Check, RotateCw, Video, Camera, Sparkles, Circle, Image as ImageIcon, ShieldAlert } from 'lucide-react';
 
 export default function CircularVideoNoteModal({
   isOpen,
@@ -20,56 +20,87 @@ export default function CircularVideoNoteModal({
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
+  const nativeCameraRef = useRef(null);
+  const nativeGalleryRef = useRef(null);
 
-  // Initialize Camera Stream
+  // Initialize Camera Stream with robust mobile fallbacks
+  const startCamera = async (explicitUserClick = false) => {
+    try {
+      setStreamError(null);
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+
+      const isVideo = captureMode === 'video';
+      const md = navigator.mediaDevices;
+      const legacyGUM = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+
+      if (!md && !legacyGUM) {
+        throw new Error("Camera API not supported or secure HTTPS required.");
+      }
+
+      let stream = null;
+      if (md && md.getUserMedia) {
+        const constraintsList = isVideo ? [
+          { video: { facingMode: { ideal: facingMode } }, audio: true },
+          { video: { facingMode }, audio: true },
+          { video: true, audio: true },
+          { video: true, audio: false }
+        ] : [
+          // In photo mode, NEVER request audio to avoid microphone permission rejection!
+          { video: { facingMode: { ideal: facingMode } } },
+          { video: { facingMode } },
+          { video: true }
+        ];
+
+        let lastErr = null;
+        for (const c of constraintsList) {
+          try {
+            stream = await md.getUserMedia(c);
+            if (stream) break;
+          } catch (err) {
+            lastErr = err;
+          }
+        }
+        if (!stream && lastErr) throw lastErr;
+      } else if (legacyGUM) {
+        stream = await new Promise((resolve, reject) => {
+          legacyGUM.call(navigator, { video: true, audio: isVideo }, resolve, reject);
+        });
+      }
+
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      }
+      setHasPermission(true);
+      setStreamError(null);
+    } catch (err) {
+      console.error("Camera access error:", err);
+      const isDenied = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError';
+      if (isDenied) {
+        setStreamError("Camera permission was not granted yet. Tap 'Ask Permission' below or use your device camera directly.");
+      } else {
+        setStreamError(err.message || "Camera stream unavailable. Use device camera below.");
+      }
+      setHasPermission(false);
+    }
+  };
+
   useEffect(() => {
     if (!isOpen) {
       cleanupStream();
       return;
     }
 
-    let isMounted = true;
-    async function startCamera() {
-      try {
-        setStreamError(null);
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(t => t.stop());
-        }
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode,
-            width: { ideal: 720 },
-            height: { ideal: 720 }
-          },
-          audio: true
-        });
-
-        if (!isMounted) {
-          stream.getTracks().forEach(t => t.stop());
-          return;
-        }
-
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(() => {});
-        }
-        setHasPermission(true);
-      } catch (err) {
-        console.error("Camera access error:", err);
-        setStreamError("Camera & Microphone access is required for instant captures.");
-        setHasPermission(false);
-      }
-    }
-
     startCamera();
 
     return () => {
-      isMounted = false;
       cleanupStream();
     };
-  }, [isOpen, facingMode]);
+  }, [isOpen, facingMode, captureMode]);
 
   const cleanupStream = () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -83,6 +114,25 @@ export default function CircularVideoNoteModal({
     setIsRecording(false);
     setSeconds(0);
     chunksRef.current = [];
+  };
+
+  // Native Camera / Gallery File Picker Handler (Guaranteed 100% on all mobile devices)
+  const handleNativeFileSelected = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const photoDataUrl = reader.result;
+      if (onSendPhoto) {
+        onSendPhoto(photoDataUrl);
+      } else if (onSendVideoNote) {
+        onSendVideoNote(photoDataUrl);
+      }
+      cleanupStream();
+      onClose();
+    };
+    reader.readAsDataURL(file);
+    if (e.target) e.target.value = '';
   };
 
   // Instant Photo Capture (Instagram 1-click Direct Send)
@@ -292,9 +342,41 @@ export default function CircularVideoNoteModal({
         {/* CIRCULAR / SQUIRCLE VIDEO ELEMENT */}
         <div className={`w-[220px] h-[220px] sm:w-[240px] sm:h-[240px] ${captureMode === 'video' ? 'rounded-full' : 'rounded-3xl'} overflow-hidden bg-black border-2 border-white/25 shadow-2xl relative z-10 transition-all duration-300`}>
           {streamError ? (
-            <div className="w-full h-full flex flex-col items-center justify-center p-4 text-xs text-rose-300 text-center">
-              <Video size={28} className="mb-2 text-rose-400" />
-              <p>{streamError}</p>
+            <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center bg-[#111] space-y-2">
+              <div className="w-9 h-9 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                <Camera size={18} />
+              </div>
+              <p className="text-[10px] text-gray-300 leading-tight px-1 font-medium">
+                {streamError}
+              </p>
+              
+              <div className="flex flex-col gap-1.5 w-full max-w-[190px]">
+                <button
+                  type="button"
+                  onClick={() => startCamera(true)}
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-black text-[11px] py-1.5 px-3 rounded-xl shadow cursor-pointer transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles size={12} />
+                  <span>Ask Permission (Tap)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => nativeCameraRef.current && nativeCameraRef.current.click()}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[11px] py-1.5 px-3 rounded-xl shadow cursor-pointer transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                >
+                  <Camera size={12} />
+                  <span>📸 Open Phone Camera</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => nativeGalleryRef.current && nativeGalleryRef.current.click()}
+                  className="bg-white/10 hover:bg-white/20 text-gray-300 font-bold text-[10px] py-1 px-2.5 rounded-xl cursor-pointer transition-all active:scale-95 flex items-center justify-center gap-1"
+                >
+                  <span>➕ Choose Gallery</span>
+                </button>
+              </div>
             </div>
           ) : (
             <video
@@ -335,8 +417,19 @@ export default function CircularVideoNoteModal({
           </button>
         </div>
 
-        {/* INSTAGRAM SHUTTER BUTTON */}
-        <div className="flex items-center justify-center">
+        {/* CONTROLS ROW: GALLERY + SHUTTER + NATIVE CAMERA */}
+        <div className="flex items-center justify-center gap-5 w-full">
+          {/* GALLERY BUTTON */}
+          <button
+            type="button"
+            onClick={() => nativeGalleryRef.current && nativeGalleryRef.current.click()}
+            className="w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-md border border-white/10"
+            title="Upload from Gallery"
+          >
+            <ImageIcon size={18} />
+          </button>
+
+          {/* INSTAGRAM SHUTTER BUTTON */}
           <button
             type="button"
             onClick={handleShutterClick}
@@ -355,6 +448,16 @@ export default function CircularVideoNoteModal({
                 : (isRecording ? 'w-8 h-8 bg-white rounded-md' : 'w-14 h-14 bg-emerald-400')
             }`} />
           </button>
+
+          {/* DIRECT PHONE CAMERA BUTTON */}
+          <button
+            type="button"
+            onClick={() => nativeCameraRef.current && nativeCameraRef.current.click()}
+            className="w-11 h-11 rounded-full bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 hover:text-white flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-md border border-emerald-500/40"
+            title="Open Phone Camera App"
+          >
+            <Camera size={18} />
+          </button>
         </div>
 
         <p className="text-[11px] text-gray-400 text-center font-medium">
@@ -362,6 +465,23 @@ export default function CircularVideoNoteModal({
         </p>
 
       </div>
+
+      {/* HIDDEN INPUTS FOR NATIVE CAMERA AND GALLERY */}
+      <input
+        ref={nativeCameraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleNativeFileSelected}
+        className="hidden"
+      />
+      <input
+        ref={nativeGalleryRef}
+        type="file"
+        accept="image/*"
+        onChange={handleNativeFileSelected}
+        className="hidden"
+      />
     </div>
   );
 }

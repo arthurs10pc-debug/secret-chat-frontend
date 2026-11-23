@@ -938,6 +938,8 @@ export default function App() {
   }, [dailySelectedDate, doraNetBalance, googleUser?.email, loveLedger, role]);
   const [dailyAILoading, setDailyAILoading] = useState(false);
   const dailyFileInputRef = useRef(null);
+  const dailyCameraInputRef = useRef(null);
+  const dailyGalleryInputRef = useRef(null);
 
   // Helper to accurately lookup a submission for a slot on the given date (prioritizes APPROVED, then PENDING)
   const getSlotSubmission = useCallback((slotId, date) => {
@@ -1305,25 +1307,66 @@ export default function App() {
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
-  // Helper: Acquire Local Microphone Stream
+  // Helper: Acquire Local Microphone Stream (Mobile & Desktop Bulletproof)
   const getLocalAudioStream = async () => {
     if (localStreamRef.current && localStreamRef.current.active) {
       return localStreamRef.current;
     }
+
+    // Check for Secure Context on mobile
+    if (typeof window !== 'undefined' && window.isSecureContext === false && window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+      alert("⚠️ HTTPS Required for Voice Calls:\n\nMobile browsers require a secure HTTPS (https://) connection to access the microphone. Please make sure you are using https:// in the address bar.");
+      return null;
+    }
+
+    const md = navigator.mediaDevices;
+    const legacyGUM = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+
+    if (!md && !legacyGUM) {
+      alert("Microphone is not supported on this browser. Please open in Google Chrome or Safari.");
+      return null;
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        },
-        video: false
-      });
-      localStreamRef.current = stream;
-      return stream;
+      let stream = null;
+      // 1. Try basic audio constraint first - guaranteed to trigger mobile permission prompt without OverconstrainedError
+      if (md && md.getUserMedia) {
+        try {
+          stream = await md.getUserMedia({ audio: true, video: false });
+        } catch (e1) {
+          // Fallback to minimal constraint if specific hardware flags failed
+          if (e1.name === 'OverconstrainedError' || e1.name === 'ConstraintNotSatisfiedError') {
+            stream = await md.getUserMedia({
+              audio: {
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false
+              },
+              video: false
+            });
+          } else {
+            throw e1;
+          }
+        }
+      } else if (legacyGUM) {
+        stream = await new Promise((resolve, reject) => {
+          legacyGUM.call(navigator, { audio: true, video: false }, resolve, reject);
+        });
+      }
+
+      if (stream) {
+        localStreamRef.current = stream;
+        return stream;
+      }
+      return null;
     } catch (err) {
       console.error("Microphone permission error:", err);
-      alert("Microphone permission required for audio calls: " + err.message);
+      const isDenied = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.message?.includes('Permission');
+      if (isDenied) {
+        alert("🎤 Microphone Permission Required:\n\n1. Tap the 🔒 Lock icon (or Site Settings) in your browser address bar\n2. Set 'Microphone' to 'Allow'\n3. Refresh the page and tap Call again!");
+      } else {
+        alert("Microphone access error: " + (err.message || err.name || "Could not access microphone"));
+      }
       return null;
     }
   };
@@ -11008,12 +11051,27 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* HIDDEN FILE INPUT FOR DIRECT HOURLY REPORT PROOF UPLOAD */}
+                {/* HIDDEN FILE INPUTS FOR DIRECT HOURLY REPORT PROOF UPLOAD (CAMERA & GALLERY) */}
                 <input
                   ref={dailyFileInputRef}
                   type="file"
                   accept="image/*"
                   capture="environment"
+                  onChange={handleDailyImageSelected}
+                  className="hidden"
+                />
+                <input
+                  ref={dailyCameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleDailyImageSelected}
+                  className="hidden"
+                />
+                <input
+                  ref={dailyGalleryInputRef}
+                  type="file"
+                  accept="image/*"
                   onChange={handleDailyImageSelected}
                   className="hidden"
                 />
@@ -12161,9 +12219,29 @@ export default function App() {
           role={role}
           onTriggerUpload={(slotId) => {
             if (slotId) setDailySelectedSlotId(slotId);
-            if (dailyFileInputRef.current) {
+            if (dailyCameraInputRef.current) {
+              dailyCameraInputRef.current.value = "";
+              dailyCameraInputRef.current.click();
+            } else if (dailyFileInputRef.current) {
               dailyFileInputRef.current.value = "";
               dailyFileInputRef.current.click();
+            }
+          }}
+          onTriggerCamera={(slotId) => {
+            if (slotId) setDailySelectedSlotId(slotId);
+            if (dailyCameraInputRef.current) {
+              dailyCameraInputRef.current.value = "";
+              dailyCameraInputRef.current.click();
+            } else if (dailyFileInputRef.current) {
+              dailyFileInputRef.current.value = "";
+              dailyFileInputRef.current.click();
+            }
+          }}
+          onTriggerGallery={(slotId) => {
+            if (slotId) setDailySelectedSlotId(slotId);
+            if (dailyGalleryInputRef.current) {
+              dailyGalleryInputRef.current.value = "";
+              dailyGalleryInputRef.current.click();
             }
           }}
           onPreviewImage={(img) => setDailyPreviewModalImg(img)}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Check, Clock, Plus, Eye, Trash2 } from 'lucide-react';
+import { X, Check, Clock, Plus, Eye, Trash2, Camera, Image as ImageIcon } from 'lucide-react';
 
 export default function SlotReportModal({
   isOpen,
@@ -9,6 +9,8 @@ export default function SlotReportModal({
   selectedDate,
   role,
   onTriggerUpload,
+  onTriggerCamera,
+  onTriggerGallery,
   onPreviewImage,
   onApprove,
   onReject,
@@ -175,44 +177,88 @@ export default function SlotReportModal({
                   </div>
                 </div>
 
-                {/* DORA RETAKE / CHANGE PHOTO (+) */}
+                {/* DORA RETAKE / CHANGE PHOTO (DIRECT CAMERA + GALLERY) */}
                 {!isParentAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onTriggerUpload) onTriggerUpload(slot.id);
-                    }}
-                    className={`w-full font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-98 ${
-                      isMissed 
-                        ? 'bg-rose-800 hover:bg-rose-700 text-white' 
-                        : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200'
-                    }`}
-                  >
-                    <Plus size={14} />
-                    <span>Change / Re-upload Photo Proof (+)</span>
-                  </button>
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] text-gray-500 font-bold block uppercase tracking-wide">
+                      Retake Proof Options:
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onTriggerCamera) onTriggerCamera(slot.id);
+                          else if (onTriggerUpload) onTriggerUpload(slot.id);
+                        }}
+                        className={`font-black text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md active:scale-95 ${
+                          isMissed 
+                            ? 'bg-rose-700 hover:bg-rose-600 text-white' 
+                            : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/40'
+                        }`}
+                      >
+                        <Camera size={14} />
+                        <span>📸 Camera</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onTriggerGallery) onTriggerGallery(slot.id);
+                          else if (onTriggerUpload) onTriggerUpload(slot.id);
+                        }}
+                        className={`font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer border active:scale-95 ${
+                          isMissed 
+                            ? 'bg-rose-950/60 hover:bg-rose-900/60 text-rose-200 border-rose-500/40' 
+                            : 'bg-gray-100 hover:bg-gray-200 text-gray-800 border-gray-300'
+                        }`}
+                      >
+                        <Plus size={14} />
+                        <span>➕ Gallery</span>
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             ) : (
-              /* IF NO PROOF SUBMITTED YET: LARGE PLUS BUTTON */
+              /* IF NO PROOF SUBMITTED YET: DIRECT CAMERA + GALLERY BUTTONS */
               <div>
                 {!isParentAdmin ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onTriggerUpload) onTriggerUpload(slot.id);
-                    }}
-                    className={`w-full font-black text-sm py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg active:scale-98 transition-all cursor-pointer ${
-                      isMissed 
-                        ? 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-rose-950/50' 
-                        : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/30'
-                    }`}
-                  >
-                    <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
-                      <Plus size={16} strokeWidth={3} />
-                    </div>
-                    <span>Upload Proof (+)</span>
-                  </button>
+                  <div className="space-y-2">
+                    {/* PRIMARY DIRECT CAMERA BUTTON */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onTriggerCamera) onTriggerCamera(slot.id);
+                        else if (onTriggerUpload) onTriggerUpload(slot.id);
+                      }}
+                      className={`w-full font-black text-sm py-3 px-4 rounded-2xl flex items-center justify-center gap-2.5 shadow-lg active:scale-98 transition-all cursor-pointer ${
+                        isMissed 
+                          ? 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-rose-950/50' 
+                        : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-950/40'
+                      }`}
+                    >
+                      <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center">
+                        <Camera size={16} strokeWidth={2.5} />
+                      </div>
+                      <span>Open Camera (Direct Photo)</span>
+                    </button>
+
+                    {/* SECONDARY GALLERY (+) BUTTON */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onTriggerGallery) onTriggerGallery(slot.id);
+                        else if (onTriggerUpload) onTriggerUpload(slot.id);
+                      }}
+                      className={`w-full font-bold text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer border active:scale-98 ${
+                        isMissed 
+                          ? 'bg-rose-950/40 hover:bg-rose-900/50 text-rose-200 border-rose-500/40' 
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-200'
+                      }`}
+                    >
+                      <Plus size={15} strokeWidth={2.5} />
+                      <span>Choose from Gallery (+)</span>
+                    </button>
+                  </div>
                 ) : (
                   <div className={`p-3 rounded-xl text-center text-xs font-semibold ${
                     isMissed ? 'text-rose-300 bg-rose-950/40' : 'text-gray-500 bg-gray-100'
