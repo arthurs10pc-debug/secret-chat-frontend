@@ -32,7 +32,8 @@
       "no-unused-vars": "off",
       "react-hooks/exhaustive-deps": "off",
       "jsx-a11y/img-redundant-alt": "off",
-      "no-useless-escape": "off"
+      "no-useless-escape": "off",
+      "no-use-before-define": "off"
     }
   },
   "browserslist": {

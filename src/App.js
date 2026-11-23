@@ -471,6 +471,16 @@ export default function App() {
     }
   });
 
+  const [adminLoveBalance, setAdminLoveBalance] = useState(() => {
+    try {
+      const saved = localStorage.getItem('stealth_admin_love_balance');
+      const val = saved !== null ? parseFloat(saved) : 71.00;
+      return !isNaN(val) && val > 0 ? val : 71.00;
+    } catch {
+      return 71.00;
+    }
+  });
+
   const isLegacyMockEntry = useCallback((item) => {
     if (!item) return true;
     if (item.id && /^lb_([1-9]|1[0-1])$/.test(item.id)) return true;
@@ -719,15 +729,6 @@ export default function App() {
   const [wpSearchQuery, setWpSearchQuery] = useState('');
 
   // Dual Balance & Power Tools State
-  const [adminLoveBalance, setAdminLoveBalance] = useState(() => {
-    try {
-      const saved = localStorage.getItem('stealth_admin_love_balance');
-      const val = saved !== null ? parseFloat(saved) : 71.00;
-      return !isNaN(val) && val > 0 ? val : 71.00;
-    } catch {
-      return 71.00;
-    }
-  });
   const [activeLbTarget, setActiveLbTarget] = useState('user'); // 'user' (Partner A) or 'admin' (Admin H)
   const [adminOverrideVal, setAdminOverrideVal] = useState('');
 
