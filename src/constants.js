@@ -81,7 +81,7 @@ export const ARCADE_GAMES = [
 ];
 
 export const DEFAULT_DAILY_SLOTS = [
-  { id: 'slot_1', title: 'Morning Workout (10 Squats / Stretch)', timeRange: '08:00 - 09:00', tag: 'Workout', rewardPoints: 2.0, order: 1, isActive: true },
+  { id: 'slot_1', title: 'Morning Workout (10 Squats / Stretch)', timeRange: '07:00 - 08:00', tag: 'Workout', rewardPoints: 2.0, order: 1, isActive: true },
   { id: 'slot_2', title: 'Healthy Detox Juice / Morning Drink', timeRange: '09:00 - 10:00', tag: 'Juice', rewardPoints: 1.5, order: 2, isActive: true },
   { id: 'slot_3', title: 'Heavy Breakfast (High-Calorie Meal Plate)', timeRange: '10:00 - 11:00', tag: 'Breakfast', rewardPoints: 2.5, order: 3, isActive: true },
   { id: 'slot_4', title: 'Lunch Check-in & Care Update', timeRange: '13:00 - 14:00', tag: 'Lunch', rewardPoints: 2.0, order: 4, isActive: true },

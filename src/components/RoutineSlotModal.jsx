@@ -2,22 +2,38 @@ import React, { useState, useEffect } from 'react';
 import { Briefcase, X, Clock, Sparkles, Check, ChevronDown, Plus, Calendar } from 'lucide-react';
 
 const QUICK_START_HOURS = [
-  '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', 
-  '13:00', '14:00', '15:30', '17:00', '18:30', '20:00', '21:00', '22:00'
+  '05:00', '05:30', '06:00', '06:30', '07:00', '07:30',
+  '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
+  '11:00', '11:30', '12:00', '12:30', '13:00', '13:30',
+  '14:00', '14:30', '15:00', '15:30', '16:00', '16:30',
+  '17:00', '17:30', '18:00', '18:30', '19:00', '19:30',
+  '20:00', '20:30', '21:00', '21:30', '22:00', '22:30', '23:00'
 ];
 
+const DURATION_OPTIONS = [
+  { label: '15m', minutes: 15 },
+  { label: '30m', minutes: 30 },
+  { label: '45m', minutes: 45 },
+  { label: '1 hr', minutes: 60 },
+  { label: '1.5 hr', minutes: 90 },
+  { label: '2 hr', minutes: 120 },
+  { label: '3 hr', minutes: 180 }
+];
+
+const MINUTE_CHIPS = ['00', '15', '30', '45'];
+
 const parseRange = (rangeStr) => {
-  if (!rangeStr) return { start: '08:00', end: '09:00' };
+  if (!rangeStr) return { start: '07:00', end: '08:00' };
   const parts = rangeStr.split('-').map(s => s.trim());
   const norm = (t) => {
-    if (!t) return '08:00';
+    if (!t) return '07:00';
     const m = t.match(/^(\d{1,2}):(\d{2})$/);
     if (m) return `${m[1].padStart(2, '0')}:${m[2]}`;
     return t;
   };
   return {
-    start: norm(parts[0]) || '08:00',
-    end: norm(parts[1]) || '09:00'
+    start: norm(parts[0]) || '07:00',
+    end: norm(parts[1]) || '08:00'
   };
 };
 
@@ -35,8 +51,8 @@ export default function RoutineSlotModal({
   setSlotFormPoints,
   handleSaveSlotForm
 }) {
-  const [startTime, setStartTime] = useState('08:00');
-  const [endTime, setEndTime] = useState('09:00');
+  const [startTime, setStartTime] = useState('07:00');
+  const [endTime, setEndTime] = useState('08:00');
   const [isManualInput, setIsManualInput] = useState(false);
 
   // Sync internal start/end times whenever slotFormTimeRange or modal changes
@@ -47,9 +63,9 @@ export default function RoutineSlotModal({
         setStartTime(parsed.start);
         setEndTime(parsed.end);
       } else if (!slotFormTimeRange) {
-        setStartTime('08:00');
-        setEndTime('09:00');
-        setSlotFormTimeRange('08:00 - 09:00');
+        setStartTime('07:00');
+        setEndTime('08:00');
+        setSlotFormTimeRange('07:00 - 08:00');
       }
     }
   }, [showAddSlotModal, slotFormTimeRange, setSlotFormTimeRange]);
@@ -62,6 +78,34 @@ export default function RoutineSlotModal({
   const handleEndChange = (val) => {
     setEndTime(val);
     setSlotFormTimeRange(`${startTime} - ${val}`);
+  };
+
+  const handleStartMinuteClick = (minStr) => {
+    const [h] = (startTime || '07:00').split(':');
+    const newStart = `${(h || '07').padStart(2, '0')}:${minStr}`;
+    setStartTime(newStart);
+    setSlotFormTimeRange(`${newStart} - ${endTime}`);
+  };
+
+  const handleEndMinuteClick = (minStr) => {
+    const [h] = (endTime || '08:00').split(':');
+    const newEnd = `${(h || '08').padStart(2, '0')}:${minStr}`;
+    setEndTime(newEnd);
+    setSlotFormTimeRange(`${startTime} - ${newEnd}`);
+  };
+
+  const handleDurationClick = (durationMinutes) => {
+    try {
+      const [sh, sm] = (startTime || '07:00').split(':').map(Number);
+      const totalMinutes = (sh * 60 + sm) + durationMinutes;
+      const endH = Math.floor(totalMinutes / 60) % 24;
+      const endM = totalMinutes % 60;
+      const newEnd = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+      setEndTime(newEnd);
+      setSlotFormTimeRange(`${startTime} - ${newEnd}`);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const getDurationText = () => {
@@ -169,6 +213,24 @@ export default function RoutineSlotModal({
                         className="w-full bg-[#0d0d0d] hover:bg-[#111] border border-blue-500/40 hover:border-blue-400 text-white font-mono font-black text-sm px-3 py-2 rounded-xl text-center cursor-pointer outline-none transition-all shadow-inner"
                       />
                     </div>
+                    {/* Minute selector chips for Start Time */}
+                    <div className="flex items-center gap-1 pt-0.5 justify-center">
+                      <span className="text-[9px] text-gray-500 font-bold">Min:</span>
+                      {MINUTE_CHIPS.map((min) => (
+                        <button
+                          key={`start-${min}`}
+                          type="button"
+                          onClick={() => handleStartMinuteClick(min)}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                            startTime.endsWith(`:${min}`)
+                              ? 'bg-blue-600 text-white shadow'
+                              : 'bg-[#222] hover:bg-[#2c2c2c] text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          :{min}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="space-y-1">
@@ -181,12 +243,47 @@ export default function RoutineSlotModal({
                         className="w-full bg-[#0d0d0d] hover:bg-[#111] border border-blue-500/40 hover:border-blue-400 text-white font-mono font-black text-sm px-3 py-2 rounded-xl text-center cursor-pointer outline-none transition-all shadow-inner"
                       />
                     </div>
+                    {/* Minute selector chips for End Time */}
+                    <div className="flex items-center gap-1 pt-0.5 justify-center">
+                      <span className="text-[9px] text-gray-500 font-bold">Min:</span>
+                      {MINUTE_CHIPS.map((min) => (
+                        <button
+                          key={`end-${min}`}
+                          type="button"
+                          onClick={() => handleEndMinuteClick(min)}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                            endTime.endsWith(`:${min}`)
+                              ? 'bg-blue-600 text-white shadow'
+                              : 'bg-[#222] hover:bg-[#2c2c2c] text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          :{min}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* QUICK DURATION / SLOT MIN TIME CHIPS */}
+                <div className="space-y-1">
+                  <span className="text-[10px] text-gray-400 font-bold block">Slot Duration / Min Time:</span>
+                  <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
+                    {DURATION_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        onClick={() => handleDurationClick(opt.minutes)}
+                        className="px-2 py-1 rounded-lg text-[10px] font-bold bg-[#1e293b] hover:bg-[#334155] text-blue-300 border border-blue-500/30 hover:border-blue-400 transition-all cursor-pointer shrink-0 active:scale-95 shadow-sm"
+                      >
+                        +{opt.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
                 {/* QUICK START HOUR SELECTOR CHIPS */}
                 <div className="space-y-1">
-                  <span className="text-[10px] text-gray-400 font-bold block">1-Tap Start Hour:</span>
+                  <span className="text-[10px] text-gray-400 font-bold block">1-Tap Start Time:</span>
                   <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
                     {QUICK_START_HOURS.map((hr) => (
                       <button
