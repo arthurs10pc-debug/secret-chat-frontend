@@ -609,9 +609,8 @@ export default function App() {
   }, [doraNetBalance, role, googleUser?.email, loveLedger]);
 
   useEffect(() => {
-    const targetAdminBal = adminNetBalance > 0 ? adminNetBalance : 71.00;
-    setAdminLoveBalance(targetAdminBal);
-    try { localStorage.setItem('stealth_admin_love_balance', targetAdminBal.toString()); } catch(e) {}
+    setAdminLoveBalance(adminNetBalance);
+    try { localStorage.setItem('stealth_admin_love_balance', adminNetBalance.toString()); } catch(e) {}
   }, [adminNetBalance]);
 
   // On mount: unconditionally purge any legacy mock template entries from storage and state
@@ -621,11 +620,6 @@ export default function App() {
       if (savedBal && parseFloat(savedBal) < 0) {
         localStorage.setItem('stealth_love_balance', '0');
         setLoveBalance(0);
-      }
-      const savedAdminBal = localStorage.getItem('stealth_admin_love_balance');
-      if (savedAdminBal === null || parseFloat(savedAdminBal) <= 0 || isNaN(parseFloat(savedAdminBal))) {
-        localStorage.setItem('stealth_admin_love_balance', '71');
-        setAdminLoveBalance(71);
       }
       const saved = localStorage.getItem('stealth_love_ledger');
       if (saved) {
@@ -638,7 +632,7 @@ export default function App() {
           }
         }
       }
-    } catch(e) {}
+    } catch (e) {}
   }, [isLegacyMockEntry]);
 
   const [showLoveBalanceModal, setShowLoveBalanceModal] = useState(false);
@@ -824,9 +818,7 @@ export default function App() {
       });
       socketRef.current.emit('love_balance_action', {
         room: GLOBAL_ROOM,
-        action: 'REQUEST_SYNC',
-        loveBalance: doraNetBalance,
-        loveLedger: loveLedger
+        action: 'REQUEST_SYNC'
       });
       socketRef.current.emit('request_users_directory');
       socketRef.current.emit('daily_task_request_sync', { date: dailySelectedDate });
@@ -5288,6 +5280,14 @@ export default function App() {
         const cleanLedger = data.loveLedger.filter(e => e && !activeDelTxs.includes(e.id) && !isLegacyMockEntry(e));
         setLoveLedger(cleanLedger);
         try { localStorage.setItem('stealth_love_ledger', JSON.stringify(cleanLedger)); } catch(e) {}
+        if (cleanLedger.length === 0) {
+          setLoveBalance(0);
+          setAdminLoveBalance(0);
+          try {
+            localStorage.setItem('stealth_love_balance', '0');
+            localStorage.setItem('stealth_admin_love_balance', '0');
+          } catch(e) {}
+        }
       }
       if (typeof data.loveBalance === 'number') {
         setLoveBalance(data.loveBalance);
@@ -5327,6 +5327,37 @@ export default function App() {
       }
     });
 
+    socketRef.current.on('love_balance_action', (data) => {
+      if (!data) return;
+      if (data.action === 'CLEAR_LEDGER') {
+        const clearTarget = data.target || 'user';
+        if (clearTarget === 'both' || clearTarget === 'user') {
+          setLoveBalance(0);
+          try { localStorage.setItem('stealth_love_balance', '0'); } catch(e) {}
+        }
+        if (clearTarget === 'both' || clearTarget === 'admin') {
+          setAdminLoveBalance(0);
+          try { localStorage.setItem('stealth_admin_love_balance', '0'); } catch(e) {}
+        }
+        if (clearTarget === 'both') {
+          setLoveLedger([]);
+          try { localStorage.setItem('stealth_love_ledger', '[]'); } catch(e) {}
+        } else if (clearTarget === 'admin') {
+          setLoveLedger(prev => {
+            const next = (prev || []).filter(e => e && e.target !== 'admin' && !(e.description && e.description.includes('[Darsh]')));
+            try { localStorage.setItem('stealth_love_ledger', JSON.stringify(next)); } catch(e) {}
+            return next;
+          });
+        } else if (clearTarget === 'user') {
+          setLoveLedger(prev => {
+            const next = (prev || []).filter(e => e && (e.target === 'admin' || (e.description && e.description.includes('[Darsh]'))));
+            try { localStorage.setItem('stealth_love_ledger', JSON.stringify(next)); } catch(e) {}
+            return next;
+          });
+        }
+      }
+    });
+
     socketRef.current.on('love_balance_broadcast', (data) => {
       if (!data) return;
       const myRole = roleRef.current || role || localStorage.getItem('stealth_role');
@@ -5351,6 +5382,14 @@ export default function App() {
         const cleanLedger = data.loveLedger.filter(e => e && !activeDelTxs.includes(e.id) && !isLegacyMockEntry(e));
         setLoveLedger(cleanLedger);
         try { localStorage.setItem('stealth_love_ledger', JSON.stringify(cleanLedger)); } catch(e) {}
+        if (cleanLedger.length === 0) {
+          setLoveBalance(0);
+          setAdminLoveBalance(0);
+          try {
+            localStorage.setItem('stealth_love_balance', '0');
+            localStorage.setItem('stealth_admin_love_balance', '0');
+          } catch(e) {}
+        }
       }
       if (Array.isArray(data.wishRequests)) {
         setWishRequests(data.wishRequests);
