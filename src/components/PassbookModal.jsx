@@ -79,11 +79,12 @@ export default function PassbookModal({
     }
   });
 
-  const isDarsh = isParentAdmin ? (activeLbTarget === 'admin') : (role === 'parent');
-  const openerName = isDarsh ? 'Darsh' : (activeDoraName || 'Dora');
-  const openerRole = isDarsh ? 'admin' : 'user';
-  const currentOpenerBalance = isDarsh ? adminNetBalance : doraNetBalance;
-  const currentViewerRole = isParentAdmin ? (activeLbTarget === 'admin' ? 'admin' : 'user') : 'user';
+  // The actual logged-in user on this device (NOT affected by which passbook tab is currently open)
+  const isDarshUser = (role === 'parent' || role === 'admin');
+  const openerName = isDarshUser ? 'Darsh' : (activeDoraName || 'Dora');
+  const openerRole = isDarshUser ? 'admin' : 'user';
+  const currentOpenerBalance = isDarshUser ? Number(adminNetBalance || 0) : Number(doraNetBalance || 0);
+  const currentViewerRole = isDarshUser ? 'admin' : 'user';
 
   // Strictly isolate unlocked scratch vouchers by the owner who paid 6 points to scratch!
   const displayedUnlockedVouchers = useMemo(() => {
@@ -1341,10 +1342,10 @@ export default function PassbookModal({
                     {displayedUnlockedVouchers.map((uv, idx) => {
                       const vKey = uv.code || uv.id || String(idx);
                       const isSelected = selectedVoucherIds.includes(vKey) || (uv.id && selectedVoucherIds.includes(uv.id)) || (uv.code && selectedVoucherIds.includes(uv.code));
-                      const availablePts = Math.max(0, displayedLoveBalance);
+                      const availablePts = Math.max(0, currentOpenerBalance);
                       const numericCost = parseFloat(String(uv.points || uv.value || '10').replace(/[^0-9.]/g, '')) || 10;
                       const canAffordUv = availablePts >= numericCost;
-                      const requesterRole = isParentAdmin ? (activeLbTarget === 'admin' ? 'admin' : 'user') : 'user';
+                      const requesterRole = uv.openerRole || openerRole;
                       const isUvPending = wishRequests.some(r => (r.wishTitle === uv.title || r.wishId === uv.code) && r.status === 'PENDING' && r.requesterRole === requesterRole);
 
                       return (
