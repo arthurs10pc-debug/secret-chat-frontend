@@ -39,6 +39,7 @@ import {
 } from './constants';
 
 import DarshAssistantBot from './components/DarshAssistantBot';
+import AnimatedScreenBuddy from './components/AnimatedScreenBuddy';
 import StealthAlertBubble from './components/StealthAlertBubble';
 import WhatsAppMediaTray from './components/WhatsAppMediaTray';
 import CircularVideoNoteModal from './components/CircularVideoNoteModal';
@@ -1175,13 +1176,38 @@ export default function App() {
   const pendingRestoreRef = useRef(null);
 
   const [isBotOpen, setIsBotOpen] = useState(false);
-  const [botTab, setBotTab] = useState('instant');
+  const [botTab, setBotTab] = useState('buddy');
   const [customMsg, setCustomMsg] = useState('');
   const [schedMsg, setSchedMsg] = useState('');
   const [schedTime1, setSchedTime1] = useState('');
   const [schedTime2, setSchedTime2] = useState('');
   const [scheduledJobs, setScheduledJobs] = useState([]);
   const [incomingAlert, setIncomingAlert] = useState(null);
+
+  // Animated Screen Mascot (Hydration Water Buddy) - Testing Mode (Admin Only)
+  const [isBuddyActive, setIsBuddyActive] = useState(false);
+  const [buddyMessage, setBuddyMessage] = useState('Dora, time to drink water! Stay hydrated & fresh 💧');
+  const [buddyType, setBuddyType] = useState('water');
+  const [buddyIntervalMinutes, setBuddyIntervalMinutes] = useState(0);
+
+  const handleTriggerBuddyTest = (customText, type = 'water') => {
+    if (customText) setBuddyMessage(customText);
+    if (type) setBuddyType(type);
+    setIsBuddyActive(false);
+    setTimeout(() => {
+      setIsBuddyActive(true);
+    }, 120);
+  };
+
+  useEffect(() => {
+    if (!buddyIntervalMinutes || buddyIntervalMinutes <= 0 || role !== 'parent') return;
+    const intervalMs = buddyIntervalMinutes * 60 * 1000;
+    const timer = setInterval(() => {
+      setIsBuddyActive(false);
+      setTimeout(() => setIsBuddyActive(true), 150);
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [buddyIntervalMinutes, role]);
 
   const [activeViewImage, setActiveViewImage] = useState(null);
   const [archivedImages, setArchivedImages] = useState(() => {
@@ -9311,6 +9337,26 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
+              {autoplayBlocked && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (playerRef.current) {
+                      try {
+                        playerRef.current.unMute();
+                        playerRef.current.setVolume(100);
+                        playerRef.current.playVideo();
+                      } catch (e) {}
+                    }
+                    setAutoplayBlocked(false);
+                  }}
+                  className="bg-amber-500 hover:bg-amber-400 text-black px-2.5 py-1 rounded-xl text-xs font-bold cursor-pointer animate-pulse flex items-center gap-1 shadow-md"
+                  title="Mobile browser paused audio. Click to listen."
+                >
+                  <Volume2 size={13} />
+                  <span>Tap to Listen</span>
+                </button>
+              )}
               <button
                 onClick={handleTogglePlayPause}
                 className="bg-[#222] hover:bg-[#333] text-white p-1.5 px-2.5 rounded-xl flex items-center gap-1 cursor-pointer text-xs font-semibold border border-[#333]"
@@ -11991,67 +12037,122 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* CURRENT TRACK STATUS BAR & VISIBLE EMBEDDED PLAYER */}
-                    <div className="space-y-3 w-full">
-                      <div className={`w-full aspect-video sm:h-72 rounded-2xl overflow-hidden bg-black border border-emerald-500/40 shadow-2xl relative ${activeVideoId ? 'block' : 'hidden'}`}>
-                        <div id="persistent-sync-iframe" className="w-full h-full" />
-                      </div>
+                    {/* PURE AUDIO-ONLY SYNCED STREAMING CARD (NO VIDEO) */}
+                    <div className="w-full space-y-3">
+                      <div className="w-full bg-gradient-to-b from-[#181818] to-[#121212] border border-emerald-500/40 rounded-3xl p-4 sm:p-6 shadow-2xl relative overflow-hidden text-left">
+                        {/* Glowing ambient pulse */}
+                        <div className="absolute -top-16 -right-16 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
-                      {activeVideoId ? (
-                        <div className="w-full bg-[#141414] border border-emerald-500/40 rounded-2xl p-3 sm:p-4 flex items-center justify-between gap-3 shadow-lg">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shrink-0">
-                              <Volume2 size={20} className={isPlaying ? 'animate-pulse' : ''} />
+                        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+                          {/* Rotating Vinyl / Glowing Audio Disc */}
+                          <div className="relative shrink-0">
+                            <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-[#0a0a0a] via-[#1a1a1a] to-[#2c2c2c] border-2 border-emerald-500/50 shadow-2xl flex items-center justify-center relative ${isPlaying ? 'animate-[spin_4s_linear_infinite]' : ''}`}>
+                              {/* Center Vinyl Label */}
+                              <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-400 flex items-center justify-center text-emerald-300 shadow-inner">
+                                <Music size={15} className={isPlaying ? 'animate-pulse' : ''} />
+                              </div>
+                              {/* Grooves */}
+                              <div className="absolute inset-1.5 rounded-full border border-white/5 pointer-events-none" />
+                              <div className="absolute inset-3.5 rounded-full border border-white/5 pointer-events-none" />
                             </div>
-                            <div className="min-w-0 text-left">
-                              <span className="text-[10px] text-emerald-400 font-mono uppercase tracking-wider block font-bold">
-                                {isPlaying ? '● Live Synchronized Playing' : '❚❚ Playback Paused'}
+                            {isPlaying && (
+                              <span className="absolute -bottom-1 -right-1 flex h-4 w-4">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 text-[9px] text-black font-bold items-center justify-center">♪</span>
                               </span>
-                              <h3 className="text-xs sm:text-sm font-bold text-white truncate max-w-[200px] sm:max-w-md">
-                                {activeTrackTitle || "YouTube Track"}
-                              </h3>
+                            )}
+                          </div>
+
+                          {/* Track Info & Visualizer */}
+                          <div className="flex-1 min-w-0 text-center sm:text-left space-y-2 w-full">
+                            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                              <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold flex items-center gap-1.5">
+                                <span className={`w-1.5 h-1.5 rounded-full ${isPlaying ? 'bg-emerald-400 animate-pulse' : 'bg-gray-400'}`} />
+                                {isPlaying ? 'Live Audio Stream' : 'Audio Paused'}
+                              </span>
+                              <span className="text-[10px] text-emerald-400/80 font-mono">
+                                🎧 Pure Audio Mode (No Video)
+                              </span>
+                            </div>
+
+                            <h3 className="text-sm sm:text-base font-bold text-white truncate max-w-full">
+                              {activeTrackTitle || "No Track Playing • Select or Schedule Below"}
+                            </h3>
+
+                            {/* Animated Equalizer Waveform Bars */}
+                            <div className="flex items-center justify-center sm:justify-start gap-1 h-5 py-0.5">
+                              {[40, 75, 55, 90, 60, 80, 45, 95, 70, 50, 85, 65, 40, 75].map((h, i) => (
+                                <div 
+                                  key={i}
+                                  className={`w-1 rounded-full transition-all duration-300 ${isPlaying ? 'bg-emerald-400' : 'bg-gray-700'}`}
+                                  style={{
+                                    height: isPlaying ? `${Math.max(25, (h * ((i % 3) + 1)) % 100)}%` : '20%',
+                                    animation: isPlaying ? `pulse ${0.4 + (i % 5) * 0.15}s infinite alternate ease-in-out` : 'none'
+                                  }}
+                                />
+                              ))}
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Audio Playback Controls */}
+                          <div className="flex items-center gap-2 shrink-0">
                             <button
                               type="button"
                               onClick={handleTogglePlayPause}
-                              className="p-2 px-3 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer active:scale-95 transition-all flex items-center gap-1 shadow"
-                              title={isPlaying ? "Pause Song" : "Play Song"}
+                              disabled={!activeVideoId}
+                              className={`p-2.5 px-3.5 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-lg cursor-pointer active:scale-95 transition-all ${
+                                activeVideoId
+                                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                                  : 'bg-[#222] text-gray-500 cursor-not-allowed opacity-50'
+                              }`}
                             >
-                              {isPlaying ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" />}
+                              {isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
                               <span>{isPlaying ? 'Pause' : 'Play'}</span>
                             </button>
+
                             <button
                               type="button"
                               onClick={handleSkipToNextScheduledSong}
                               disabled={!scheduledSongs[0]}
-                              className={`p-2 px-3 rounded-xl text-xs font-semibold border flex items-center gap-1 transition-all ${
+                              className={`p-2.5 px-3 rounded-2xl text-xs font-bold border flex items-center gap-1.5 transition-all ${
                                 scheduledSongs[0]
                                   ? 'bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border-emerald-500/40 cursor-pointer active:scale-95'
                                   : 'bg-[#1c1c1c] text-gray-600 border-[#2a2a2a] cursor-not-allowed opacity-50'
                               }`}
                               title={scheduledSongs[0] ? "Skip to Next Scheduled Song" : "No song scheduled in Slot 1"}
                             >
-                              <SkipForward size={13} />
+                              <SkipForward size={14} />
                               <span className="hidden sm:inline">Next</span>
                             </button>
                           </div>
                         </div>
-                      ) : (
-                        <div className="w-full bg-[#121212] border border-[#242424] rounded-2xl p-5 sm:p-6 text-center space-y-2.5 shadow-xl">
-                          <div className="w-14 h-14 rounded-full bg-[#1c1c1c] border border-[#2e2e2e] flex items-center justify-center text-emerald-400 mx-auto">
-                            <Volume2 size={24} />
+
+                        {/* Unmute / Autoplay Prompt Banner if mobile browser blocked audio */}
+                        {activeVideoId && autoplayBlocked && (
+                          <div className="mt-4 p-2.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs flex items-center justify-between">
+                            <span className="flex items-center gap-2 font-medium">
+                              <Volume2 size={15} className="animate-bounce" />
+                              Audio muted by browser policy.
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (playerRef.current) {
+                                  try {
+                                    playerRef.current.unMute();
+                                    playerRef.current.setVolume(100);
+                                    playerRef.current.playVideo();
+                                  } catch (e) {}
+                                }
+                                setAutoplayBlocked(false);
+                              }}
+                              className="bg-amber-500 text-black px-3 py-1 rounded-lg font-bold text-xs hover:bg-amber-400 cursor-pointer shadow"
+                            >
+                              Tap to Unmute & Listen 🔊
+                            </button>
                           </div>
-                          <div>
-                            <span className="text-[10px] text-gray-500 font-mono uppercase tracking-wider block">Live Synchronized</span>
-                            <h3 className="text-sm sm:text-base font-bold text-white mt-1 break-words">
-                              No track playing. Search or paste link above to start live sync.
-                            </h3>
-                          </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
 
                     {/* 3 UPCOMING SCHEDULED SONG SECTIONS */}
@@ -13094,7 +13195,29 @@ export default function App() {
           schedTime2={schedTime2}
           setSchedTime2={setSchedTime2}
           handleScheduleAlertSubmit={handleScheduleAlertSubmit}
+          handleTriggerBuddyTest={handleTriggerBuddyTest}
+          buddyIntervalMinutes={buddyIntervalMinutes}
+          setBuddyIntervalMinutes={setBuddyIntervalMinutes}
         />
+
+        {/* ANIMATED SCREEN MASCOT (HYDRATION WATER BUDDY) - STRICTLY ADMIN TESTING ONLY */}
+        {role === 'parent' && (
+          <AnimatedScreenBuddy
+            isActive={isBuddyActive}
+            message={buddyMessage}
+            type={buddyType}
+            onDismiss={() => setIsBuddyActive(false)}
+          />
+        )}
+
+        {/* PERSISTENT INVISIBLE SYNC AUDIO STREAM CONTAINER (ALWAYS VIEWPORT MOUNTED, PURE AUDIO NO VIDEO) */}
+        <div 
+          aria-hidden="true"
+          className="fixed bottom-0 right-0 w-[2px] h-[2px] opacity-[0.01] pointer-events-none -z-50 overflow-hidden"
+          style={{ position: 'fixed', bottom: 0, right: 0, width: '2px', height: '2px', opacity: 0.01, zIndex: -50 }}
+        >
+          <div id="persistent-sync-iframe" className="w-full h-full" />
+        </div>
         </Suspense>
 
       </main>
