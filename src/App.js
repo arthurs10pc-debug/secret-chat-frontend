@@ -317,6 +317,17 @@ export default function App() {
     return fromUser || fromDir;
   }, [googleUser, usersDirectory]);
 
+  const isCurrentAdmin = useMemo(() => {
+    const cleanEmail = (googleUser?.email || localStorage.getItem('stealth_user_email') || '').toLowerCase().trim();
+    return Boolean(
+      role === 'parent' ||
+      role === 'admin' ||
+      role === 'H' ||
+      cleanEmail === 'arthurs10pc@gmail.com' ||
+      googleUser?.isAdmin
+    );
+  }, [role, googleUser]);
+
   const partnerName = role === 'parent' ? activeDoraName : 'Darsh';
 
   useEffect(() => {
@@ -1096,7 +1107,7 @@ export default function App() {
   const [isPeerTyping, setIsPeerTyping] = useState(false);
   const typingTimerRef = useRef(null);
 
-  const [syncStatus, setSyncStatus] = useState('idle');
+  const [syncStatus, setSyncStatus] = useState('connected');
   const [incomingInviteRole, setIncomingInviteRole] = useState('');
   const [youtubeUrlInput, setYoutubeUrlInput] = useState('');
   const [activeTrackTitle, setActiveTrackTitle] = useState('');
@@ -1210,7 +1221,6 @@ export default function App() {
   const viewModeRef = useRef(viewMode);
   const isWhatsAppViewRef = useRef(isWhatsAppView);
   const roleRef = useRef(role);
-  const isCurrentAdmin = role === 'parent';
 
   // --- CODEX CINEMA YOUTUBE PLAYER SYNC ENGINE ---
   useEffect(() => {
@@ -8741,7 +8751,7 @@ export default function App() {
             </button>
 
             {/* LOVE BALANCE PILL BUTTON -> OPENS PASSBOOK */}
-            {role === 'parent' ? (
+            {isCurrentAdmin ? (
               <button
                 type="button"
                 onClick={() => {
@@ -8792,7 +8802,7 @@ export default function App() {
           </div>
 
           {/* RIGHT: CIRCULAR NEW CHAT BUTTON (HIDDEN FOR ADMIN) */}
-          {role !== 'parent' && (
+          {!isCurrentAdmin && (
             <button
               type="button"
               onClick={handleNewChat}
@@ -8897,7 +8907,7 @@ export default function App() {
             </button>
 
             {/* LOVE BALANCE BUTTON PILL (SHOW BOTH FOR DARSH, DORA ONLY SEES DORA) */}
-            {role === 'parent' ? (
+            {isCurrentAdmin ? (
               <div
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono font-bold shrink-0 transition-all ${
                   hasIncomingPendingWish
@@ -11406,66 +11416,35 @@ export default function App() {
                       onClick={handleDisconnectSync}
                       className="flex items-center gap-1 bg-rose-950 border border-rose-800 text-rose-300 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer"
                     >
-                      <Unlink size={12} /> Disconnect
+                      <Unlink size={12} /> Reset Sync
                     </button>
                   )}
                 </div>
 
-                {syncStatus !== 'connected' ? (
-                  <div className="bg-[#141414] border border-[#262626] rounded-2xl p-6 sm:p-8 text-center space-y-4 shadow-xl">
-                    <div className="w-14 h-14 rounded-full bg-[#1e1e1e] border border-[#333] flex items-center justify-center text-amber-400 mx-auto">
-                      <Radio size={26} className={syncStatus === 'requested' ? 'animate-pulse text-blue-400' : ''} />
-                    </div>
-
-                    <div>
-                      <h3 className="text-base font-bold text-white">Two-Way Handshake</h3>
-                      <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
-                        Both sides must authorize the synchronized audio stream.
-                      </p>
-                    </div>
-
-                    {syncStatus === 'idle' && (
-                      <button
-                        onClick={handleSendSyncInvite}
-                        className="w-full sm:w-auto bg-[#1c3a6b] text-white px-6 py-3 rounded-xl text-xs font-bold cursor-pointer inline-flex items-center justify-center gap-2 active:scale-95"
-                      >
-                        <Link2 size={15} />
-                        <span>Send Connection Request ({role === 'parent' ? 'Admin' : 'User'})</span>
-                      </button>
-                    )}
-
-                    {syncStatus === 'requested' && (
-                      <div className="inline-flex items-center gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-4 py-2.5 rounded-xl">
-                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                        <span>Invitation sent! Waiting for counterpart...</span>
-                      </div>
-                    )}
-
-                    {syncStatus === 'incoming_request' && (
-                      <div className="bg-emerald-950/40 border border-emerald-500/40 p-4 rounded-2xl max-w-sm mx-auto space-y-3">
-                        <p className="text-xs text-emerald-300 font-medium">
-                          Incoming lounge invitation from <strong className="text-white uppercase">{incomingInviteRole}</strong>!
-                        </p>
-                        <button
-                          onClick={handleAcceptSyncInvite}
-                          className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-                        >
-                          <Check size={16} /> Accept & Join Synced Lounge
-                        </button>
-                      </div>
-                    )}
+                {syncStatus === 'incoming_request' && (
+                  <div className="bg-emerald-950/60 border border-emerald-500/50 p-3.5 rounded-2xl flex items-center justify-between gap-3 animate-pulse shadow-lg">
+                    <p className="text-xs text-emerald-300 font-medium">
+                      🎵 Incoming lounge sync invitation from <strong className="text-white uppercase">{incomingInviteRole}</strong>!
+                    </p>
+                    <button
+                      onClick={handleAcceptSyncInvite}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer active:scale-95 shadow"
+                    >
+                      <Check size={14} /> Accept Sync
+                    </button>
                   </div>
-                ) : (
-                  <div className="space-y-3 sm:space-y-4">
-                    <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3 flex items-center justify-between shadow-lg">
-                      <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold font-mono">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                        <span>LINKED (Persists across refresh)</span>
-                      </div>
-                      <span className="text-[11px] text-gray-400 font-mono">Exact Sync</span>
-                    </div>
+                )}
 
-                    <div className="relative">
+                <div className="space-y-3 sm:space-y-4">
+                  <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3 flex items-center justify-between shadow-lg">
+                    <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold font-mono">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                      <span>LINKED (Exact Sync Across Devices)</span>
+                    </div>
+                    <span className="text-[11px] text-gray-400 font-mono">Ready to Play</span>
+                  </div>
+
+                  <div className="relative">
                       <form onSubmit={(e) => { e.preventDefault(); handleTriggerSong(youtubeUrlInput); }} className="flex gap-2">
                         <input 
                           type="text" 
@@ -11716,7 +11695,6 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                )}
               </section>
             )}
 
