@@ -9,7 +9,7 @@ import {
   Search, PanelLeft, ArrowUp, Plus, RefreshCw, Sparkles, Share,
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown, ChevronUp,
-  Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX,
+  Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX, SkipForward,
   Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2, Heart, Coins, Award, Scale, Gift, SlidersHorizontal, Bell, BellRing, Filter, CheckCircle2, XCircle, ArrowLeft, MoreVertical, Paperclip, Camera, Briefcase, Calendar, CheckCircle, Users, UserCheck, Mail, Pin, Star, CornerUpLeft,
   Menu, Sliders, Laptop, LayoutGrid
 } from 'lucide-react';
@@ -1109,6 +1109,11 @@ export default function App() {
 
   const [trackProgress, setTrackProgress] = useState(0);
   const [trackDuration, setTrackDuration] = useState(100);
+
+  // 3-Slot Upcoming Songs Queue
+  const [scheduledSongs, setScheduledSongs] = useState([null, null, null]);
+  const [slotInputs, setSlotInputs] = useState(['', '', '']);
+  const [loadingSlot, setLoadingSlot] = useState(null);
 
   const [codexEngine, setCodexEngine] = useState('gofile');
   const codexEngineRef = useRef(codexEngine);
@@ -3121,6 +3126,11 @@ export default function App() {
         const duration = playerRef.current.getDuration() || 100;
         setTrackProgress(current);
         setTrackDuration(duration);
+        if (duration > 0 && current >= duration - 0.8) {
+          if (socketRef.current) {
+            socketRef.current.emit('sync_track_ended');
+          }
+        }
       }
     }, 1000);
     return () => clearInterval(timer);
@@ -3187,7 +3197,12 @@ export default function App() {
               if (isRemoteTriggerRef.current) return;
               if (Date.now() - lastSyncActionTimeRef.current < 2500) return;
 
-              if (event.data === window.YT.PlayerState.PLAYING) {
+              if (event.data === (window.YT?.PlayerState?.ENDED ?? 0)) {
+                setIsPlaying(false);
+                if (socketRef.current) {
+                  socketRef.current.emit('sync_track_ended');
+                }
+              } else if (event.data === window.YT.PlayerState.PLAYING) {
                 setIsPlaying(true);
                 setAutoplayBlocked(false);
                 if (socketRef.current) {
@@ -5280,6 +5295,14 @@ export default function App() {
       if (!data || !data.connected) return;
       setSyncStatus('connected');
 
+      if (data && Array.isArray(data.queue)) {
+        setScheduledSongs([
+          data.queue[0] || null,
+          data.queue[1] || null,
+          data.queue[2] || null
+        ]);
+      }
+
       if (data.videoId) {
         setActiveVideoId(data.videoId);
         setActiveTrackTitle(data.title || "YouTube Track");
@@ -5379,6 +5402,16 @@ export default function App() {
           setAutoplayBlocked(true);
         }
         setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
+      }
+    });
+
+    socketRef.current.on('sync_queue_broadcast', ({ queue }) => {
+      if (Array.isArray(queue)) {
+        setScheduledSongs([
+          queue[0] || null,
+          queue[1] || null,
+          queue[2] || null
+        ]);
       }
     });
 
@@ -6859,6 +6892,94 @@ export default function App() {
         videoId: vid,
         title: finalTitle
       });
+    }
+  };
+
+  const handleScheduleSlotSong = async (slotIdx, inputVal) => {
+    const raw = (inputVal !== undefined ? inputVal : slotInputs[slotIdx] || '').trim();
+    if (!raw) return;
+    setLoadingSlot(slotIdx);
+
+    let vid = extractYouTubeId(raw);
+    let title = raw;
+
+    if (!vid) {
+      try {
+        const res = await fetch(`${SOCKET_URL}/api/yt-search?q=${encodeURIComponent(raw)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.videoId) {
+            vid = data.videoId;
+            title = data.title || title;
+          }
+        }
+      } catch (err) {
+        console.error("Queue resolver error:", err);
+      }
+    }
+
+    setLoadingSlot(null);
+
+    if (!vid) {
+      alert("Could not load track. Try pasting a direct YouTube watch link.");
+      return;
+    }
+
+    const nextQueue = [...scheduledSongs];
+    nextQueue[slotIdx] = {
+      url: raw,
+      videoId: vid,
+      title: title
+    };
+
+    setScheduledSongs(nextQueue);
+    setSlotInputs(prev => {
+      const copy = [...prev];
+      copy[slotIdx] = '';
+      return copy;
+    });
+
+    if (socketRef.current) {
+      socketRef.current.emit('sync_queue_update', { queue: nextQueue });
+    }
+  };
+
+  const handleRemoveScheduledSlot = (slotIdx) => {
+    const filtered = scheduledSongs.filter((_, idx) => idx !== slotIdx);
+    const nextQueue = [
+      filtered[0] || null,
+      filtered[1] || null,
+      null
+    ];
+    setScheduledSongs(nextQueue);
+    if (socketRef.current) {
+      socketRef.current.emit('sync_queue_update', { queue: nextQueue });
+    }
+  };
+
+  const handlePlayScheduledSlot = (slotIdx) => {
+    const targetSong = scheduledSongs[slotIdx];
+    if (!targetSong) return;
+
+    if (socketRef.current) {
+      socketRef.current.emit('sync_play_scheduled_slot', { index: slotIdx });
+    } else {
+      handleTriggerSong(targetSong.videoId, targetSong.title);
+      handleRemoveScheduledSlot(slotIdx);
+    }
+  };
+
+  const handleClearEntireQueue = () => {
+    const emptyQueue = [null, null, null];
+    setScheduledSongs(emptyQueue);
+    if (socketRef.current) {
+      socketRef.current.emit('sync_queue_update', { queue: emptyQueue });
+    }
+  };
+
+  const handleSkipToNextScheduledSong = () => {
+    if (socketRef.current) {
+      socketRef.current.emit('sync_track_ended');
     }
   };
 
@@ -11393,15 +11514,186 @@ export default function App() {
                       )}
                     </div>
 
-                    <div className="w-full bg-[#121212] border border-[#242424] rounded-2xl p-5 sm:p-6 text-center space-y-2.5 shadow-xl">
-                      <div className="w-14 h-14 rounded-full bg-[#1c1c1c] border border-[#2e2e2e] flex items-center justify-center text-emerald-400 mx-auto">
-                        <Volume2 size={24} className={isPlaying ? 'animate-bounce' : ''} />
+                    {/* CURRENT TRACK STATUS BAR */}
+                    {activeVideoId ? (
+                      <div className="w-full bg-[#141414] border border-emerald-500/40 rounded-2xl p-3 sm:p-4 flex items-center justify-between gap-3 shadow-lg">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                            <Volume2 size={20} className={isPlaying ? 'animate-pulse' : ''} />
+                          </div>
+                          <div className="min-w-0 text-left">
+                            <span className="text-[10px] text-emerald-400 font-mono uppercase tracking-wider block font-bold">
+                              {isPlaying ? '● Live Synchronized Playing' : '❚❚ Playback Paused'}
+                            </span>
+                            <h3 className="text-xs sm:text-sm font-bold text-white truncate max-w-[200px] sm:max-w-md">
+                              {activeTrackTitle || "YouTube Track"}
+                            </h3>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={handleSkipToNextScheduledSong}
+                            disabled={!scheduledSongs[0]}
+                            className={`p-2 px-3 rounded-xl text-xs font-semibold border flex items-center gap-1 transition-all ${
+                              scheduledSongs[0]
+                                ? 'bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border-emerald-500/40 cursor-pointer active:scale-95'
+                                : 'bg-[#1c1c1c] text-gray-600 border-[#2a2a2a] cursor-not-allowed opacity-50'
+                            }`}
+                            title={scheduledSongs[0] ? "Skip to Next Scheduled Song" : "No song scheduled in Slot 1"}
+                          >
+                            <SkipForward size={13} />
+                            <span className="hidden sm:inline">Next</span>
+                          </button>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-[10px] text-gray-500 font-mono uppercase tracking-wider block">Live Synchronized</span>
-                        <h3 className="text-sm sm:text-base font-bold text-white mt-1 break-words">
-                          {activeTrackTitle || "No track playing. Search or paste link above."}
-                        </h3>
+                    ) : (
+                      <div className="w-full bg-[#121212] border border-[#242424] rounded-2xl p-4 text-center text-xs text-gray-400">
+                        🎵 No track playing. Search or paste link above to start live sync.
+                      </div>
+                    )}
+
+                    {/* 3 UPCOMING SCHEDULED SONG SECTIONS */}
+                    <div className="w-full space-y-2.5 pt-1">
+                      <div className="flex items-center justify-between px-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-gray-200 tracking-wide uppercase font-mono flex items-center gap-1.5">
+                            <Clock size={13} className="text-emerald-400" />
+                            <span>Upcoming Songs Queue (Auto-Schedule)</span>
+                          </span>
+                          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-mono font-bold">
+                            {scheduledSongs.filter(Boolean).length}/3 Scheduled
+                          </span>
+                        </div>
+                        {scheduledSongs.some(Boolean) && (
+                          <button
+                            type="button"
+                            onClick={handleClearEntireQueue}
+                            className="text-[11px] text-rose-400 hover:text-rose-300 cursor-pointer transition-colors hover:underline"
+                          >
+                            Clear All
+                          </button>
+                        )}
+                      </div>
+
+                      {/* 3 DEDICATED SLOTS */}
+                      <div className="grid grid-cols-1 gap-2.5">
+                        {[0, 1, 2].map((slotIdx) => {
+                          const song = scheduledSongs[slotIdx];
+                          const slotNum = slotIdx + 1;
+                          const isNextUp = slotIdx === 0;
+
+                          return (
+                            <div
+                              key={slotIdx}
+                              className={`rounded-2xl p-3 sm:p-3.5 transition-all border ${
+                                song
+                                  ? isNextUp
+                                    ? 'bg-[#121c16] border-emerald-500/60 shadow-[0_0_16px_rgba(16,185,129,0.18)]'
+                                    : 'bg-[#151515] border-[#303030]'
+                                  : 'bg-[#101010] border-[#242424] border-dashed'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2 mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono font-bold ${
+                                    song
+                                      ? isNextUp
+                                        ? 'bg-emerald-500 text-black shadow'
+                                        : 'bg-blue-500 text-white shadow'
+                                      : 'bg-[#222] text-gray-500'
+                                  }`}>
+                                    {slotNum}
+                                  </span>
+                                  <span className={`text-xs font-bold ${isNextUp && song ? 'text-emerald-300' : 'text-gray-300'}`}>
+                                    {isNextUp ? 'Slot 1: Next Up (Plays Automatically)' : `Slot ${slotNum}: Scheduled Queue`}
+                                  </span>
+                                </div>
+
+                                {song && (
+                                  <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/70 border border-emerald-500/40 px-2 py-0.5 rounded-full">
+                                    {isNextUp ? '⚡ Auto-Play Next' : '⏳ In Queue'}
+                                  </span>
+                                )}
+                              </div>
+
+                              {song ? (
+                                <div className="flex items-center justify-between gap-2 bg-[#191919] border border-[#2b2b2b] rounded-xl p-2.5">
+                                  <div className="flex items-center gap-2.5 min-w-0 flex-1 text-left">
+                                    <div className="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0 text-xs">
+                                      🎵
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs font-semibold text-white truncate" title={song.title || song.url}>
+                                        {song.title || song.url}
+                                      </p>
+                                      <p className="text-[10px] text-gray-500 truncate font-mono">
+                                        {song.url}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => handlePlayScheduledSlot(slotIdx)}
+                                      className="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-2.5 py-1.5 rounded-lg cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow"
+                                      title="Play this song right now for both users"
+                                    >
+                                      <Play size={11} fill="currentColor" />
+                                      <span>Play Now</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveScheduledSlot(slotIdx)}
+                                      className="p-1.5 text-gray-400 hover:text-rose-400 hover:bg-rose-950/40 border border-transparent hover:border-rose-500/30 rounded-lg cursor-pointer transition-all"
+                                      title="Remove from queue"
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={slotInputs[slotIdx] || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setSlotInputs(prev => {
+                                        const next = [...prev];
+                                        next[slotIdx] = val;
+                                        return next;
+                                      });
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleScheduleSlotSong(slotIdx, slotInputs[slotIdx]);
+                                      }
+                                    }}
+                                    placeholder={slotIdx === 0 ? "Paste 1st upcoming YouTube link..." : (slotIdx === 1 ? "Paste 2nd upcoming YouTube link..." : "Paste 3rd upcoming YouTube link...")}
+                                    className="flex-1 bg-[#161616] border border-[#2b2b2b] focus:border-emerald-500/60 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 outline-none transition-colors"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleScheduleSlotSong(slotIdx, slotInputs[slotIdx])}
+                                    disabled={loadingSlot === slotIdx || !slotInputs[slotIdx]?.trim()}
+                                    className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-all shrink-0 ${
+                                      slotInputs[slotIdx]?.trim()
+                                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow active:scale-95'
+                                        : 'bg-[#1f1f1f] text-gray-500 cursor-not-allowed'
+                                    }`}
+                                  >
+                                    {loadingSlot === slotIdx ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                                    <span>Schedule</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
 
