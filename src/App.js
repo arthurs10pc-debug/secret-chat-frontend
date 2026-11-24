@@ -11651,28 +11651,90 @@ export default function App() {
                   {syncStatus === 'connected' && (
                     <button
                       onClick={handleDisconnectSync}
-                      className="flex items-center gap-1 bg-rose-950 border border-rose-800 text-rose-300 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer"
+                      className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer active:scale-95 transition-all shadow-md shadow-rose-900/40"
+                      title="Disconnect Lounge & Audio"
                     >
-                      <Unlink size={12} /> Reset Sync
+                      <Unlink size={13} />
+                      <span>Disconnect</span>
                     </button>
                   )}
                 </div>
 
-                {syncStatus === 'incoming_request' && (
-                  <div className="bg-emerald-950/60 border border-emerald-500/50 p-3.5 rounded-2xl flex items-center justify-between gap-3 animate-pulse shadow-lg">
-                    <p className="text-xs text-emerald-300 font-medium">
-                      🎵 Incoming lounge sync invitation from <strong className="text-white uppercase">{incomingInviteRole}</strong>!
-                    </p>
-                    <button
-                      onClick={handleAcceptSyncInvite}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer active:scale-95 shadow"
-                    >
-                      <Check size={14} /> Accept Sync
-                    </button>
-                  </div>
-                )}
+                {syncStatus !== 'connected' ? (
+                  <div className="bg-[#141414] border border-[#2a2a2a] rounded-3xl p-6 sm:p-8 text-center space-y-5 max-w-lg w-full mx-auto shadow-2xl my-6">
+                    <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto shadow-inner">
+                      {syncStatus === 'requested' ? (
+                        <Loader2 size={32} className="animate-spin text-amber-400" />
+                      ) : syncStatus === 'incoming_request' ? (
+                        <Radio size={32} className="animate-pulse text-emerald-400" />
+                      ) : (
+                        <Link2 size={32} className="text-amber-400" />
+                      )}
+                    </div>
 
-                <div className="space-y-3 sm:space-y-4">
+                    <div className="space-y-1.5">
+                      <h3 className="text-base sm:text-lg font-bold text-white tracking-wide">
+                        {syncStatus === 'requested'
+                          ? 'Connection Request Sent'
+                          : syncStatus === 'incoming_request'
+                          ? `Incoming Sync Invitation from ${incomingInviteRole?.toUpperCase() || (role === 'parent' ? 'DORA' : 'ADMIN')}!`
+                          : 'Two-Way Audio Handshake Required'}
+                      </h3>
+                      <p className="text-xs text-gray-400 leading-relaxed max-w-sm mx-auto">
+                        {syncStatus === 'requested'
+                          ? `Waiting for ${role === 'parent' ? 'Dora' : 'Admin'} to accept your request. Once joined, audio and the 3 scheduled song slots will sync together.`
+                          : syncStatus === 'incoming_request'
+                          ? `Accept the connection to listen to synchronized YouTube tracks and manage the 3 upcoming scheduled songs together.`
+                          : `Please connect both devices first. Once linked, the YouTube player and 3 upcoming auto-play song queue slots will unlock.`}
+                      </p>
+                    </div>
+
+                    <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                      {syncStatus === 'idle' && (
+                        <button
+                          type="button"
+                          onClick={handleSendSyncInvite}
+                          className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-3 rounded-2xl text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all shadow-lg shadow-emerald-950/50"
+                        >
+                          <Link2 size={16} />
+                          <span>Send Connection Request ({role === 'parent' ? 'to Dora' : 'to Admin'})</span>
+                        </button>
+                      )}
+
+                      {syncStatus === 'requested' && (
+                        <button
+                          type="button"
+                          onClick={handleDisconnectSync}
+                          className="w-full sm:w-auto bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-rose-300 font-semibold px-5 py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
+                        >
+                          <Unlink size={14} />
+                          <span>Cancel Request</span>
+                        </button>
+                      )}
+
+                      {syncStatus === 'incoming_request' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleAcceptSyncInvite}
+                            className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-3 rounded-2xl text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all shadow-lg shadow-emerald-950/50 animate-pulse"
+                          >
+                            <Check size={16} />
+                            <span>Accept & Join Synced Lounge</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleDisconnectSync}
+                            className="w-full sm:w-auto bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-3 rounded-2xl text-xs font-semibold cursor-pointer transition-all"
+                          >
+                            Decline
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3 sm:space-y-4">
                   <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3 flex items-center justify-between shadow-lg">
                     <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold font-mono">
                       <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
@@ -11932,6 +11994,7 @@ export default function App() {
                       </div>
                     )}
                   </div>
+                )}
               </section>
             )}
 
