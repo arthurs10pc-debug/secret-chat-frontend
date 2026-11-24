@@ -1,374 +1,616 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Check, Droplets, Sparkles, Heart } from 'lucide-react';
+import { X, Droplets, Check, Clock, Volume2, VolumeX, Sparkles } from 'lucide-react';
 
 export default function AnimatedScreenBuddy({
   isActive,
   onDismiss,
-  message = "Dora, time to drink water! Stay hydrated & fresh 💧",
-  type = 'water',
-  autoDismissSeconds = 12
+  recipientName = "Dora",
+  customSongUrl = null,
+  initialLiters = 1.5,
+  targetLiters = 2.75
 }) {
-  // animationStage: 'entering' -> 'drinking' -> 'exiting' -> 'closed'
-  const [stage, setStage] = useState('entering');
-  const [cupDrinking, setCupDrinking] = useState(false);
-  const audioPlayedRef = useRef(false);
+  // stages: 'walking_in' -> 'waiting_input' -> 'drinking' -> 'post_drink' -> 'declined' -> 'walking_out' -> 'closed'
+  const [stage, setStage] = useState('closed');
+  const [liters, setLiters] = useState(initialLiters);
+  const [isMuted, setIsMuted] = useState(false);
+  const [dialogStatus, setDialogStatus] = useState('prompt'); // 'prompt' | 'success' | 'later'
 
-  // Sound generator using Web Audio API (100% reliable, no network assets required)
-  const playChimeSound = () => {
+  const musicEngineRef = useRef(null);
+  const customAudioRef = useRef(null);
+  const autoExitTimerRef = useRef(null);
+
+  // Synthesized energetic beat (Kick, Snare, HiHat, Groovy Bassline) matching the video's upbeat entry!
+  const startBackgroundMusic = () => {
+    if (isMuted) return;
+
+    if (customSongUrl) {
+      try {
+        if (!customAudioRef.current) {
+          customAudioRef.current = new Audio(customSongUrl);
+          customAudioRef.current.loop = true;
+        }
+        customAudioRef.current.currentTime = 0;
+        customAudioRef.current.play().catch(() => {});
+        return;
+      } catch (e) {}
+    }
+
+    // High quality Web Audio API Synthesizer (Instant playback without network lag)
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
-      const now = ctx.currentTime;
-      // Gentle sweet 3-note chime (C6, E6, G6)
-      [1046.5, 1318.51, 1567.98].forEach((freq, i) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, now + i * 0.1);
-        gain.gain.setValueAtTime(0.15, now + i * 0.1);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.1 + 0.45);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now + i * 0.1);
-        osc.stop(now + i * 0.1 + 0.45);
-      });
-    } catch (e) {
-      // Audio context might be restricted before gesture
+      let isRunning = true;
+      let step = 0;
+      const bpm = 124;
+      const stepInterval = (60 / bpm) / 4; // 16th notes
+
+      // Catchy funky bassline chords (D minor / G / A)
+      const bassFreqs = [146.83, 146.83, 174.61, 196.00, 146.83, 220.00, 196.00, 164.81];
+
+      const tick = () => {
+        if (!isRunning || ctx.state === 'closed') return;
+        const now = ctx.currentTime;
+
+        // 1. Pumping Kick Drum (on beats 0, 4, 8, 12)
+        if (step % 4 === 0) {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.frequency.setValueAtTime(140, now);
+          osc.frequency.exponentialRampToValueAtTime(35, now + 0.14);
+          gain.gain.setValueAtTime(0.55, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.16);
+        }
+
+        // 2. Snappy Snare / Handclap (on beats 4, 12)
+        if (step % 8 === 4) {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(260, now);
+          gain.gain.setValueAtTime(0.28, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.12);
+        }
+
+        // 3. Disco Hi-Hat (on every 16th note)
+        const hatGain = ctx.createGain();
+        const hatOsc = ctx.createOscillator();
+        hatOsc.type = 'sawtooth';
+        hatOsc.frequency.setValueAtTime(7500, now);
+        const hatVol = (step % 2 === 1) ? 0.08 : 0.03;
+        hatGain.gain.setValueAtTime(hatVol, now);
+        hatGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+        hatOsc.connect(hatGain);
+        hatGain.connect(ctx.destination);
+        hatOsc.start(now);
+        hatOsc.stop(now + 0.04);
+
+        // 4. Energetic Bass Synth
+        if (step % 2 === 0) {
+          const noteFreq = bassFreqs[(step / 2) % bassFreqs.length];
+          const bassOsc = ctx.createOscillator();
+          const bassGain = ctx.createGain();
+          bassOsc.type = 'sawtooth';
+          bassOsc.frequency.setValueAtTime(noteFreq, now);
+          bassGain.gain.setValueAtTime(0.22, now);
+          bassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+          bassOsc.connect(bassGain);
+          bassGain.connect(ctx.destination);
+          bassOsc.start(now);
+          bassOsc.stop(now + 0.18);
+        }
+
+        step = (step + 1) % 16;
+        musicEngineRef.current.timer = setTimeout(tick, stepInterval * 1000);
+      };
+
+      musicEngineRef.current = {
+        ctx,
+        stop: () => {
+          isRunning = false;
+          clearTimeout(musicEngineRef.current?.timer);
+          try { ctx.close(); } catch (e) {}
+        }
+      };
+
+      tick();
+    } catch (e) {}
+  };
+
+  const stopMusic = () => {
+    if (musicEngineRef.current?.stop) {
+      musicEngineRef.current.stop();
+      musicEngineRef.current = null;
+    }
+    if (customAudioRef.current) {
+      try {
+        customAudioRef.current.pause();
+        customAudioRef.current.currentTime = 0;
+      } catch (e) {}
     }
   };
 
-  const playSipSound = () => {
+  // Sound effects for Drinking Gulp & Celebration
+  const playSipGulpSound = () => {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
       const now = ctx.currentTime;
-      // Gentle water bubble sip
-      [420, 560, 720].forEach((freq, i) => {
+      // Gulp pitch drop
+      [360, 420, 320].forEach((freq, idx) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(freq, now + i * 0.14);
-        gain.gain.setValueAtTime(0.12, now + i * 0.14);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.14 + 0.28);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.18);
+        osc.frequency.exponentialRampToValueAtTime(freq * 0.7, now + idx * 0.18 + 0.15);
+        gain.gain.setValueAtTime(0.25, now + idx * 0.18);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.18 + 0.16);
         osc.connect(gain);
         gain.connect(ctx.destination);
-        osc.start(now + i * 0.14);
-        osc.stop(now + i * 0.14 + 0.28);
+        osc.start(now + idx * 0.18);
+        osc.stop(now + idx * 0.18 + 0.16);
       });
     } catch (e) {}
   };
 
+  const playSuccessCelebrationSound = () => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+      // High celebratory chime arpeggio
+      [587.33, 739.99, 880.00, 1174.66].forEach((f, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(f, now + i * 0.1);
+        gain.gain.setValueAtTime(0.2, now + i * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.1 + 0.4);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + i * 0.1);
+        osc.stop(now + i * 0.1 + 0.4);
+      });
+    } catch (e) {}
+  };
+
+  // Trigger Lifecycle
   useEffect(() => {
     if (!isActive) {
+      stopMusic();
       setStage('closed');
-      audioPlayedRef.current = false;
       return;
     }
 
-    setStage('entering');
-    if (!audioPlayedRef.current) {
-      playChimeSound();
-      audioPlayedRef.current = true;
-    }
+    setStage('walking_in');
+    setDialogStatus('prompt');
+    startBackgroundMusic();
 
-    // Step 1: Walk in for 1.4s, then switch to 'drinking'
+    // Walking in takes 2.6 seconds to reach the center
     const enterTimer = setTimeout(() => {
-      setStage('drinking');
-      setCupDrinking(true);
-      playSipSound();
-    }, 1400);
-
-    // Step 2: Auto dismiss after configured seconds
-    const dismissTimer = setTimeout(() => {
-      handleExit();
-    }, autoDismissSeconds * 1000);
+      setStage('waiting_input');
+    }, 2600);
 
     return () => {
       clearTimeout(enterTimer);
-      clearTimeout(dismissTimer);
+      clearTimeout(autoExitTimerRef.current);
+      stopMusic();
     };
-  }, [isActive, autoDismissSeconds]);
+  }, [isActive]);
 
-  const handleExit = () => {
-    if (stage === 'exiting' || stage === 'closed') return;
-    setCupDrinking(false);
-    setStage('exiting');
+  // Action: "Drinking now 💧"
+  const handleDrinkNow = () => {
+    setStage('drinking');
+    playSipGulpSound();
+
     setTimeout(() => {
+      setLiters((prev) => +(prev + 0.25).toFixed(2));
+      setDialogStatus('success');
+      playSuccessCelebrationSound();
+      setStage('post_drink');
+
+      // Stay celebrating for 3 seconds then walk out
+      autoExitTimerRef.current = setTimeout(() => {
+        handleWalkOut();
+      }, 3500);
+    }, 1200);
+  };
+
+  // Action: "I will do it later"
+  const handleDoLater = () => {
+    setDialogStatus('later');
+    setStage('declined');
+
+    autoExitTimerRef.current = setTimeout(() => {
+      handleWalkOut();
+    }, 2500);
+  };
+
+  // Walk out of screen
+  const handleWalkOut = () => {
+    setStage('walking_out');
+    setTimeout(() => {
+      stopMusic();
       setStage('closed');
       if (onDismiss) onDismiss();
-    }, 1400);
+    }, 2400);
   };
 
   if (!isActive && stage === 'closed') return null;
 
+  const percentProgress = Math.min(100, Math.round((liters / targetLiters) * 100));
+
   return (
-    <div 
-      className="fixed bottom-2 right-2 sm:bottom-6 sm:right-8 z-50 flex items-end select-none pointer-events-auto"
-      style={{
-        transform: stage === 'entering' 
-          ? 'translateX(0)' 
-          : stage === 'exiting' 
-            ? 'translateX(180px)' 
-            : 'translateX(0)',
-        transition: 'transform 1.4s cubic-bezier(0.25, 1, 0.5, 1)',
-        opacity: stage === 'exiting' ? 0.3 : 1
-      }}
-    >
+    <div className="fixed inset-0 pointer-events-none z-50 flex flex-col justify-end items-center overflow-hidden font-sans select-none pb-2 sm:pb-6">
       <style>{`
-        @keyframes buddyLegSwingLeft {
-          0%, 100% { transform: rotate(0deg); }
-          50% { transform: rotate(22deg); }
+        /* Realistic Human Walking Gait Keyframes */
+        @keyframes walkStrideLeftLeg {
+          0% { transform: rotate(-32deg); }
+          50% { transform: rotate(32deg); }
+          100% { transform: rotate(-32deg); }
         }
-        @keyframes buddyLegSwingRight {
-          0%, 100% { transform: rotate(0deg); }
-          50% { transform: rotate(-22deg); }
+        @keyframes walkStrideRightLeg {
+          0% { transform: rotate(32deg); }
+          50% { transform: rotate(-32deg); }
+          100% { transform: rotate(32deg); }
         }
-        @keyframes buddyBobWalk {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-4px); }
+        @keyframes walkKneeFlexLeft {
+          0% { transform: rotate(0deg); }
+          30% { transform: rotate(-40deg); }
+          60% { transform: rotate(0deg); }
+          100% { transform: rotate(0deg); }
         }
-        @keyframes waterBubbleFloat {
-          0% { transform: translateY(0) scale(0.6); opacity: 0; }
-          40% { opacity: 1; }
-          100% { transform: translateY(-24px) scale(1.1); opacity: 0; }
+        @keyframes walkKneeFlexRight {
+          0% { transform: rotate(0deg); }
+          70% { transform: rotate(-40deg); }
+          100% { transform: rotate(0deg); }
         }
-        @keyframes blinkEyes {
-          0%, 92%, 100% { transform: scaleY(1); }
-          95% { transform: scaleY(0.1); }
+        @keyframes walkTorsoBob {
+          0%, 100% { transform: translateY(0px) rotate(0deg); }
+          25% { transform: translateY(-9px) rotate(-1.5deg); }
+          50% { transform: translateY(0px) rotate(0deg); }
+          75% { transform: translateY(-9px) rotate(1.5deg); }
         }
-        .buddy-walking {
-          animation: buddyBobWalk 0.35s infinite ease-in-out;
+        @keyframes walkArmSwingLeft {
+          0% { transform: rotate(28deg); }
+          50% { transform: rotate(-28deg); }
+          100% { transform: rotate(28deg); }
         }
-        .buddy-leg-left {
-          transform-origin: 35px 125px;
-          animation: buddyLegSwingLeft 0.35s infinite ease-in-out;
+        @keyframes walkArmBottleGroove {
+          0%, 100% { transform: rotate(-4deg) translateY(0); }
+          50% { transform: rotate(12deg) translateY(-8px); }
         }
-        .buddy-leg-right {
-          transform-origin: 52px 125px;
-          animation: buddyLegSwingRight 0.35s infinite ease-in-out;
+        @keyframes celebrateDance {
+          0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
+          25% { transform: translateY(-14px) rotate(-4deg) scale(1.02); }
+          50% { transform: translateY(0) rotate(0deg) scale(1); }
+          75% { transform: translateY(-14px) rotate(4deg) scale(1.02); }
         }
-        .buddy-blink {
-          transform-origin: center;
-          animation: blinkEyes 3.5s infinite;
+        @keyframes drinkBottleTilt {
+          0% { transform: translate(0, 0) rotate(0deg); }
+          100% { transform: translate(-30px, -70px) rotate(-125deg); }
+        }
+        @keyframes waterDropletShower {
+          0% { transform: translateY(0) scale(0.5); opacity: 0; }
+          30% { opacity: 1; }
+          100% { transform: translateY(60px) scale(1.2); opacity: 0; }
+        }
+        @keyframes floorShadowSync {
+          0%, 50%, 100% { transform: scaleX(1); opacity: 0.55; }
+          25%, 75% { transform: scaleX(0.72); opacity: 0.3; }
+        }
+
+        .animate-walk-torso {
+          animation: walkTorsoBob 0.6s infinite ease-in-out;
+        }
+        .animate-walk-leg-l {
+          transform-origin: 38px 150px;
+          animation: walkStrideLeftLeg 0.6s infinite ease-in-out;
+        }
+        .animate-walk-knee-l {
+          transform-origin: 38px 190px;
+          animation: walkKneeFlexLeft 0.6s infinite ease-in-out;
+        }
+        .animate-walk-leg-r {
+          transform-origin: 62px 150px;
+          animation: walkStrideRightLeg 0.6s infinite ease-in-out;
+        }
+        .animate-walk-knee-r {
+          transform-origin: 62px 190px;
+          animation: walkKneeFlexRight 0.6s infinite ease-in-out;
+        }
+        .animate-walk-arm-l {
+          transform-origin: 22px 85px;
+          animation: walkArmSwingLeft 0.6s infinite ease-in-out;
+        }
+        .animate-walk-bottle-r {
+          transform-origin: 75px 85px;
+          animation: walkArmBottleGroove 0.6s infinite ease-in-out;
+        }
+        .animate-hero-celebrate {
+          animation: celebrateDance 0.5s infinite ease-in-out;
+        }
+        .animate-floor-shadow {
+          animation: floorShadowSync 0.6s infinite ease-in-out;
         }
       `}</style>
 
-      {/* SPEECH BUBBLE (Reminders, Action, Dismiss) */}
-      {(stage === 'drinking' || stage === 'entering') && (
+      {/* UPPER INTERACTIVE HERO DIALOG CARD (EXACT REPLICA FROM VIDEO) */}
+      {(stage === 'waiting_input' || stage === 'drinking' || stage === 'post_drink' || stage === 'declined') && (
         <div 
-          className="mr-2 sm:mr-3 mb-10 w-64 max-w-[70vw] bg-[#141414]/95 border border-emerald-500/40 rounded-2xl p-3 sm:p-3.5 shadow-2xl backdrop-blur-md animate-in zoom-in-90 fade-in duration-300 relative text-left"
-          style={{
-            boxShadow: '0 12px 36px rgba(0, 255, 128, 0.15), 0 4px 12px rgba(0,0,0,0.8)'
-          }}
+          className="pointer-events-auto mb-4 w-92 max-w-[94vw] bg-[#0c1017]/95 border-2 border-cyan-400/50 rounded-3xl p-5 shadow-[0_16px_50px_rgba(6,182,212,0.35)] backdrop-blur-xl animate-in zoom-in-95 duration-200 text-center relative space-y-3.5 z-50"
         >
-          {/* Bubble tail pointing to character */}
-          <div 
-            className="absolute -right-2 bottom-6 w-3 h-3 bg-[#141414] border-r border-t border-emerald-500/40 transform rotate-45"
-          />
+          {/* Sound & Dismiss Controls */}
+          <div className="absolute top-3 right-3 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                if (isMuted) {
+                  setIsMuted(false);
+                  startBackgroundMusic();
+                } else {
+                  setIsMuted(true);
+                  stopMusic();
+                }
+              }}
+              className="p-1.5 rounded-full text-gray-400 hover:text-white bg-[#1a2230] cursor-pointer"
+              title={isMuted ? "Unmute Song" : "Mute Song"}
+            >
+              {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} className="text-cyan-400" />}
+            </button>
+            <button
+              type="button"
+              onClick={handleWalkOut}
+              className="p-1.5 rounded-full text-gray-400 hover:text-white bg-[#1a2230] cursor-pointer"
+              title="Close"
+            >
+              <X size={14} />
+            </button>
+          </div>
 
-          <div className="flex items-center justify-between pb-1.5 border-b border-[#282828]">
-            <div className="flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                {type === 'water' ? <Droplets size={12} className="text-emerald-400" /> : <Sparkles size={12} className="text-amber-400" />}
-              </span>
-              <span className="text-[11px] font-bold text-white tracking-wide">
-                {type === 'water' ? 'Hydration Mascot' : 'Mascot Reminder'}
-              </span>
+          {/* Prompt State */}
+          {dialogStatus === 'prompt' && (
+            <>
+              <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight drop-shadow-md">
+                Hey, {recipientName}! <br />
+                <span className="text-cyan-400 flex items-center justify-center gap-1.5">
+                  Time to drink water! <Droplets size={22} className="animate-bounce" />
+                </span>
+              </h2>
+
+              {/* Progress Indicator */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center text-xs font-bold text-gray-300 px-1">
+                  <span>Today: {liters} L of {targetLiters} L</span>
+                  <span className="text-cyan-400">{percentProgress}%</span>
+                </div>
+                <div className="w-full bg-[#182333] h-3.5 rounded-full p-0.5 border border-cyan-500/30 overflow-hidden shadow-inner">
+                  <div 
+                    className="h-full bg-gradient-to-r from-cyan-500 via-teal-400 to-blue-500 rounded-full transition-all duration-700 shadow-lg"
+                    style={{ width: `${percentProgress}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Big Action Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={handleDrinkNow}
+                  className="bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-500 hover:from-blue-500 hover:to-teal-400 text-white font-extrabold text-sm py-3 px-4 rounded-2xl shadow-[0_6px_20px_rgba(6,182,212,0.5)] cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <Droplets size={16} fill="currentColor" />
+                  <span>Drinking now 💧</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDoLater}
+                  className="bg-white hover:bg-gray-100 text-[#0d141e] font-bold text-xs py-3 px-3 rounded-2xl shadow-md cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                >
+                  <Clock size={15} />
+                  <span>I will do it later (10m)</span>
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Success Drink State */}
+          {dialogStatus === 'success' && (
+            <div className="space-y-2 py-1">
+              <span className="text-3xl">🎉</span>
+              <h2 className="text-xl sm:text-2xl font-black text-amber-300 tracking-tight">
+                Semma, {recipientName}! 🔥
+              </h2>
+              <p className="text-xs text-gray-200 font-semibold">
+                See you in another 1 hour!
+              </p>
+              <div className="w-full bg-[#182333] h-3.5 rounded-full p-0.5 border border-cyan-500/30 overflow-hidden shadow-inner mt-2">
+                <div 
+                  className="h-full bg-gradient-to-r from-emerald-500 via-cyan-400 to-teal-400 rounded-full transition-all duration-700 shadow-lg"
+                  style={{ width: `${percentProgress}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-cyan-300 font-mono font-bold">
+                Today: {liters} L of {targetLiters} L ({percentProgress}%)
+              </p>
             </div>
-            <button 
-              type="button"
-              onClick={handleExit}
-              className="text-gray-400 hover:text-white p-0.5 rounded cursor-pointer transition-colors"
-            >
-              <X size={13} />
-            </button>
-          </div>
+          )}
 
-          <p className="text-xs text-gray-200 mt-2 font-medium leading-relaxed">
-            {message}
-          </p>
-
-          <div className="mt-3 flex items-center gap-2">
-            <button 
-              type="button"
-              onClick={handleExit}
-              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] py-1.5 px-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
-            >
-              <Check size={13} />
-              <span>{type === 'water' ? 'Pee Liya! 💧' : 'Done ✓'}</span>
-            </button>
-            <button 
-              type="button"
-              onClick={handleExit}
-              className="bg-[#242424] hover:bg-[#333] text-gray-300 text-[11px] py-1.5 px-2.5 rounded-xl active:scale-95 transition-all cursor-pointer"
-            >
-              Later
-            </button>
-          </div>
+          {/* Later / Decline State */}
+          {dialogStatus === 'later' && (
+            <div className="space-y-1.5 py-1">
+              <span className="text-3xl">🥺</span>
+              <h2 className="text-lg sm:text-xl font-bold text-amber-300">
+                Okay... 
+              </h2>
+              <p className="text-xs text-gray-300 font-medium">
+                I'll come back in another 10 minutes!
+              </p>
+            </div>
+          )}
         </div>
       )}
 
-      {/* CHARACTER SVG (Pixel/Chibi stylish girl with glasses, trench coat, green cup) */}
+      {/* FULL-BODY 3D-STYLE ANIMATED HERO CHARACTER (WALKS FROM OFFSCREEN TO CENTER) */}
       <div 
-        className={`relative cursor-pointer transition-transform duration-200 ${stage === 'entering' || stage === 'exiting' ? 'buddy-walking' : 'active:scale-95'}`}
-        onClick={() => {
-          if (stage === 'drinking') {
-            setCupDrinking(!cupDrinking);
-            playSipSound();
-          }
+        className="pointer-events-auto relative flex flex-col items-center cursor-pointer transition-all duration-[2400ms] ease-[cubic-bezier(0.2,0.8,0.3,1)]"
+        style={{
+          transform: stage === 'walking_in'
+            ? 'translateX(-320px)'
+            : stage === 'walking_out'
+              ? 'translateX(350px)'
+              : 'translateX(0px)',
+          opacity: stage === 'walking_out' ? 0.3 : 1
         }}
-        title="Hydration Buddy! Click to drink water"
+        onClick={() => {
+          if (stage === 'waiting_input') handleDrinkNow();
+        }}
       >
-        {/* Floating water bubbles when drinking */}
-        {cupDrinking && (
-          <div className="absolute top-2 left-6 pointer-events-none z-20">
-            <span 
-              className="absolute text-cyan-300 text-xs font-bold"
-              style={{ animation: 'waterBubbleFloat 1.2s infinite ease-out' }}
-            >
-              💧
-            </span>
-            <span 
-              className="absolute left-3 -top-2 text-emerald-300 text-[10px]"
-              style={{ animation: 'waterBubbleFloat 1.5s infinite ease-out 0.4s' }}
-            >
-              ✨
-            </span>
+        {/* Dynamic Floor Shadow */}
+        <div 
+          className={`w-36 h-5 rounded-full bg-black/60 blur-[3px] absolute bottom-1 -z-10 ${
+            stage === 'walking_in' || stage === 'walking_out' ? 'animate-floor-shadow' : ''
+          }`} 
+        />
+
+        {/* Rain / Water Splash Particles during drinking celebration */}
+        {(stage === 'drinking' || stage === 'post_drink') && (
+          <div className="absolute -top-12 inset-x-0 flex justify-center gap-4 pointer-events-none z-30">
+            <span className="text-cyan-400 text-lg animate-bounce" style={{ animationDelay: '0.1s' }}>💧</span>
+            <span className="text-teal-300 text-sm animate-bounce" style={{ animationDelay: '0.3s' }}>✨</span>
+            <span className="text-cyan-300 text-base animate-bounce" style={{ animationDelay: '0.2s' }}>💧</span>
           </div>
         )}
 
+        {/* CHARACTER SVG (Detailed Thalapathy / Suriya Hero Style: Denim Jacket, Black Shirt, Water Bottle) */}
         <svg 
-          width="105" 
-          height="165" 
-          viewBox="0 0 95 155" 
+          width="150" 
+          height="240" 
+          viewBox="0 0 100 240" 
           fill="none" 
           xmlns="http://www.w3.org/2000/svg"
-          className="drop-shadow-[0_8px_16px_rgba(0,0,0,0.7)]"
+          className={`drop-shadow-[0_12px_24px_rgba(0,0,0,0.8)] ${
+            stage === 'post_drink' ? 'animate-hero-celebrate' : ''
+          }`}
         >
-          {/* LEGS & SHOES */}
+          {/* LEGS & SHOES RIG */}
           {/* Left Leg */}
-          <g className={stage === 'entering' || stage === 'exiting' ? 'buddy-leg-left' : ''}>
-            <rect x="32" y="112" width="10" height="30" rx="4" fill="#181818" />
-            {/* Left Shoe */}
-            <rect x="27" y="138" width="16" height="8" rx="3" fill="#0d0d0d" />
-            <rect x="27" y="143" width="16" height="3" rx="1.5" fill="#3a3a3a" />
+          <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-leg-l' : ''}>
+            {/* Thigh */}
+            <rect x="33" y="148" width="13" height="38" rx="5" fill="#141821" stroke="#0a0d14" strokeWidth="1" />
+            {/* Knee & Calf */}
+            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-knee-l' : ''}>
+              <rect x="34" y="182" width="11" height="38" rx="4.5" fill="#181d29" />
+              {/* White Sneaker Shoe */}
+              <path d="M28 218 C28 214 34 212 45 212 L48 218 L48 225 L28 225 Z" fill="#ffffff" />
+              <rect x="26" y="222" width="24" height="4" rx="2" fill="#e2e8f0" />
+            </g>
           </g>
 
           {/* Right Leg */}
-          <g className={stage === 'entering' || stage === 'exiting' ? 'buddy-leg-right' : ''}>
-            <rect x="50" y="112" width="10" height="30" rx="4" fill="#181818" />
-            {/* Right Shoe */}
-            <rect x="49" y="138" width="16" height="8" rx="3" fill="#0d0d0d" />
-            <rect x="49" y="143" width="16" height="3" rx="1.5" fill="#3a3a3a" />
+          <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-leg-r' : ''}>
+            {/* Thigh */}
+            <rect x="54" y="148" width="13" height="38" rx="5" fill="#141821" stroke="#0a0d14" strokeWidth="1" />
+            {/* Knee & Calf */}
+            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-knee-r' : ''}>
+              <rect x="55" y="182" width="11" height="38" rx="4.5" fill="#181d29" />
+              {/* White Sneaker Shoe */}
+              <path d="M49 218 C49 214 55 212 66 212 L69 218 L69 225 L49 225 Z" fill="#ffffff" />
+              <rect x="47" y="222" width="24" height="4" rx="2" fill="#e2e8f0" />
+            </g>
           </g>
 
-          {/* BACK HAIR */}
-          <path 
-            d="M24 38C22 55 20 80 23 96C25 106 34 108 46 108C60 108 69 106 71 96C74 80 72 55 70 38C66 18 30 18 24 38Z" 
-            fill="#231b17" 
-          />
+          {/* TORSO / BODY (Denim Jacket + Black T-Shirt) */}
+          <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-torso' : ''}>
+            {/* Black T-Shirt Body */}
+            <path d="M34 85 L66 85 L64 152 L36 152 Z" fill="#111317" />
+            {/* Denim Jacket (Open front) */}
+            {/* Left flap */}
+            <path d="M29 82 L44 84 L41 146 L27 142 Z" fill="#2b5282" />
+            {/* Right flap */}
+            <path d="M71 82 L56 84 L59 146 L73 142 Z" fill="#2b5282" />
+            {/* Denim collar & seams */}
+            <polygon points="36,82 45,95 38,98 30,85" fill="#3b699e" />
+            <polygon points="64,82 55,95 62,98 70,85" fill="#3b699e" />
+            {/* Belt */}
+            <rect x="35" y="146" width="30" height="6" fill="#08090b" />
+            <rect x="46" y="145" width="8" height="8" rx="1.5" fill="#cbd5e1" stroke="#64748b" strokeWidth="1" />
 
-          {/* TRENCH COAT / JACKET (Main Body) */}
-          <path 
-            d="M27 68C27 65 31 63 36 63L58 63C63 63 67 65 67 68L73 115C73 118 69 120 65 120L29 120C25 120 21 118 21 115L27 68Z" 
-            fill="#1f1f23" 
-          />
-          {/* Coat Lapels & Inner Shirt */}
-          <polygon points="47,63 41,85 53,85" fill="#f4f4f4" />
-          <polygon points="41,63 47,88 35,78" fill="#121214" />
-          <polygon points="53,63 47,88 59,78" fill="#161619" />
-          {/* Belt / Buckle */}
-          <rect x="28" y="90" width="38" height="6" fill="#121214" />
-          <rect x="43" y="89" width="8" height="8" rx="1.5" fill="#e5c158" stroke="#a38228" strokeWidth="1" />
+            {/* HEAD & FACE (Hero Style with Beard, Styled Hair & Smile) */}
+            {/* Neck */}
+            <rect x="44" y="68" width="12" height="18" fill="#e0a982" />
+            {/* Face */}
+            <rect x="33" y="32" width="34" height="42" rx="14" fill="#f0be97" />
+            {/* Beard & Stubble */}
+            <path d="M34 54 C34 74 66 74 66 54 C66 68 58 75 50 75 C42 75 34 68 34 54 Z" fill="#241b17" opacity="0.85" />
+            {/* Moustache */}
+            <path d="M42 59 C46 57 54 57 58 59 C54 62 46 62 42 59 Z" fill="#1c1411" />
+            {/* Smile / Teeth */}
+            <path d="M43 62 C45 66 55 66 57 62 Z" fill="#ffffff" stroke="#1c1411" strokeWidth="1" />
 
-          {/* HEAD & FACE */}
-          {/* Neck */}
-          <rect x="42" y="52" width="10" height="13" fill="#f8cdb2" />
-          {/* Face */}
-          <rect x="29" y="24" width="36" height="36" rx="14" fill="#fce4d6" />
+            {/* Eyes & Eyebrows */}
+            {/* Eyebrows */}
+            <path d="M37 45 C41 43 45 44 47 46" stroke="#150f0c" strokeWidth="2.5" strokeLinecap="round" />
+            <path d="M53 46 C55 44 59 43 63 45" stroke="#150f0c" strokeWidth="2.5" strokeLinecap="round" />
+            {/* Big Expressive Eyes */}
+            <circle cx="42" cy="50" r="3.5" fill="#150f0c" />
+            <circle cx="43" cy="49" r="1.2" fill="#ffffff" />
+            <circle cx="58" cy="50" r="3.5" fill="#150f0c" />
+            <circle cx="59" cy="49" r="1.2" fill="#ffffff" />
 
-          {/* BLUSH CHEEKS */}
-          <ellipse cx="36" cy="48" rx="4" ry="2" fill="#ff9999" opacity="0.6" />
-          <ellipse cx="58" cy="48" rx="4" ry="2" fill="#ff9999" opacity="0.6" />
+            {/* Stylish Voluminous Hair (Hero Pompadour/Slicked) */}
+            <path 
+              d="M30 38 C28 20 40 12 50 12 C62 12 72 20 70 38 C72 44 71 50 70 52 C65 42 62 40 50 40 C38 40 35 42 30 52 C29 48 29 42 30 38 Z" 
+              fill="#1e1612" 
+            />
 
-          {/* EYES (With Blinking Animation) */}
-          <g className="buddy-blink">
-            {/* Left Eye */}
-            <circle cx="38" cy="42" r="3.2" fill="#2c1a10" />
-            <circle cx="39" cy="41" r="1.2" fill="#ffffff" />
-            {/* Right Eye */}
-            <circle cx="56" cy="42" r="3.2" fill="#2c1a10" />
-            <circle cx="57" cy="41" r="1.2" fill="#ffffff" />
+            {/* LEFT ARM (Swings during walk, raises in celebration) */}
+            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-arm-l' : ''}>
+              <path d="M29 86 C21 95 18 112 21 126 L29 124 C27 114 28 100 34 92 Z" fill="#2b5282" />
+              {/* Hand */}
+              <circle cx="23" cy="132" r="5" fill="#f0be97" />
+            </g>
+
+            {/* RIGHT ARM & WATER BOTTLE RIG */}
+            {stage === 'drinking' ? (
+              /* Arm Raised Drinking from Bottle */
+              <g style={{ animation: 'drinkBottleTilt 1.2s forwards ease-in-out' }}>
+                <path d="M69 88 C76 96 74 110 65 112 L61 106 C66 102 68 94 65 88 Z" fill="#2b5282" />
+                {/* Hand holding bottle near mouth */}
+                <circle cx="58" cy="65" r="5" fill="#f0be97" />
+                {/* Water Bottle Tilted */}
+                <rect x="46" y="44" width="14" height="34" rx="3" fill="#bae6fd" stroke="#0284c7" strokeWidth="1.5" opacity="0.85" />
+                <rect x="48" y="52" width="10" height="14" fill="#38bdf8" />
+                <rect x="49" y="40" width="8" height="5" rx="1.5" fill="#ffffff" stroke="#0369a1" strokeWidth="1" />
+              </g>
+            ) : (
+              /* Arm Holding Bottle Proudly / Dancing */
+              <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-bottle-r' : ''}>
+                <path d="M70 86 C77 94 80 106 79 116 L71 115 C72 107 70 98 66 90 Z" fill="#2b5282" />
+                {/* Forearm bent forward holding bottle */}
+                <path d="M74 114 L82 108 L86 114 L78 120 Z" fill="#2b5282" />
+                {/* Hand */}
+                <circle cx="84" cy="110" r="5" fill="#f0be97" />
+                {/* Water Bottle (Clear bottle with blue water + white cap) */}
+                <rect x="80" y="86" width="12" height="30" rx="3" fill="#bae6fd" stroke="#0284c7" strokeWidth="1.5" opacity="0.9" />
+                {/* Water Level inside */}
+                <rect x="81" y="96" width="10" height="19" rx="1.5" fill="#38bdf8" />
+                {/* Bottle Cap */}
+                <rect x="82" y="82" width="8" height="5" rx="1.5" fill="#ffffff" stroke="#0284c7" strokeWidth="1" />
+              </g>
+            )}
           </g>
-
-          {/* SMILE / DRINKING MOUTH */}
-          {cupDrinking ? (
-            <ellipse cx="47" cy="51" rx="2.5" ry="3.5" fill="#c45858" />
-          ) : (
-            <path d="M44 49C45 52 49 52 50 49" stroke="#b04f4f" strokeWidth="1.8" strokeLinecap="round" />
-          )}
-
-          {/* CHIC GLASSES (Exact style from user's video) */}
-          <rect x="31" y="36" width="14" height="11" rx="3" fill="none" stroke="#111111" strokeWidth="2" />
-          <rect x="49" y="36" width="14" height="11" rx="3" fill="none" stroke="#111111" strokeWidth="2" />
-          {/* Bridge */}
-          <line x1="45" y1="40" x2="49" y2="40" stroke="#111111" strokeWidth="2" />
-          {/* Frame sides */}
-          <line x1="28" y1="39" x2="31" y2="39" stroke="#111111" strokeWidth="2" />
-          <line x1="63" y1="39" x2="66" y2="39" stroke="#111111" strokeWidth="2" />
-          {/* Glass reflection shimmer */}
-          <line x1="33" y1="38" x2="37" y2="44" stroke="#ffffff" strokeWidth="1" opacity="0.5" strokeLinecap="round" />
-          <line x1="51" y1="38" x2="55" y2="44" stroke="#ffffff" strokeWidth="1" opacity="0.5" strokeLinecap="round" />
-
-          {/* FRONT STYLISH HAIR (Bangs & Flowing Waves) */}
-          <path 
-            d="M26 32C28 20 40 16 47 16C54 16 66 20 68 32C69 35 68 40 68 45C63 36 55 35 48 35C40 35 32 37 26 45C26 40 25 35 26 32Z" 
-            fill="#342821" 
-          />
-          {/* Side hair locks */}
-          <path d="M25 35C24 45 23 58 27 68C28 62 28 50 29 42Z" fill="#342821" />
-          <path d="M69 35C70 45 71 58 67 68C66 62 66 50 65 42Z" fill="#342821" />
-
-          {/* LEFT ARM (Rests casually at side) */}
-          <path d="M26 69C22 75 20 86 22 96C23 99 26 100 28 98C30 95 30 85 30 75Z" fill="#1a1a1e" />
-          <circle cx="25" cy="99" r="4" fill="#fce4d6" />
-
-          {/* RIGHT ARM & GREEN CUP (Hydration Cup / Tumbler with straw) */}
-          {cupDrinking ? (
-            /* Arm raised sipping from cup */
-            <g>
-              {/* Sleeve bent up */}
-              <path d="M67 70C69 76 66 84 58 82C55 81 54 75 58 72Z" fill="#1a1a1e" />
-              {/* Hand */}
-              <circle cx="53" cy="68" r="4.5" fill="#fce4d6" />
-              {/* Green Cup near mouth */}
-              <polygon points="46,55 58,55 56,72 48,72" fill="#10b981" />
-              {/* Cup sleeve */}
-              <rect x="47" y="60" width="8" height="6" fill="#a7f3d0" />
-              {/* Cup Lid */}
-              <rect x="45" y="53" width="14" height="2.5" rx="1" fill="#ffffff" />
-              {/* Straw */}
-              <line x1="51" y1="48" x2="51" y2="54" stroke="#059669" strokeWidth="2" strokeLinecap="round" />
-            </g>
-          ) : (
-            /* Arm holding cup casually at waist */
-            <g>
-              {/* Sleeve */}
-              <path d="M67 70C71 78 70 88 65 94C63 94 62 90 64 84Z" fill="#1a1a1e" />
-              {/* Hand */}
-              <circle cx="63" cy="95" r="4.5" fill="#fce4d6" />
-              {/* Green Tumbler Cup */}
-              <polygon points="60,88 72,88 70,105 62,105" fill="#10b981" />
-              {/* Cup sleeve */}
-              <rect x="61" y="93" width="9" height="7" fill="#a7f3d0" />
-              {/* Cup Lid */}
-              <rect x="59" y="86" width="14" height="2.5" rx="1" fill="#ffffff" />
-              {/* Straw */}
-              <line x1="64" y1="80" x2="64" y2="87" stroke="#059669" strokeWidth="2" strokeLinecap="round" />
-            </g>
-          )}
         </svg>
       </div>
     </div>

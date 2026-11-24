@@ -24,6 +24,7 @@ export default function DarshAssistantBot({
 }) {
   const [buddyType, setBuddyType] = useState('water');
   const [buddyCustomText, setBuddyCustomText] = useState('Dora, time to drink water! Stay hydrated & fresh 💧');
+  const [buddySongInput, setBuddySongInput] = useState('');
   const [scheduledSuccessMsg, setScheduledSuccessMsg] = useState('');
 
   if (role !== 'parent') return null;
@@ -214,19 +215,33 @@ export default function DarshAssistantBot({
                 )}
               </div>
 
+              {/* Optional Custom Song URL */}
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
+                  Optional Song URL (Song badme bata sakte hain, abhi groovy upbeat beat bajegi):
+                </label>
+                <input
+                  type="text"
+                  value={buddySongInput}
+                  onChange={(e) => setBuddySongInput(e.target.value)}
+                  placeholder="Paste audio / song URL (optional)..."
+                  className="w-full bg-[#1a1a1a] text-xs p-2 rounded-xl outline-none border border-[#333] text-white focus:border-cyan-500/50"
+                />
+              </div>
+
               {/* TEST POPUP BUTTON */}
               <button 
                 type="button"
                 onClick={() => {
                   if (handleTriggerBuddyTest) {
-                    handleTriggerBuddyTest(buddyCustomText, buddyType);
+                    handleTriggerBuddyTest(buddyCustomText, buddyType, buddySongInput);
                     setIsBotOpen(false);
                   }
                 }}
-                className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs py-2.5 rounded-xl cursor-pointer shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+                className="w-full bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-500 hover:from-blue-500 hover:to-teal-400 text-white font-extrabold text-xs py-3 rounded-xl cursor-pointer shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
               >
-                <Play size={13} fill="currentColor" />
-                <span>Test Mascot Popup Now (Admin Screen)</span>
+                <Play size={14} fill="currentColor" />
+                <span>Test Hero Walk-In (Song + Walk Animation)</span>
               </button>
             </div>
           )}

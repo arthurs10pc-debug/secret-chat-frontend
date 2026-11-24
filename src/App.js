@@ -1189,10 +1189,12 @@ export default function App() {
   const [buddyMessage, setBuddyMessage] = useState('Dora, time to drink water! Stay hydrated & fresh 💧');
   const [buddyType, setBuddyType] = useState('water');
   const [buddyIntervalMinutes, setBuddyIntervalMinutes] = useState(0);
+  const [buddySongUrl, setBuddySongUrl] = useState('');
 
-  const handleTriggerBuddyTest = (customText, type = 'water') => {
+  const handleTriggerBuddyTest = (customText, type = 'water', songUrl = '') => {
     if (customText) setBuddyMessage(customText);
     if (type) setBuddyType(type);
+    if (songUrl !== undefined) setBuddySongUrl(songUrl);
     setIsBuddyActive(false);
     setTimeout(() => {
       setIsBuddyActive(true);
@@ -13204,8 +13206,8 @@ export default function App() {
         {role === 'parent' && (
           <AnimatedScreenBuddy
             isActive={isBuddyActive}
-            message={buddyMessage}
-            type={buddyType}
+            recipientName={activeDoraName || "Dora"}
+            customSongUrl={buddySongUrl}
             onDismiss={() => setIsBuddyActive(false)}
           />
         )}
