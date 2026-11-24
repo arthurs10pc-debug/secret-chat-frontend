@@ -3178,15 +3178,45 @@ export default function App() {
     }
   }, []);
 
-  const initGlobalPlayer = useCallback((initialVideoId = '') => {
-    if (window.YT && window.YT.Player && !playerRef.current) {
+  const playOrLoadVideo = useCallback((vid, startSec = 0, autoPlay = true) => {
+    if (!vid) return;
+    setActiveVideoId(vid);
+    if (autoPlay) setIsPlaying(true);
+
+    const tryPlay = () => {
+      const targetEl = document.getElementById('persistent-sync-iframe');
+      if (!window.YT || !window.YT.Player || !targetEl) return false;
+
+      if (playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
+        try {
+          isRemoteTriggerRef.current = true;
+          playerRef.current.loadVideoById({
+            videoId: vid,
+            startSeconds: startSec || 0
+          });
+          if (typeof playerRef.current.unMute === 'function') playerRef.current.unMute();
+          if (typeof playerRef.current.setVolume === 'function') playerRef.current.setVolume(100);
+          if (autoPlay) {
+            const p = playerRef.current.playVideo();
+            if (p && typeof p.catch === 'function') {
+              p.catch(() => setAutoplayBlocked(true));
+            }
+          }
+          setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
+          return true;
+        } catch (e) {
+          console.error("loadVideoById error:", e);
+        }
+      }
+
+      // Initialize player when element is ready
       try {
         playerRef.current = new window.YT.Player('persistent-sync-iframe', {
           height: '100%',
           width: '100%',
-          videoId: initialVideoId,
+          videoId: vid,
           playerVars: {
-            autoplay: 1,
+            autoplay: autoPlay ? 1 : 0,
             controls: 1,
             modestbranding: 1,
             rel: 0,
@@ -3194,27 +3224,17 @@ export default function App() {
             origin: window.location.origin
           },
           events: {
-            onReady: () => {
-              if (pendingRestoreRef.current) {
-                const playerInst = pendingRestoreRef.current;
-                pendingRestoreRef.current = null;
-                isRemoteTriggerRef.current = true;
-                playerRef.current.loadVideoById({
-                  videoId: playerInst.videoId,
-                  startSeconds: playerInst.currentTime || 0
-                });
-                playerRef.current.unMute();
-                playerRef.current.setVolume(100);
-                if (playerInst.state === 'PLAY' && viewModeRef.current !== 'codex') {
-                  const playPromise = playerRef.current.playVideo();
-                  if (playPromise && typeof playPromise.catch === 'function') {
-                    playPromise.catch(() => setAutoplayBlocked(true));
+            onReady: (event) => {
+              try {
+                event.target.unMute();
+                event.target.setVolume(100);
+                if (autoPlay) {
+                  const p = event.target.playVideo();
+                  if (p && typeof p.catch === 'function') {
+                    p.catch(() => setAutoplayBlocked(true));
                   }
-                } else {
-                  playerRef.current.pauseVideo();
                 }
-                setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
-              }
+              } catch (e) {}
             },
             onStateChange: (event) => {
               if (isRemoteTriggerRef.current) return;
@@ -3225,24 +3245,24 @@ export default function App() {
                 if (socketRef.current) {
                   socketRef.current.emit('sync_track_ended');
                 }
-              } else if (event.data === window.YT.PlayerState.PLAYING) {
+              } else if (event.data === (window.YT?.PlayerState?.PLAYING ?? 1)) {
                 setIsPlaying(true);
                 setAutoplayBlocked(false);
                 if (socketRef.current) {
                   socketRef.current.emit('sync_playback_state', {
                     room: GLOBAL_ROOM,
                     state: 'PLAY',
-                    currentTime: playerRef.current.getCurrentTime(),
+                    currentTime: (typeof playerRef.current?.getCurrentTime === 'function' ? playerRef.current.getCurrentTime() : 0) || 0,
                     timestamp: Date.now()
                   });
                 }
-              } else if (event.data === window.YT.PlayerState.PAUSED) {
+              } else if (event.data === (window.YT?.PlayerState?.PAUSED ?? 2)) {
                 setIsPlaying(false);
                 if (socketRef.current) {
                   socketRef.current.emit('sync_playback_state', {
                     room: GLOBAL_ROOM,
                     state: 'PAUSE',
-                    currentTime: playerRef.current.getCurrentTime(),
+                    currentTime: (typeof playerRef.current?.getCurrentTime === 'function' ? playerRef.current.getCurrentTime() : 0) || 0,
                     timestamp: Date.now()
                   });
                 }
@@ -3250,19 +3270,23 @@ export default function App() {
             }
           }
         });
-      } catch (e) {}
+        return true;
+      } catch (e) {
+        console.error("Player creation error:", e);
+        return false;
+      }
+    };
+
+    if (!tryPlay()) {
+      let retries = 0;
+      const interval = setInterval(() => {
+        retries++;
+        if (tryPlay() || retries > 30) {
+          clearInterval(interval);
+        }
+      }, 250);
     }
   }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (window.YT && window.YT.Player && !playerRef.current) {
-        initGlobalPlayer();
-        clearInterval(timer);
-      }
-    }, 400);
-    return () => clearInterval(timer);
-  }, [initGlobalPlayer]);
 
   useEffect(() => {
     // 1. Register Service Worker on all browsers (including iOS Safari)
@@ -5521,8 +5545,10 @@ export default function App() {
     });
 
     socketRef.current.on('sync_restore_state', (data) => {
-      if (!data || !data.connected) return;
-      setSyncStatus('connected');
+      if (!data) return;
+      if (data.connected) {
+        setSyncStatus('connected');
+      }
 
       if (data && Array.isArray(data.queue)) {
         setScheduledSongs([
@@ -5533,30 +5559,8 @@ export default function App() {
       }
 
       if (data.videoId) {
-        setActiveVideoId(data.videoId);
         setActiveTrackTitle(data.title || "YouTube Track");
-        setIsPlaying(data.state === 'PLAY');
-
-        if (playerRef.current && playerRef.current.loadVideoById) {
-          isRemoteTriggerRef.current = true;
-          playerRef.current.loadVideoById({
-            videoId: data.videoId,
-            startSeconds: data.currentTime || 0
-          });
-          playerRef.current.unMute();
-          playerRef.current.setVolume(100);
-          if (data.state === 'PLAY' && viewModeRef.current !== 'codex') {
-            const playPromise = playerRef.current.playVideo();
-            if (playPromise && typeof playPromise.catch === 'function') {
-              playPromise.catch(() => setAutoplayBlocked(true));
-            }
-          } else {
-            playerRef.current.pauseVideo();
-          }
-          setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
-        } else {
-          pendingRestoreRef.current = data;
-        }
+        playOrLoadVideo(data.videoId, data.currentTime || 0, data.state === 'PLAY');
       }
     });
 
@@ -5613,25 +5617,8 @@ export default function App() {
 
     socketRef.current.on('sync_track_update', ({ videoId, title }) => {
       setActiveTrackTitle(title || "YouTube Track");
-      setActiveVideoId(videoId);
-      setIsPlaying(true);
       lastSyncActionTimeRef.current = Date.now();
-
-      if (playerRef.current && playerRef.current.loadVideoById) {
-        isRemoteTriggerRef.current = true;
-        try {
-          playerRef.current.loadVideoById({ videoId, startSeconds: 0 });
-          playerRef.current.unMute();
-          playerRef.current.setVolume(100);
-          const playPromise = playerRef.current.playVideo();
-          if (playPromise && typeof playPromise.catch === 'function') {
-            playPromise.catch(() => setAutoplayBlocked(true));
-          }
-        } catch (e) {
-          setAutoplayBlocked(true);
-        }
-        setTimeout(() => { isRemoteTriggerRef.current = false; }, 2000);
-      }
+      playOrLoadVideo(videoId, 0, true);
     });
 
     socketRef.current.on('sync_queue_broadcast', ({ queue }) => {
@@ -7170,12 +7157,9 @@ export default function App() {
       return;
     }
 
-    if (playerRef.current && playerRef.current.unMute) {
-      try {
-        playerRef.current.unMute();
-        playerRef.current.setVolume(100);
-      } catch (e) {}
-    }
+    // Set and play immediately on user gesture!
+    setActiveTrackTitle(finalTitle);
+    playOrLoadVideo(vid, 0, true);
 
     if (socketRef.current) {
       socketRef.current.emit('sync_track_change', {
@@ -7251,6 +7235,11 @@ export default function App() {
   const handlePlayScheduledSlot = (slotIdx) => {
     const targetSong = scheduledSongs[slotIdx];
     if (!targetSong) return;
+
+    if (targetSong.videoId) {
+      setActiveTrackTitle(targetSong.title || targetSong.url || "YouTube Track");
+      playOrLoadVideo(targetSong.videoId, 0, true);
+    }
 
     if (socketRef.current) {
       socketRef.current.emit('sync_play_scheduled_slot', { index: slotIdx });
@@ -7641,20 +7630,6 @@ export default function App() {
           </div>
         </div>
       )}
-
-      <div 
-        style={{
-          position: 'fixed',
-          top: '-9999px',
-          left: '-9999px',
-          width: '320px',
-          height: '240px',
-          pointerEvents: 'none',
-          zIndex: -9999
-        }}
-      >
-        <div id="persistent-sync-iframe"></div>
-      </div>
 
       {sidebarOpen && (
         <div 
@@ -11860,9 +11835,8 @@ export default function App() {
               </section>
             )}
 
-            {viewMode === 'scheduled' && (
-              <section className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-4 scrollbar-none font-sans">
-                <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
+            <section className={`flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 max-w-4xl w-full mx-auto space-y-4 scrollbar-none font-sans ${viewMode === 'scheduled' ? 'block' : 'hidden'}`}>
+              <div className="flex items-center justify-between border-b border-[#222] pb-2.5">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
                       <Music size={18} />
@@ -12017,45 +11991,68 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* CURRENT TRACK STATUS BAR */}
-                    {activeVideoId ? (
-                      <div className="w-full bg-[#141414] border border-emerald-500/40 rounded-2xl p-3 sm:p-4 flex items-center justify-between gap-3 shadow-lg">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shrink-0">
-                            <Volume2 size={20} className={isPlaying ? 'animate-pulse' : ''} />
+                    {/* CURRENT TRACK STATUS BAR & VISIBLE EMBEDDED PLAYER */}
+                    <div className="space-y-3 w-full">
+                      <div className={`w-full aspect-video sm:h-72 rounded-2xl overflow-hidden bg-black border border-emerald-500/40 shadow-2xl relative ${activeVideoId ? 'block' : 'hidden'}`}>
+                        <div id="persistent-sync-iframe" className="w-full h-full" />
+                      </div>
+
+                      {activeVideoId ? (
+                        <div className="w-full bg-[#141414] border border-emerald-500/40 rounded-2xl p-3 sm:p-4 flex items-center justify-between gap-3 shadow-lg">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                              <Volume2 size={20} className={isPlaying ? 'animate-pulse' : ''} />
+                            </div>
+                            <div className="min-w-0 text-left">
+                              <span className="text-[10px] text-emerald-400 font-mono uppercase tracking-wider block font-bold">
+                                {isPlaying ? '● Live Synchronized Playing' : '❚❚ Playback Paused'}
+                              </span>
+                              <h3 className="text-xs sm:text-sm font-bold text-white truncate max-w-[200px] sm:max-w-md">
+                                {activeTrackTitle || "YouTube Track"}
+                              </h3>
+                            </div>
                           </div>
-                          <div className="min-w-0 text-left">
-                            <span className="text-[10px] text-emerald-400 font-mono uppercase tracking-wider block font-bold">
-                              {isPlaying ? '● Live Synchronized Playing' : '❚❚ Playback Paused'}
-                            </span>
-                            <h3 className="text-xs sm:text-sm font-bold text-white truncate max-w-[200px] sm:max-w-md">
-                              {activeTrackTitle || "YouTube Track"}
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={handleTogglePlayPause}
+                              className="p-2 px-3 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer active:scale-95 transition-all flex items-center gap-1 shadow"
+                              title={isPlaying ? "Pause Song" : "Play Song"}
+                            >
+                              {isPlaying ? <Pause size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" />}
+                              <span>{isPlaying ? 'Pause' : 'Play'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleSkipToNextScheduledSong}
+                              disabled={!scheduledSongs[0]}
+                              className={`p-2 px-3 rounded-xl text-xs font-semibold border flex items-center gap-1 transition-all ${
+                                scheduledSongs[0]
+                                  ? 'bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border-emerald-500/40 cursor-pointer active:scale-95'
+                                  : 'bg-[#1c1c1c] text-gray-600 border-[#2a2a2a] cursor-not-allowed opacity-50'
+                              }`}
+                              title={scheduledSongs[0] ? "Skip to Next Scheduled Song" : "No song scheduled in Slot 1"}
+                            >
+                              <SkipForward size={13} />
+                              <span className="hidden sm:inline">Next</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="w-full bg-[#121212] border border-[#242424] rounded-2xl p-5 sm:p-6 text-center space-y-2.5 shadow-xl">
+                          <div className="w-14 h-14 rounded-full bg-[#1c1c1c] border border-[#2e2e2e] flex items-center justify-center text-emerald-400 mx-auto">
+                            <Volume2 size={24} />
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-gray-500 font-mono uppercase tracking-wider block">Live Synchronized</span>
+                            <h3 className="text-sm sm:text-base font-bold text-white mt-1 break-words">
+                              No track playing. Search or paste link above to start live sync.
                             </h3>
                           </div>
                         </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={handleSkipToNextScheduledSong}
-                            disabled={!scheduledSongs[0]}
-                            className={`p-2 px-3 rounded-xl text-xs font-semibold border flex items-center gap-1 transition-all ${
-                              scheduledSongs[0]
-                                ? 'bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border-emerald-500/40 cursor-pointer active:scale-95'
-                                : 'bg-[#1c1c1c] text-gray-600 border-[#2a2a2a] cursor-not-allowed opacity-50'
-                            }`}
-                            title={scheduledSongs[0] ? "Skip to Next Scheduled Song" : "No song scheduled in Slot 1"}
-                          >
-                            <SkipForward size={13} />
-                            <span className="hidden sm:inline">Next</span>
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="w-full bg-[#121212] border border-[#242424] rounded-2xl p-4 text-center text-xs text-gray-400">
-                        🎵 No track playing. Search or paste link above to start live sync.
-                      </div>
-                    )}
+                      )}
+                    </div>
 
                     {/* 3 UPCOMING SCHEDULED SONG SECTIONS */}
                     <div className="w-full space-y-2.5 pt-1">
@@ -12221,7 +12218,6 @@ export default function App() {
                   </div>
                 )}
               </section>
-            )}
 
             {viewMode === 'codex' && (
               <ErrorBoundary fallback={
