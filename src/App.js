@@ -10,7 +10,7 @@ import {
   Bot, X, Download, AlertCircle, ShieldCheck, Smile,
   Copy, ThumbsUp, ThumbsDown, RotateCw, Check, Edit3, Maximize2, Mic, AudioLines, ChevronDown, ChevronUp,
   Code, Play, Pause, Eye, EyeOff, FileDown, Radio, Link2, Unlink, Music, Volume2, Loader2, VolumeX, SkipForward,
-  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2, Heart, Coins, Award, Scale, Gift, SlidersHorizontal, Bell, BellRing, Filter, CheckCircle2, XCircle, ArrowLeft, MoreVertical, Paperclip, Camera, Briefcase, Calendar, CheckCircle, Users, UserCheck, Mail, Pin, Star, CornerUpLeft,
+  Film, Tv, Video, TerminalSquare, AlertTriangle, HardDrive, Globe, ExternalLink, Gamepad2, Trophy, RotateCcw, Dices, Timer, Dice5, Send, MessageCircle, Phone, Video as VideoIcon, CheckCheck, MicOff, Disc, Lock, Trash2, Heart, Coins, Award, Scale, Gift, SlidersHorizontal, Bell, BellRing, Filter, CheckCircle2, XCircle, ArrowLeft, MoreVertical, Paperclip, Camera, Briefcase, Calendar, CheckCircle, Users, UserCheck, User, Mail, Pin, Star, CornerUpLeft,
   Menu, Sliders, Laptop, LayoutGrid
 } from 'lucide-react';
 
@@ -1078,6 +1078,10 @@ export default function App() {
     }
     return 'default';
   });
+
+  // Frosted Neumorphic Top Banner Notification (Styled after user mockup)
+  const [activeFrostedBanner, setActiveFrostedBanner] = useState(null);
+  const frostedBannerTimerRef = useRef(null);
 
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem('stealth_conversations');
@@ -3387,6 +3391,30 @@ export default function App() {
     return 'denied';
   }, []);
 
+  const handleRequestNotificationPermission = useCallback(async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const perm = await Notification.requestPermission();
+        setNotificationPermission(perm);
+        if (perm === 'granted') {
+          // Send instant test notification to system notification bar
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then(reg => {
+              reg.showNotification('🔔 Alerts Active!', {
+                body: 'You will now receive all updates and points in your mobile notification bar.',
+                icon: '/favicon.ico',
+                badge: '/favicon.ico',
+                vibrate: [200, 100, 200]
+              });
+            }).catch(() => {});
+          }
+        }
+      } catch (e) {
+        console.warn("handleRequestNotificationPermission error:", e);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     try {
       if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -3401,37 +3429,97 @@ export default function App() {
     } catch (e) {}
   }, []);
 
-  const triggerMobileNotification = useCallback((incomingText, senderRole) => {
-    try {
-      if (!('Notification' in window) || Notification.permission !== 'granted') return;
-
-    const senderTag = senderRole === 'parent' ? 'Darsh' : 'Dora';
-    const title = `ChatGPT • ${senderTag}`;
-
-    const bodyText = incomingText 
-      ? `• ${incomingText.length > 50 ? incomingText.substring(0, 47) + '...' : incomingText}`
-      : '• New message received';
-
-    const options = {
-      body: bodyText,
-      icon: '/favicon.ico',
-      badge: '/favicon.ico',
-      tag: 'stealth_chat_message',
-      renotify: true,
-      vibrate: [200, 100, 200]
-    };
-
-    if (swRegistrationRef.current && 'showNotification' in swRegistrationRef.current) {
-      swRegistrationRef.current.showNotification(title, options);
-    } else {
+  // --- UNIFIED MOBILE NOTIFICATION DISPATCHER ---
+  // Triggers REAL system notification in phone's notification bar + Frosted Glass Banner (from user's mockup)
+  const dispatchUnifiedNotification = useCallback(async ({
+    title,
+    body,
+    icon = '✨',
+    type = 'info',
+    onClickAction = null,
+    sound = true,
+    tag = null
+  }) => {
+    // 1. Notification Sound
+    if (sound) {
       try {
-        new Notification(title, options);
+        if (type === 'reward' || type === 'balance') {
+          playPointEarnedSound();
+        } else {
+          playReceiveSound();
+        }
       } catch (e) {}
     }
-  } catch (err) {
-    console.warn("triggerMobileNotification failed:", err);
-  }
-  }, []);
+
+    // 2. Frosted Neumorphic Banner (Styled after user's uploaded mockup)
+    const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    setActiveFrostedBanner({
+      title: title || 'ChatGPT',
+      body: body || '',
+      icon,
+      type,
+      time: timeStr,
+      onClickAction
+    });
+
+    if (frostedBannerTimerRef.current) {
+      clearTimeout(frostedBannerTimerRef.current);
+    }
+    frostedBannerTimerRef.current = setTimeout(() => {
+      setActiveFrostedBanner(null);
+    }, 4500);
+
+    // 3. Mobile Device System Notification Bar (Android / iOS / Windows top status bar)
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        if (Notification.permission === 'granted') {
+          const notificationOptions = {
+            body: body ? (body.length > 80 ? body.substring(0, 77) + '...' : body) : '',
+            icon: '/favicon.ico',
+            badge: '/favicon.ico',
+            tag: tag || 'stealth_' + (type || 'alert') + '_' + Date.now(),
+            renotify: true,
+            vibrate: [200, 100, 200],
+            silent: false
+          };
+
+          // Try ServiceWorker first (MANDATORY for Android status notification bar)
+          if ('serviceWorker' in navigator) {
+            try {
+              const reg = swRegistrationRef.current || await navigator.serviceWorker.ready;
+              if (reg && reg.showNotification) {
+                await reg.showNotification(title || 'ChatGPT', notificationOptions);
+                return;
+              }
+            } catch (swErr) {
+              console.warn("SW showNotification error:", swErr);
+            }
+          }
+
+          // Fallback to Notification constructor
+          try {
+            new Notification(title || 'ChatGPT', notificationOptions);
+          } catch (nErr) {}
+        }
+      }
+    } catch (e) {
+      console.warn("dispatchUnifiedNotification system error:", e);
+    }
+  }, [playPointEarnedSound, playReceiveSound]);
+
+  const triggerMobileNotification = useCallback((incomingText, senderRole) => {
+    const senderTag = senderRole === 'parent' ? 'Darsh' : activeDoraName;
+    const title = `ChatGPT • ${senderTag}`;
+    const bodyText = incomingText 
+      ? `${incomingText.length > 50 ? incomingText.substring(0, 47) + '...' : incomingText}`
+      : 'New message received';
+    dispatchUnifiedNotification({
+      title,
+      body: bodyText,
+      icon: '💬',
+      type: 'message'
+    });
+  }, [activeDoraName, dispatchUnifiedNotification]);
 
   const handleLoveBalanceTransaction = useCallback((amount, type, reason, isBroadcast = false, target = 'user', extraData = null) => {
     const numAmount = Math.abs(parseFloat(amount) || 0);
@@ -3491,8 +3579,22 @@ export default function App() {
     if (type === 'credit' && !isBroadcast) {
       try {
         confetti({ particleCount: 50, spread: 70, origin: { y: 0.4 } });
-        playPointEarnedSound();
       } catch (e) {}
+    }
+
+    if (!isBroadcast) {
+      const isCredit = type === 'credit';
+      const sign = isCredit ? '+' : '-';
+      dispatchUnifiedNotification({
+        title: `${isCredit ? '⚡ Point Awarded' : '📉 Balance Deducted'} • ${targetLabel} (${sign}₹${numAmount.toFixed(2)})`,
+        body: cleanReason,
+        icon: isCredit ? '💰' : '📉',
+        type: isCredit ? 'reward' : 'balance',
+        onClickAction: () => {
+          setShowLoveBalanceModal(true);
+          setLoveModalTab('passbook');
+        }
+      });
     }
 
     if (!isBroadcast && socketRef.current) {
@@ -3509,7 +3611,7 @@ export default function App() {
         timestamp: Date.now()
       });
     }
-  }, [role]);
+  }, [role, activeDoraName, dispatchUnifiedNotification]);
 
   // --- SMOOTH ERROR-LESS LONG PRESS CONTROLLER FOR ADMIN STEALTH TOGGLE ---
   const handleThinkPointerDown = useCallback((e) => {
@@ -4865,10 +4967,11 @@ export default function App() {
     });
 
     socketRef.current.on('launch_game_session', (gameObj) => {
-      if (gameObj && (gameObj.id === 'ludo' || gameObj === 'ludo')) {
+      setIncomingGameChallenge(null);
+      if (gameObj && (gameObj.id === 'ludo' || gameObj === 'ludo' || gameObj.game === 'ludo')) {
         setShowLudoModal(true);
       } else {
-        setActiveGame(gameObj);
+        setShowCoupleMiniGameModal(true);
       }
       setWinnerMessage('');
       playReceiveSound();
@@ -4876,8 +4979,35 @@ export default function App() {
 
     socketRef.current.on('couple_game_invite_broadcast', (inviteData) => {
       if (!inviteData) return;
+      // Do NOT show challenge banner to the challenger themselves!
+      const currentRole = roleRef.current || role;
+      if (inviteData.challengerRole && inviteData.challengerRole === currentRole) {
+        return;
+      }
       setIncomingGameChallenge(inviteData);
       playReceiveSound();
+
+      const gameLabel = inviteData.game === 'ludo' ? 'Ludo Royale' : 'Tic-Tac-Toe';
+      const betLabel = inviteData.betAmount ? ` (₹${Number(inviteData.betAmount).toFixed(2)})` : '';
+      dispatchUnifiedNotification({
+        title: `🎲 ${inviteData.challenger} Challenged You!`,
+        body: `${gameLabel}${betLabel} • Tap to play!`,
+        icon: inviteData.game === 'ludo' ? '🎲' : '⚔️',
+        type: 'game',
+        onClickAction: () => {
+          setIncomingGameChallenge(null);
+          if (socketRef.current) {
+            socketRef.current.emit('couple_game_accept', { game: inviteData.game, id: inviteData.game });
+            socketRef.current.emit('couple_game_invite_clear');
+          }
+          if (inviteData.game === 'ludo') setShowLudoModal(true);
+          else setShowCoupleMiniGameModal(true);
+        }
+      });
+    });
+
+    socketRef.current.on('couple_game_invite_clear', () => {
+      setIncomingGameChallenge(null);
     });
 
     const handleIncomingGameBroadcast = (data) => {
@@ -5933,7 +6063,12 @@ export default function App() {
         });
         if (myRole !== 'parent' && myRole !== 'admin') {
           try { confetti({ particleCount: 80, spread: 90, origin: { y: 0.4 } }); } catch(e) {}
-          alert(`🎉 Task Approved by Darsh!\n\n+₹ ${data.points || 0} has been added to your Love Balance! 💖`);
+          dispatchUnifiedNotification({
+            title: `🎉 Task Approved by Darsh! (+₹${Number(data.points || 0).toFixed(2)})`,
+            body: 'Your submitted task was approved and love balance credited!',
+            icon: '🏆',
+            type: 'reward'
+          });
         }
       } else if (data.action === 'DAILY_TASK_REJECTED' && data.submissionId) {
         setDailySubmissions(prev => {
@@ -6049,6 +6184,12 @@ export default function App() {
 
         if (myRole !== 'parent' && myRole !== 'admin') {
           try { confetti({ particleCount: 80, spread: 80, origin: { y: 0.4 } }); } catch(e) {}
+          dispatchUnifiedNotification({
+            title: `🎉 Task Approved (+₹${Number(pts).toFixed(2)})`,
+            body: slotTitle,
+            icon: '🏆',
+            type: 'reward'
+          });
         }
       } else if (data.action === 'SYNC_STATE_RESPONSE') {
         if (typeof data.loveBalance === 'number') {
@@ -6138,8 +6279,22 @@ export default function App() {
         if (data.type === 'credit') {
           try {
             confetti({ particleCount: 50, spread: 70, origin: { y: 0.4 } });
-            playPointEarnedSound();
           } catch (e) {}
+          const targetName = data.target === 'admin' ? 'Darsh' : activeDoraName;
+          dispatchUnifiedNotification({
+            title: `⚡ Point Update • ${targetName} (+₹${Number(data.amount).toFixed(2)})`,
+            body: data.reason || 'Love balance reward updated',
+            icon: '💰',
+            type: 'reward'
+          });
+        } else if (data.type === 'debit' || data.type === 'redeem') {
+          const targetName = data.target === 'admin' ? 'Darsh' : activeDoraName;
+          dispatchUnifiedNotification({
+            title: `📉 Balance Update • ${targetName} (-₹${Number(data.amount).toFixed(2)})`,
+            body: data.reason || 'Love balance deduction',
+            icon: '📉',
+            type: 'balance'
+          });
         }
       }
     });
@@ -6238,7 +6393,12 @@ export default function App() {
             confetti({ particleCount: 80, spread: 90, origin: { y: 0.4 } });
           } catch (e) {}
           if (activeRole !== 'parent' && activeRole !== 'admin') {
-            alert(`🎉 Task Approved by Darsh!\n\n+₹ ${pts.toFixed(2)} has been added to your Love Balance! 💖`);
+            dispatchUnifiedNotification({
+              title: `🎉 Task Approved by Darsh! (+₹${pts.toFixed(2)})`,
+              body: `${(submission && submission.slotTitle) || 'Routine Task'} was approved!`,
+              icon: '🏆',
+              type: 'reward'
+            });
           }
         } else if (rejected) {
           if (activeRole !== 'parent' && activeRole !== 'admin') {
@@ -6356,6 +6516,36 @@ export default function App() {
       });
     }
   };
+
+  const handleAcceptGameChallenge = useCallback((challenge) => {
+    if (!challenge) return;
+    const g = challenge.game;
+    setIncomingGameChallenge(null);
+    if (socketRef.current) {
+      socketRef.current.emit('couple_game_accept', { game: g, id: g });
+      socketRef.current.emit('couple_game_invite_clear');
+    }
+    if (g === 'ludo') {
+      setShowLudoModal(true);
+    } else {
+      setShowCoupleMiniGameModal(true);
+    }
+  }, []);
+
+  const handleDeclineGameChallenge = useCallback(() => {
+    setIncomingGameChallenge(null);
+    if (socketRef.current) {
+      socketRef.current.emit('couple_game_invite_clear');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!incomingGameChallenge) return;
+    const timer = setTimeout(() => {
+      setIncomingGameChallenge(null);
+    }, 25000);
+    return () => clearTimeout(timer);
+  }, [incomingGameChallenge]);
 
   const handleGameAction = useCallback((payload) => {
     if (!payload) return;
@@ -8749,6 +8939,19 @@ export default function App() {
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" />
               )}
             </button>
+
+            {/* ENABLE MOBILE NOTIFICATIONS 1-TAP PILL (WHEN NOT GRANTED) */}
+            {notificationPermission === 'default' && (
+              <button
+                type="button"
+                onClick={handleRequestNotificationPermission}
+                className="px-2.5 py-1 rounded-full flex items-center gap-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-[11px] font-bold transition-all active:scale-95 shadow cursor-pointer shrink-0 animate-pulse"
+                title="Turn on mobile notification bar alerts"
+              >
+                <span>🔔</span>
+                <span className="hidden xs:inline">Alerts</span>
+              </button>
+            )}
 
             {/* LOVE BALANCE PILL BUTTON -> OPENS PASSBOOK */}
             {isCurrentAdmin ? (
@@ -12446,38 +12649,79 @@ export default function App() {
           socketRef={socketRef}
         />
 
-        {/* INCOMING GAME CHALLENGE NOTIFICATION (LIVE POPUP FROM PARTNER) */}
-        {incomingGameChallenge && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100000] w-[92%] max-w-md bg-gradient-to-r from-purple-800 via-indigo-800 to-purple-900 text-white p-3.5 rounded-2xl shadow-2xl border-2 border-amber-400 flex items-center justify-between gap-3 animate-bounce font-sans">
-            <div className="flex items-center gap-2.5">
-              <span className="text-2xl">{incomingGameChallenge.game === 'ludo' ? '🎲' : '⚔️'}</span>
-              <div className="text-left">
-                <h4 className="text-xs sm:text-sm font-black text-amber-300">
-                  {incomingGameChallenge.challenger} Challenged You!
+        {/* FROSTED NEUMORPHIC NOTIFICATION BANNER (STYLED EXACTLY LIKE USER MOCKUP) */}
+        {activeFrostedBanner && (
+          <div 
+            onClick={() => {
+              if (activeFrostedBanner.onClickAction) {
+                activeFrostedBanner.onClickAction();
+              }
+              setActiveFrostedBanner(null);
+            }}
+            className="fixed top-3 left-1/2 -translate-x-1/2 z-[100001] w-[calc(100vw-24px)] max-w-sm sm:max-w-md bg-[#181a20]/95 backdrop-blur-2xl border border-white/20 text-white p-3.5 sm:p-4 rounded-[26px] shadow-[0_14px_45px_rgba(0,0,0,0.75)] flex items-center gap-3.5 font-sans animate-in fade-in slide-in-from-top-4 duration-300 cursor-pointer active:scale-[0.98] transition-all box-border overflow-hidden"
+          >
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-white/10 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5),0_1px_2px_rgba(255,255,255,0.15)] border border-white/20 flex items-center justify-center shrink-0 text-xl sm:text-2xl">
+              {activeFrostedBanner.icon || <User size={22} className="text-white/80" />}
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-[13px] sm:text-[14px] font-bold text-white tracking-wide truncate">
+                  {activeFrostedBanner.title}
                 </h4>
-                <p className="text-[11px] text-gray-200">
-                  {incomingGameChallenge.game === 'ludo' ? 'Ludo Royale (2P Live Board)' : 'Couple Tic-Tac-Toe'}
+                <span className="text-[10px] sm:text-[11px] text-gray-400 font-medium shrink-0">
+                  {activeFrostedBanner.time || 'Just now'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-300 leading-snug line-clamp-2 mt-0.5 font-normal">
+                {activeFrostedBanner.body}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveFrostedBanner(null);
+              }}
+              className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 text-gray-400 hover:text-white flex items-center justify-center text-xs shrink-0 transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* INCOMING GAME CHALLENGE NOTIFICATION (STYLED LIKE USER MOCKUP, NEVER OVERFLOWS) */}
+        {incomingGameChallenge && incomingGameChallenge.challengerRole !== role && (
+          <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[100000] w-[calc(100vw-24px)] max-w-sm sm:max-w-md bg-[#181a20]/95 backdrop-blur-2xl border border-white/20 text-white p-3 sm:p-3.5 rounded-[26px] shadow-[0_12px_40px_rgba(0,0,0,0.7)] flex items-center justify-between gap-2.5 font-sans animate-in fade-in slide-in-from-top-3 duration-300 box-border overflow-hidden">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="w-11 h-11 rounded-full bg-white/10 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5),0_1px_2px_rgba(255,255,255,0.15)] border border-white/20 flex items-center justify-center shrink-0 text-2xl">
+                {incomingGameChallenge.game === 'ludo' ? '🎲' : '⚔️'}
+              </div>
+              <div className="text-left min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-1">
+                  <h4 className="text-xs sm:text-sm font-bold text-white tracking-wide truncate">
+                    {incomingGameChallenge.challenger}
+                  </h4>
+                  <span className="text-[10px] text-gray-400 font-medium shrink-0">Just now</span>
+                </div>
+                <p className="text-[11px] sm:text-xs text-gray-300 truncate mt-0.5">
+                  {incomingGameChallenge.game === 'ludo' ? 'Ludo Royale (2P)' : 'Tic-Tac-Toe'}
                   {incomingGameChallenge.betAmount ? ` • ₹${incomingGameChallenge.betAmount} Bet` : ' • Friendly'}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
-                onClick={() => {
-                  const g = incomingGameChallenge.game;
-                  setIncomingGameChallenge(null);
-                  if (g === 'ludo') setShowLudoModal(true);
-                  else setShowCoupleMiniGameModal(true);
-                }}
-                className="bg-amber-400 hover:bg-amber-300 text-black font-black text-xs px-3 py-1.5 rounded-xl shadow cursor-pointer active:scale-95 transition-all"
+                onClick={() => handleAcceptGameChallenge(incomingGameChallenge)}
+                className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold text-[11px] px-3.5 py-2 rounded-full shadow-md cursor-pointer active:scale-95 transition-all tracking-wider uppercase"
               >
-                Accept & Play
+                Play
               </button>
               <button
                 type="button"
-                onClick={() => setIncomingGameChallenge(null)}
-                className="text-gray-300 hover:text-white text-xs font-bold p-1 cursor-pointer"
+                onClick={handleDeclineGameChallenge}
+                className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white flex items-center justify-center text-xs font-bold cursor-pointer transition-colors"
+                title="Dismiss"
               >
                 ✕
               </button>
