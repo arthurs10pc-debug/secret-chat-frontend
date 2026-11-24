@@ -8670,15 +8670,17 @@ export default function App() {
             )}
           </div>
 
-          {/* RIGHT: CIRCULAR NEW CHAT BUTTON */}
-          <button
-            type="button"
-            onClick={handleNewChat}
-            className="w-10 h-10 rounded-full bg-[#212121] active:bg-[#2c2c2c] text-white flex items-center justify-center transition-transform active:scale-95 shadow cursor-pointer shrink-0"
-            title="New Chat"
-          >
-            <SquarePen size={18} className="text-gray-200" />
-          </button>
+          {/* RIGHT: CIRCULAR NEW CHAT BUTTON (HIDDEN FOR ADMIN) */}
+          {role !== 'parent' && (
+            <button
+              type="button"
+              onClick={handleNewChat}
+              className="w-10 h-10 rounded-full bg-[#212121] active:bg-[#2c2c2c] text-white flex items-center justify-center transition-transform active:scale-95 shadow cursor-pointer shrink-0"
+              title="New Chat"
+            >
+              <SquarePen size={18} className="text-gray-200" />
+            </button>
+          )}
         </header>
 
         {/* DESKTOP CHATGPT HEADER (hidden md:flex) */}

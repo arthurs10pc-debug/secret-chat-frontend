@@ -1,7 +1,7 @@
 {
-  "short_name": "Notes & Calc",
-  "name": "Scientific Notes & Utilities",
-  "description": "Scientific utility notes and calculation manager",
+  "short_name": "ChatGPT",
+  "name": "ChatGPT",
+  "description": "ChatGPT",
   "icons": [
     {
       "src": "favicon.ico",
