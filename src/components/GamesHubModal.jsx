@@ -6,6 +6,7 @@ export default function GamesHubModal({
   onClose,
   onOpenLudo,
   onOpenTicTacToe,
+  onOpenSnakes,
   role,
   activeDoraName
 }) {
@@ -51,7 +52,7 @@ export default function GamesHubModal({
               onClose();
               onOpenLudo();
             }}
-            className="bg-gradient-to-br from-[#1c1c1c] via-[#222] to-[#1a1a1a] border-2 border-amber-500/50 hover:border-amber-400 rounded-2xl p-4 cursor-pointer transition-all hover:scale-[1.02] shadow-lg flex items-center justify-between group active:scale-95"
+            className="bg-gradient-to-br from-[#1c1c1c] via-[#222] to-[#1a1a1a] border-2 border-amber-500/50 hover:border-amber-400 rounded-2xl p-3.5 sm:p-4 cursor-pointer transition-all hover:scale-[1.02] shadow-lg flex items-center justify-between group active:scale-95"
           >
             <div className="flex items-center gap-3.5">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 via-rose-600 to-emerald-600 flex items-center justify-center text-2xl shadow-md group-hover:rotate-12 transition-transform">
@@ -63,7 +64,7 @@ export default function GamesHubModal({
                     Ludo Royale (2P Mobile)
                   </h4>
                   <span className="text-[9px] font-mono bg-amber-500 text-black px-1.5 py-0.2 rounded font-bold">
-                    NEW 15x15
+                    15x15
                   </span>
                 </div>
                 <p className="text-xs text-gray-400 leading-tight">
@@ -76,6 +77,41 @@ export default function GamesHubModal({
             </div>
 
             <div className="text-amber-400 font-black text-sm group-hover:translate-x-1 transition-transform">
+              ➔
+            </div>
+          </div>
+
+          {/* GAME 2: SNAKES AND LADDERS */}
+          <div 
+            onClick={() => {
+              onClose();
+              if (onOpenSnakes) onOpenSnakes();
+            }}
+            className="bg-gradient-to-br from-[#1c1c1c] via-[#222] to-[#1a1a1a] border-2 border-emerald-500/50 hover:border-emerald-400 rounded-2xl p-3.5 sm:p-4 cursor-pointer transition-all hover:scale-[1.02] shadow-lg flex items-center justify-between group active:scale-95"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-600 to-amber-500 flex items-center justify-center text-2xl shadow-md group-hover:rotate-12 transition-transform">
+                🐍
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">
+                    Snakes & Ladders (100 Tiles)
+                  </h4>
+                  <span className="text-[9px] font-mono bg-emerald-500 text-black px-1.5 py-0.2 rounded font-bold">
+                    NEW
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400 leading-tight">
+                  Colorful 10x10 board, 3D dice, audio sounds, ladder climbs & snakes!
+                </p>
+                <div className="text-[10px] text-emerald-400/90 font-mono font-semibold pt-0.5">
+                  Darsh (Red) vs Dora (Blue) • Vs Bot / 2P
+                </div>
+              </div>
+            </div>
+
+            <div className="text-emerald-400 font-black text-sm group-hover:translate-x-1 transition-transform">
               ➔
             </div>
           </div>

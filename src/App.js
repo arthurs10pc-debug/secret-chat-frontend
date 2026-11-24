@@ -56,6 +56,7 @@ const ImagePreviewModal = lazy(() => import('./components/ImagePreviewModal'));
 const CoupleMiniGameModal = lazy(() => import('./components/CoupleMiniGameModal'));
 const LudoGameModal = lazy(() => import('./components/LudoGameModal'));
 const GamesHubModal = lazy(() => import('./components/GamesHubModal'));
+const SnakesLaddersModal = lazy(() => import('./components/SnakesLaddersModal'));
 
 const getEmbedUrl = (server, imdbId) => {
   const cleanId = imdbId.trim();
@@ -698,8 +699,10 @@ export default function App() {
   const [showLoveBalanceModal, setShowLoveBalanceModal] = useState(false);
   const [showCoupleMiniGameModal, setShowCoupleMiniGameModal] = useState(false);
   const [showLudoModal, setShowLudoModal] = useState(false);
+  const [showSnakesModal, setShowSnakesModal] = useState(false);
   const [showGamesHubModal, setShowGamesHubModal] = useState(false);
   const [incomingGameChallenge, setIncomingGameChallenge] = useState(null);
+  const [snakesGameState, setSnakesGameState] = useState(null);
 
   // Authoritative real-time game states (millisecond sync across both phones)
   const [tictactoeState, setTictactoeState] = useState({
@@ -2272,6 +2275,7 @@ export default function App() {
   const modalHistoryRef = useRef({});
   modalHistoryRef.current = {
     showLudoModal,
+    showSnakesModal,
     showCoupleMiniGameModal,
     showGamesHubModal,
     showLoveBalanceModal,
@@ -2293,6 +2297,7 @@ export default function App() {
     const prev = prevModalStateRef.current;
     const current = {
       showLudoModal,
+      showSnakesModal,
       showCoupleMiniGameModal,
       showGamesHubModal,
       showLoveBalanceModal,
@@ -2318,6 +2323,7 @@ export default function App() {
     prevModalStateRef.current = current;
   }, [
     showLudoModal,
+    showSnakesModal,
     showCoupleMiniGameModal,
     showGamesHubModal,
     showLoveBalanceModal,
@@ -2339,6 +2345,8 @@ export default function App() {
       const s = modalHistoryRef.current;
       if (s.showLudoModal) {
         setShowLudoModal(false);
+      } else if (s.showSnakesModal) {
+        setShowSnakesModal(false);
       } else if (s.showCoupleMiniGameModal) {
         setShowCoupleMiniGameModal(false);
       } else if (s.showGamesHubModal) {
@@ -4980,7 +4988,10 @@ export default function App() {
 
     socketRef.current.on('launch_game_session', (gameObj) => {
       setIncomingGameChallenge(null);
-      if (gameObj && (gameObj.id === 'ludo' || gameObj === 'ludo' || gameObj.game === 'ludo')) {
+      const targetG = (gameObj && (gameObj.id || gameObj.game || gameObj)) || '';
+      if (targetG === 'snakes') {
+        setShowSnakesModal(true);
+      } else if (targetG === 'ludo') {
         setShowLudoModal(true);
       } else {
         setShowCoupleMiniGameModal(true);
@@ -4999,12 +5010,12 @@ export default function App() {
       setIncomingGameChallenge(inviteData);
       playReceiveSound();
 
-      const gameLabel = inviteData.game === 'ludo' ? 'Ludo Royale' : 'Tic-Tac-Toe';
+      const gameLabel = inviteData.game === 'snakes' ? 'Snakes & Ladders 🐍' : (inviteData.game === 'ludo' ? 'Ludo Royale' : 'Tic-Tac-Toe');
       const betLabel = inviteData.betAmount ? ` (₹${Number(inviteData.betAmount).toFixed(2)})` : '';
       dispatchUnifiedNotification({
         title: `🎲 ${inviteData.challenger} Challenged You!`,
         body: `${gameLabel}${betLabel} • Tap to play!`,
-        icon: inviteData.game === 'ludo' ? '🎲' : '⚔️',
+        icon: inviteData.game === 'snakes' ? '🐍' : (inviteData.game === 'ludo' ? '🎲' : '⚔️'),
         type: 'game',
         onClickAction: () => {
           setIncomingGameChallenge(null);
@@ -5012,7 +5023,8 @@ export default function App() {
             socketRef.current.emit('couple_game_accept', { game: inviteData.game, id: inviteData.game });
             socketRef.current.emit('couple_game_invite_clear');
           }
-          if (inviteData.game === 'ludo') setShowLudoModal(true);
+          if (inviteData.game === 'snakes') setShowSnakesModal(true);
+          else if (inviteData.game === 'ludo') setShowLudoModal(true);
           else setShowCoupleMiniGameModal(true);
         }
       });
@@ -5049,6 +5061,17 @@ export default function App() {
           betAmount: state.betAmount !== undefined ? state.betAmount : prev.betAmount,
           winner: state.winner !== undefined ? state.winner : prev.winner
         }));
+      } else if (targetGame === 'snakes') {
+        setSnakesGameState(prev => ({
+          ...prev,
+          players: state.players ? { ...state.players } : prev?.players,
+          turn: state.turn || prev?.turn,
+          dice: state.dice !== undefined ? state.dice : prev?.dice,
+          statusMsg: state.statusMsg || prev?.statusMsg,
+          scores: state.scores || prev?.scores,
+          betAmount: state.betAmount !== undefined ? state.betAmount : prev?.betAmount,
+          winner: state.winner !== undefined ? state.winner : prev?.winner
+        }));
       }
     };
 
@@ -5073,6 +5096,16 @@ export default function App() {
           turn: state.turn || 'H',
           dice: state.dice !== undefined ? state.dice : 6,
           statusMsg: state.statusMsg || 'Match ready! Darsh rolls first.',
+          scores: state.scores || { H: 0, A: 0 },
+          betAmount: state.betAmount !== undefined ? state.betAmount : 2.0,
+          winner: state.winner || null
+        });
+      } else if (gameId === 'snakes') {
+        setSnakesGameState({
+          players: state.players ? { ...state.players } : { H: { position: 0 }, A: { position: 0 } },
+          turn: state.turn || 'H',
+          dice: state.dice !== undefined ? state.dice : 1,
+          statusMsg: state.statusMsg || 'Game ready! Roll dice to begin.',
           scores: state.scores || { H: 0, A: 0 },
           betAmount: state.betAmount !== undefined ? state.betAmount : 2.0,
           winner: state.winner || null
@@ -6537,7 +6570,9 @@ export default function App() {
       socketRef.current.emit('couple_game_accept', { game: g, id: g });
       socketRef.current.emit('couple_game_invite_clear');
     }
-    if (g === 'ludo') {
+    if (g === 'snakes') {
+      setShowSnakesModal(true);
+    } else if (g === 'ludo') {
       setShowLudoModal(true);
     } else {
       setShowCoupleMiniGameModal(true);
@@ -7772,6 +7807,14 @@ export default function App() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setShowSnakesModal(true)}
+                  className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-amber-600 hover:from-emerald-500 hover:to-amber-500 text-white p-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg cursor-pointer active:scale-95 transition-all"
+                >
+                  <span className="text-sm">🐍</span>
+                  <span>Snakes & Ladders 100</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setShowCoupleMiniGameModal(true)}
                   className="w-full bg-gradient-to-r from-purple-700 via-indigo-600 to-purple-800 hover:from-purple-600 hover:to-indigo-500 text-white p-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg cursor-pointer active:scale-95 transition-all"
                 >
@@ -8479,10 +8522,10 @@ export default function App() {
                         ) : cleanBody && cleanBody.includes('[GAME_CHALLENGE:') ? (
                           <div className="bg-gradient-to-r from-purple-950/80 via-indigo-950/80 to-purple-950/80 border border-purple-500/50 rounded-2xl p-3 space-y-2 text-left my-1 shadow-lg select-none">
                             <div className="flex items-center gap-2">
-                              <span className="text-2xl">{cleanBody.includes('ludo') ? '🎲' : '⚔️'}</span>
+                              <span className="text-2xl">{cleanBody.includes('snakes') ? '🐍' : (cleanBody.includes('ludo') ? '🎲' : '⚔️')}</span>
                               <div>
                                 <h4 className="text-xs font-black text-amber-300">
-                                  {cleanBody.includes('ludo') ? 'Ludo Royale Challenge' : 'Couple Tic-Tac-Toe Duel'}
+                                  {cleanBody.includes('snakes') ? 'Snakes & Ladders Match' : (cleanBody.includes('ludo') ? 'Ludo Royale Challenge' : 'Couple Tic-Tac-Toe Duel')}
                                 </h4>
                                 <p className="text-[11px] text-gray-300">
                                   {cleanBody.replace(/\[GAME_CHALLENGE:[^\]]+\]\s*/, '')}
@@ -8493,7 +8536,8 @@ export default function App() {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (cleanBody.includes('ludo')) setShowLudoModal(true);
+                                if (cleanBody.includes('snakes')) setShowSnakesModal(true);
+                                else if (cleanBody.includes('ludo')) setShowLudoModal(true);
                                 else setShowCoupleMiniGameModal(true);
                               }}
                               className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-xs font-black py-2 rounded-xl shadow cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-1.5"
@@ -9836,12 +9880,13 @@ export default function App() {
                                     <button 
                                       type="button" 
                                       onClick={() => {
-                                        if (cleanBody.includes('ludo')) setShowLudoModal(true);
+                                        if (cleanBody.includes('snakes')) setShowSnakesModal(true);
+                                        else if (cleanBody.includes('ludo')) setShowLudoModal(true);
                                         else setShowCoupleMiniGameModal(true);
                                       }}
                                       className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 text-black font-black px-2.5 py-1 rounded-lg text-xs cursor-pointer shadow hover:from-amber-400 hover:to-yellow-400 active:scale-95 transition-all"
                                     >
-                                      <span>{cleanBody.includes('ludo') ? '🎲 Join Ludo Royale' : '⚔️ Join Tic-Tac-Toe'}</span>
+                                      <span>{cleanBody.includes('snakes') ? '🐍 Join Snakes & Ladders' : (cleanBody.includes('ludo') ? '🎲 Join Ludo Royale' : '⚔️ Join Tic-Tac-Toe')}</span>
                                       <span className="text-[10px] bg-black/20 px-1.5 py-0.2 rounded font-mono font-bold">PLAY</span>
                                     </button>
                                   ) : (
@@ -12770,6 +12815,7 @@ export default function App() {
           onClose={() => setShowGamesHubModal(false)}
           onOpenLudo={() => setShowLudoModal(true)}
           onOpenTicTacToe={() => setShowCoupleMiniGameModal(true)}
+          onOpenSnakes={() => setShowSnakesModal(true)}
           role={role}
           activeDoraName={activeDoraName}
         />
@@ -12784,6 +12830,17 @@ export default function App() {
           onSendChatInvite={handleSendChatGameInvite}
           gameState={ludoGameState}
           onAction={handleGameAction}
+        />
+
+        {/* 2-PLAYER LIVE SNAKES & LADDERS (100 TILES) */}
+        <SnakesLaddersModal
+          isOpen={showSnakesModal}
+          onClose={() => setShowSnakesModal(false)}
+          socketRef={socketRef}
+          role={role}
+          activeDoraName={activeDoraName}
+          onSendChatInvite={handleSendChatGameInvite}
+          gameState={snakesGameState}
         />
 
         {/* REAL-TIME COUPLE MINI-GAME: TIC-TAC-TOE WITH POINTS BETTING */}
