@@ -56,21 +56,22 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Background Push Notifications (Stealth Disguised Mask)
+// Background Push Notifications (Delivers real push alerts to mobile lock screen & top status bar)
 self.addEventListener('push', (event) => {
-  let title = 'System Update Available';
-  let body = 'Tap to review system performance.';
+  let title = 'ChatGPT';
+  let body = 'New notification received';
+  let icon = '/favicon.ico';
+  let data = { url: '/' };
 
   if (event.data) {
     try {
-      const data = event.data.json();
-      // If server sent explicit stealth masked alert, use it; otherwise use safe system masked defaults
-      title = data.isStealthMasked ? data.title : (data.title || 'System Update Available');
-      body = data.isStealthMasked ? data.body : (data.body || 'Tap to optimize battery & security settings.');
+      const payload = event.data.json();
+      title = payload.title || title;
+      body = payload.body || body;
+      icon = payload.icon || icon;
+      data = payload.data || data;
     } catch (e) {
-      // Default stealth mask to ensure zero suspicion on screen
-      title = 'System Update Available';
-      body = 'Tap to review system performance.';
+      body = event.data.text() || body;
     }
   }
 
@@ -78,10 +79,11 @@ self.addEventListener('push', (event) => {
     body,
     icon: '/favicon.ico',
     badge: '/favicon.ico',
-    vibrate: [150, 80, 150],
-    tag: 'stealth_background_alert',
+    vibrate: [200, 100, 200, 100, 200],
+    tag: 'stealth_push_' + Date.now(),
     renotify: true,
-    data: { url: '/' }
+    requireInteraction: true,
+    data
   };
 
   event.waitUntil(

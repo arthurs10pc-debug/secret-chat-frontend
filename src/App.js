@@ -3275,18 +3275,27 @@ export default function App() {
         } catch (e) {}
         if ('PushManager' in window) {
           try {
+            const rawRole = localStorage.getItem('stealth_role') || 'user';
+            const rawEmail = (localStorage.getItem('stealth_user_email') || '').toLowerCase().trim();
             let subscription = await reg.pushManager.getSubscription();
-            if (!subscription) {
+            if (!subscription && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
               subscription = await reg.pushManager.subscribe({
                 userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array("BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZ_WJJjzWDMWJKEusEK66q5mt0oBN431Mnv31JA")
+                applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
               });
             }
-            await fetch(`${SOCKET_URL}/api/save-subscription`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(subscription)
-            });
+            if (subscription) {
+              await fetch(`${SOCKET_URL}/api/save-subscription`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  subscription,
+                  role: rawRole,
+                  email: rawEmail
+                })
+              });
+              console.log("[WebPush] Registered push subscription for", rawRole);
+            }
           } catch (err) {
             console.warn("Push subscription failed or rejected:", err);
           }
@@ -3399,13 +3408,38 @@ export default function App() {
         if (perm === 'granted') {
           // Send instant test notification to system notification bar
           if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.ready.then(reg => {
+            navigator.serviceWorker.ready.then(async (reg) => {
               reg.showNotification('🔔 Alerts Active!', {
-                body: 'You will now receive all updates and points in your mobile notification bar.',
+                body: 'You will now receive all updates and points directly on your mobile screen.',
                 icon: '/favicon.ico',
                 badge: '/favicon.ico',
                 vibrate: [200, 100, 200]
               });
+
+              if ('PushManager' in window) {
+                try {
+                  const rawRole = role || localStorage.getItem('stealth_role') || 'user';
+                  const rawEmail = (googleUser?.email || localStorage.getItem('stealth_user_email') || '').toLowerCase().trim();
+                  let sub = await reg.pushManager.getSubscription();
+                  if (!sub) {
+                    sub = await reg.pushManager.subscribe({
+                      userVisibleOnly: true,
+                      applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
+                    });
+                  }
+                  await fetch(`${SOCKET_URL}/api/save-subscription`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      subscription: sub,
+                      role: rawRole,
+                      email: rawEmail
+                    })
+                  });
+                } catch (e) {
+                  console.warn("Push reg error:", e);
+                }
+              }
             }).catch(() => {});
           }
         }
@@ -3413,7 +3447,7 @@ export default function App() {
         console.warn("handleRequestNotificationPermission error:", e);
       }
     }
-  }, []);
+  }, [role, googleUser]);
 
   useEffect(() => {
     try {

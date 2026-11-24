@@ -11,7 +11,7 @@ export const getLocalDateString = (d = new Date()) => {
   return `${year}-${month}-${day}`;
 };
 
-export const PUBLIC_VAPID_KEY = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-8vMeAtA5cHmDkJ0d8Q9cW4vG0mJ5M3Q5lK0P8vWq6X5LwG0J7j6W0Yg';
+export const PUBLIC_VAPID_KEY = 'BLGlvaIiH3UdH3hCrmFmiWV3jKRRAKnR2rv7lmiq7hofrpjEU_13EcpzcBeil9BxDisRr3IhxSuANyJi3-N5JlU';
 
 export const QUICK_EMOJIS = ["👍", "❤️", "😂", "🔥", "😮", "🙏", "👌", "💯", "🤫", "✨"];
 export const HOVER_REACTIONS = ["👍", "❤️", "🥰", "😆", "😮", "😢", "➕"];
