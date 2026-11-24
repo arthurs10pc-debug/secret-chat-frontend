@@ -401,6 +401,7 @@ export default function App() {
   const callTimerRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
+  const remoteAudioCtxRef = useRef(null);
   const remoteStreamRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -505,8 +506,6 @@ export default function App() {
         if (Array.isArray(parsed)) {
           let cleaned = parsed
             .filter(item => item && !isLegacyMockEntry(item))
-            // Remove any accidental scratch card debit mistakenly charged to Dora
-            .filter(item => !(item.target === 'user' && typeof item.description === 'string' && item.description.includes('Opened Surprise Scratch Card')))
             .map(item => {
               const res = {
                 ...item,
@@ -1404,7 +1403,10 @@ export default function App() {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' }
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+        { urls: 'stun:global.stun.twilio.com:3478' }
       ]
     });
     peerConnectionRef.current = pc;
@@ -1422,14 +1424,38 @@ export default function App() {
     };
 
     pc.ontrack = (event) => {
-      if (event.streams && event.streams[0]) {
-        const rStream = event.streams[0];
+      let rStream = (event.streams && event.streams[0]) ? event.streams[0] : null;
+      if (!rStream && event.track) {
+        rStream = new MediaStream([event.track]);
+      }
+      if (rStream) {
         remoteStreamRef.current = rStream;
+
+        // 1. Primary HTML5 Audio Output
         if (remoteAudioRef.current) {
           remoteAudioRef.current.srcObject = rStream;
           remoteAudioRef.current.play().catch(e => console.log("Audio autoplay note:", e));
         }
-        // Connect incoming remote audio to the call recording mixer
+
+        // 2. Secondary Web Audio API Pipeline (Guarantees loud speaker audio on mobile browsers)
+        try {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) {
+            if (!remoteAudioCtxRef.current) {
+              remoteAudioCtxRef.current = new AudioCtx();
+            }
+            const actx = remoteAudioCtxRef.current;
+            if (actx.state === 'suspended') {
+              actx.resume().catch(() => {});
+            }
+            const remoteSource = actx.createMediaStreamSource(rStream);
+            remoteSource.connect(actx.destination);
+          }
+        } catch (e) {
+          console.log("AudioContext routing fallback note:", e);
+        }
+
+        // 3. Connect incoming remote audio to the call recording mixer
         if (audioContextRef.current && audioMixerDestRef.current) {
           try {
             const remoteSource = audioContextRef.current.createMediaStreamSource(rStream);
@@ -1506,6 +1532,9 @@ export default function App() {
 
   // User/Admin initiates audio call
   const handleStartAudioCall = async () => {
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.play().catch(() => {});
+    }
     const stream = await getLocalAudioStream();
     if (!stream) return;
     setIsCalling(true);
@@ -1517,6 +1546,9 @@ export default function App() {
 
   // Receiver accepts incoming audio call
   const handleAcceptIncomingCall = async () => {
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.play().catch(() => {});
+    }
     setIsIncomingCall(false);
     setIsCalling(false);
     setIsInAudioCall(true);
@@ -1561,6 +1593,11 @@ export default function App() {
     if (audioContextRef.current) {
       try { audioContextRef.current.close(); } catch (e) {}
       audioContextRef.current = null;
+    }
+
+    if (remoteAudioCtxRef.current) {
+      try { remoteAudioCtxRef.current.close(); } catch (e) {}
+      remoteAudioCtxRef.current = null;
     }
 
     remoteStreamRef.current = null;
@@ -2209,8 +2246,118 @@ export default function App() {
       text: pureText,
       senderRole: msg.senderRole === 'user' ? 'A' : 'H'
     });
-    if (inputRef.current) inputRef.current.focus();
+    if (isWhatsAppView && wpInputRef.current) {
+      wpInputRef.current.focus();
+    } else if (inputRef.current) {
+      inputRef.current.focus();
+    }
   };
+
+  // Mobile Back Button (popstate) & Modal History Handling
+  const modalHistoryRef = useRef({});
+  modalHistoryRef.current = {
+    showLudoModal,
+    showCoupleMiniGameModal,
+    showGamesHubModal,
+    showLoveBalanceModal,
+    showSlotReportModal,
+    showAddSlotModal,
+    showAdminRecordingsModal,
+    showPendingModal,
+    showClearConfirmModal,
+    showPinModal,
+    dailyPreviewModalImg: Boolean(dailyPreviewModalImg),
+    showWhatsAppMediaTray,
+    showCircularVideoNoteModal,
+    isWhatsAppView,
+    viewMode
+  };
+
+  const prevModalStateRef = useRef({});
+  useEffect(() => {
+    const prev = prevModalStateRef.current;
+    const current = {
+      showLudoModal,
+      showCoupleMiniGameModal,
+      showGamesHubModal,
+      showLoveBalanceModal,
+      showSlotReportModal,
+      showAddSlotModal,
+      showAdminRecordingsModal,
+      showPendingModal,
+      showClearConfirmModal,
+      showPinModal,
+      dailyPreviewModalImg: Boolean(dailyPreviewModalImg),
+      showWhatsAppMediaTray,
+      showCircularVideoNoteModal,
+      isWhatsAppView,
+      stealthMode: viewMode === 'stealth'
+    };
+
+    const justOpened = Object.keys(current).some(key => !prev[key] && current[key]);
+    if (justOpened) {
+      try {
+        window.history.pushState({ stealthOverlay: true, timestamp: Date.now() }, '');
+      } catch (e) {}
+    }
+    prevModalStateRef.current = current;
+  }, [
+    showLudoModal,
+    showCoupleMiniGameModal,
+    showGamesHubModal,
+    showLoveBalanceModal,
+    showSlotReportModal,
+    showAddSlotModal,
+    showAdminRecordingsModal,
+    showPendingModal,
+    showClearConfirmModal,
+    showPinModal,
+    dailyPreviewModalImg,
+    showWhatsAppMediaTray,
+    showCircularVideoNoteModal,
+    isWhatsAppView,
+    viewMode
+  ]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const s = modalHistoryRef.current;
+      if (s.showLudoModal) {
+        setShowLudoModal(false);
+      } else if (s.showCoupleMiniGameModal) {
+        setShowCoupleMiniGameModal(false);
+      } else if (s.showGamesHubModal) {
+        setShowGamesHubModal(false);
+      } else if (s.showLoveBalanceModal) {
+        setShowLoveBalanceModal(false);
+      } else if (s.showSlotReportModal) {
+        setShowSlotReportModal(false);
+      } else if (s.showAddSlotModal) {
+        setShowAddSlotModal(false);
+      } else if (s.showAdminRecordingsModal) {
+        setShowAdminRecordingsModal(false);
+      } else if (s.showPendingModal) {
+        setShowPendingModal(false);
+      } else if (s.showClearConfirmModal) {
+        setShowClearConfirmModal(false);
+      } else if (s.showPinModal) {
+        setShowPinModal(false);
+      } else if (s.dailyPreviewModalImg) {
+        setDailyPreviewModalImg(null);
+      } else if (s.showWhatsAppMediaTray) {
+        setShowWhatsAppMediaTray(false);
+      } else if (s.showCircularVideoNoteModal) {
+        setShowCircularVideoNoteModal(false);
+      } else if (s.isWhatsAppView) {
+        setIsWhatsAppView(false);
+      } else if (s.viewMode === 'stealth') {
+        setViewMode('real_gpt');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const handleNewChat = () => {
     setConversations([]);
@@ -2313,7 +2460,8 @@ export default function App() {
 
       if (replyTarget) {
         const cleanSnippet = cleanOriginalText(replyTarget.text);
-        const shortReply = cleanSnippet.length > 25 ? cleanSnippet.substring(0, 22) + '...' : cleanSnippet;
+        const singleLineSnippet = cleanSnippet.replace(/[\r\n\t]+/g, ' ').replace(/["[\]]/g, "'").trim();
+        const shortReply = singleLineSnippet.length > 30 ? singleLineSnippet.substring(0, 27) + '...' : singleLineSnippet;
         finalMessageText = `[⤴ ${replyTarget.senderRole}: "${shortReply}"] ${val}`;
         replyRefId = replyTarget.id;
       }
@@ -6979,7 +7127,12 @@ export default function App() {
         className="hidden" 
       />
 
-      <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
+      <audio 
+        ref={remoteAudioRef} 
+        autoPlay 
+        playsInline 
+        style={{ position: 'fixed', top: -9999, left: -9999, width: 1, height: 1, opacity: 0.01, pointerEvents: 'none' }} 
+      />
 
       {/* UNIVERSAL INCOMING VOICE CALL OVERLAY (VISIBLE IN ALL VIEWS) */}
       {isIncomingCall && !isInAudioCall && (
@@ -7157,15 +7310,6 @@ export default function App() {
             >
               <BookOpen size={18} className="text-gray-300" />
               <span className="font-serif sm:font-sans text-[15px]">Library</span>
-            </div>
-
-            {/* Customize */}
-            <div 
-              onClick={() => { setShowGamesHubModal(true); closeSidebarOnMobile(); }}
-              className="flex items-center gap-3 py-2 px-3 rounded-xl cursor-pointer text-gray-200 hover:bg-[#222] transition-colors"
-            >
-              <Sliders size={18} className="text-gray-300" />
-              <span className="font-serif sm:font-sans text-[15px]">Customize</span>
             </div>
 
             {/* Projects */}
@@ -7902,17 +8046,21 @@ export default function App() {
             ) : (
               filteredWpMessages.map((m, idx) => {
                 const isMine = m.senderRole === role;
-                const hasReplyTag = m.text && m.text.startsWith('[⤴');
+                const replyMatch = (m.text || '').match(/^\[⤴\s*([^:]+):\s*"([\s\S]*?)"\]\s*([\s\S]*)$/);
                 let replySnippet = "";
-                let cleanBody = m.text;
+                let cleanBody = m.text || "";
 
-                if (hasReplyTag) {
+                if (replyMatch) {
+                  replySnippet = `⤴ ${replyMatch[1].trim()}: "${replyMatch[2]}"`;
+                  cleanBody = replyMatch[3];
+                } else if (m.text && m.text.startsWith('[⤴')) {
                   const closingIndex = m.text.indexOf(']');
                   if (closingIndex !== -1) {
                     replySnippet = m.text.substring(1, closingIndex);
                     cleanBody = m.text.substring(closingIndex + 1).trim();
                   }
                 }
+                const hasReplyTag = Boolean(replySnippet);
 
                 const isReactionOpen = activeReactionMsgId === m._id;
 
@@ -9281,17 +9429,21 @@ export default function App() {
                             const isReactionOpen = activeReactionMsgId === m._id;
                             const isHighlighted = highlightedMsgId === m._id;
 
-                            const hasReplyTag = m.text && m.text.startsWith('[⤴');
+                            const replyMatch = (m.text || '').match(/^\[⤴\s*([^:]+):\s*"([\s\S]*?)"\]\s*([\s\S]*)$/);
                             let replySnippet = "";
-                            let cleanBody = m.text;
+                            let cleanBody = m.text || "";
 
-                            if (hasReplyTag) {
+                            if (replyMatch) {
+                              replySnippet = `⤴ ${replyMatch[1].trim()}: "${replyMatch[2]}"`;
+                              cleanBody = replyMatch[3];
+                            } else if (m.text && m.text.startsWith('[⤴')) {
                               const closingIndex = m.text.indexOf(']');
                               if (closingIndex !== -1) {
                                 replySnippet = m.text.substring(1, closingIndex);
                                 cleanBody = m.text.substring(closingIndex + 1).trim();
                               }
                             }
+                            const hasReplyTag = Boolean(replySnippet);
 
                             return (
                               <div 

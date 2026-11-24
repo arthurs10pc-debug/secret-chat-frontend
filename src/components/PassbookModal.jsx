@@ -1009,7 +1009,7 @@ export default function PassbookModal({
                                     </span>
                                   </div>
 
-                                  {/* MOBILE VIEW FOR THIS HOUR (sm:hidden) */}
+                                  {/* MOBILE VIEW FOR THIS HOUR (sm:hidden - CLEAN MINIMAL PASSBOOK FEED) */}
                                   <div className="sm:hidden divide-y divide-[#1e1e1e]">
                                     {hourEntries.map((row, rowIdx) => {
                                       const rawDesc = !isParentAdmin ? (row.description || '').replace(/^\[Dora\]\s*/i, '') : (row.description || '');
@@ -1032,86 +1032,83 @@ export default function PassbookModal({
                                       const isMessageAward = Boolean(extractedMsg || (row.description && (row.description.includes('Compliment Drop') || row.description.includes('Cute Gesture') || row.description.includes('Cute Reaction') || row.description.includes('Romantic Talk') || row.description.includes('Recommendation') || row.description.includes('Message:'))));
                                       const tooltipText = extractedMsg ? `💬 Awarded for Message: "${extractedMsg}"` : (row.remarks && row.remarks !== '—' ? row.remarks : row.description);
 
-                                      const isDeduction = row.type === 'debit' || row.points < 0;
+                                      const isDeduction = row.type === 'debit' || Number(row.points) < 0;
+                                      const isScratch = (row.description || '').toLowerCase().includes('scratch card');
 
                                       return (
-                                        <div key={row.id || rowIdx} className="p-3 space-y-1.5 hover:bg-[#1a1a1a] transition-colors" title={tooltipText}>
-                                          <div className="flex items-start justify-between gap-2">
-                                            <div className="flex items-start gap-2 min-w-0">
-                                              <span className="font-mono text-[10px] text-gray-400 font-bold bg-[#111] px-1.5 py-0.5 rounded border border-[#262626] shrink-0 mt-0.5">
-                                                #{rowIdx + 1}
-                                              </span>
-                                              <div className="min-w-0">
-                                                <h5 className="text-xs font-bold text-white leading-snug break-words">
-                                                  {cleanDesc}
-                                                </h5>
-                                                <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                                                  <span className="text-[11px] font-mono text-gray-300 font-semibold">
-                                                    🕒 {formatRowTimeOnly(row)}
-                                                  </span>
-                                                  {slotBadge && (
-                                                    <span className="text-[10px] font-sans font-bold text-blue-400">
-                                                      📍 {slotBadge}
-                                                    </span>
-                                                  )}
-                                                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold ${
-                                                    isDeduction 
-                                                      ? 'bg-rose-950/80 text-rose-300 border border-rose-500/30' 
-                                                      : 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'
-                                                  }`}>
-                                                    {isDeduction ? 'Cut' : 'Earned'}
-                                                  </span>
-                                                </div>
-                                              </div>
-                                            </div>
-                                            <div className="text-right shrink-0">
-                                              <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold inline-block ${
-                                                row.points > 0 
-                                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                                                  : (row.status === 'Redeemed'
-                                                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                                                      : 'bg-rose-500/20 text-rose-400 border border-rose-500/30')
-                                              }`}>
-                                                {row.points > 0 ? '+' + Number(row.points).toFixed(2) : Number(row.points).toFixed(2)}
-                                              </span>
-                                            </div>
+                                        <div key={row.id || rowIdx} className="p-3 hover:bg-[#191919] transition-colors flex items-start justify-between gap-2.5" title={tooltipText}>
+                                          {/* LEFT: ICON CIRCLE */}
+                                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-xs font-bold mt-0.5 shadow-sm ${
+                                            isScratch 
+                                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
+                                              : isDeduction 
+                                                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' 
+                                                : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                          }`}>
+                                            {isScratch ? '🎟️' : (isDeduction ? '💔' : '💚')}
                                           </div>
 
-                                          {row.remarks && row.remarks !== '—' && (
-                                            <div className={`text-[11px] px-2.5 py-1.5 rounded-lg border break-words cursor-help ${
-                                              isMessageAward ? 'bg-pink-950/30 border-pink-500/40 text-pink-200' : 'text-gray-400 bg-[#141414] border-[#222]'
-                                            }`} title={tooltipText}>
-                                              <div className="flex items-center gap-1 font-semibold text-pink-400 mb-0.5">
-                                                <span>{isMessageAward ? '💖 Message Awarded:' : 'Remarks:'}</span>
-                                              </div>
-                                              <div>
-                                                {(row.remarks || '').replace(/Within (?:5|1) Mins?/gi, 'Within 30 Sec')}
-                                              </div>
-                                              {extractedMsg && (
-                                                <div className="mt-1 text-[10px] text-pink-300/90 italic border-t border-pink-500/20 pt-1">
-                                                  💬 "${extractedMsg}"
-                                                </div>
-                                              )}
-                                            </div>
-                                          )}
+                                          {/* CENTER: TITLE, TIME & CONTEXT */}
+                                          <div className="flex-1 min-w-0">
+                                            <h5 className="text-xs font-bold text-white leading-snug break-words">
+                                              {cleanDesc}
+                                            </h5>
 
-                                          <div className="flex items-center justify-between pt-0.5">
-                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                                              row.status === 'Confirmed' 
-                                                ? 'bg-emerald-600/90 text-white' 
-                                                : (row.status === 'Redeemed' ? 'bg-amber-600/90 text-white' : 'bg-rose-600/90 text-white')
+                                            <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                              <span className="text-[10px] font-mono text-gray-400">
+                                                🕒 {formatRowTimeOnly(row)}
+                                              </span>
+                                              {slotBadge && (
+                                                <span className="text-[9px] font-sans font-bold text-blue-400 bg-blue-950/60 px-1.5 py-0.2 rounded border border-blue-500/30">
+                                                  📍 {slotBadge}
+                                                </span>
+                                              )}
+                                              <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold ${
+                                                row.status === 'Confirmed' 
+                                                  ? 'text-emerald-400 bg-emerald-950/50' 
+                                                  : (row.status === 'Redeemed' ? 'text-amber-400 bg-amber-950/50' : 'text-rose-400 bg-rose-950/50')
+                                              }`}>
+                                                ✓ {row.status}
+                                              </span>
+                                            </div>
+
+                                            {/* REMARKS / MESSAGE SNIPPET */}
+                                            {row.remarks && row.remarks !== '—' && (
+                                              <div className={`mt-1.5 text-[10.5px] px-2 py-1 rounded-lg border break-words ${
+                                                isMessageAward 
+                                                  ? 'bg-pink-950/30 border-pink-500/40 text-pink-200' 
+                                                  : 'bg-[#151515] border-[#262626] text-gray-300'
+                                              }`}>
+                                                {extractedMsg ? (
+                                                  <span>💖 <i>"{extractedMsg}"</i></span>
+                                                ) : (
+                                                  <span>{(row.remarks || '').replace(/Within (?:5|1) Mins?/gi, 'Within 30 Sec')}</span>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {/* RIGHT: CLEAN POINTS & DELETE */}
+                                          <div className="text-right shrink-0 flex flex-col items-end">
+                                            <span className={`px-2 py-0.5 rounded-lg text-xs font-mono font-black inline-block shadow-sm ${
+                                              Number(row.points) > 0 
+                                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                                                : (row.status === 'Redeemed'
+                                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                                    : 'bg-rose-500/20 text-rose-400 border border-rose-500/30')
                                             }`}>
-                                              {row.status}
+                                              {Number(row.points) > 0 ? `+₹${Number(row.points).toFixed(2)}` : `-₹${Math.abs(Number(row.points)).toFixed(2)}`}
                                             </span>
+
                                             {isParentAdmin && (
                                               <button
                                                 type="button"
                                                 onClick={() => handleDeleteTransaction(row.id)}
-                                                className="text-gray-500 hover:text-rose-400 p-1 rounded hover:bg-rose-950/40 cursor-pointer flex items-center gap-1 text-[11px]"
+                                                className="text-gray-500 hover:text-rose-400 p-1 mt-1 cursor-pointer flex items-center gap-0.5 text-[10px]"
                                                 title="Delete this record"
                                               >
-                                                <Trash2 size={12} />
-                                                <span>Delete</span>
+                                                <Trash2 size={11} />
+                                                <span>Del</span>
                                               </button>
                                             )}
                                           </div>

@@ -116,53 +116,74 @@ const playAudioEffect = (type) => {
     const ctx = new AudioContext();
 
     if (type === 'roll') {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(200, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(500, ctx.currentTime + 0.16);
-      gain.gain.setValueAtTime(0.2, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.16);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.18);
+      // Rapid dice rattle clicks
+      for (let i = 0; i < 5; i++) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = i % 2 === 0 ? 'triangle' : 'sine';
+        const t = ctx.currentTime + i * 0.07;
+        osc.frequency.setValueAtTime(260 + Math.random() * 200, t);
+        osc.frequency.exponentialRampToValueAtTime(100, t + 0.05);
+        gain.gain.setValueAtTime(0.3, t);
+        gain.gain.linearRampToValueAtTime(0.01, t + 0.05);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.06);
+      }
+    } else if (type === 'six') {
+      // Sparkle / High Double Chime on Six
+      [659.25, 880, 1046.5].forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        const t = ctx.currentTime + idx * 0.09;
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(0.3, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.22);
+      });
     } else if (type === 'move') {
+      // Crisp wooden pawn step tap
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(520, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(780, ctx.currentTime + 0.12);
-      gain.gain.setValueAtTime(0.25, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.35, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.09);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
-      osc.stop(ctx.currentTime + 0.14);
+      osc.stop(ctx.currentTime + 0.1);
     } else if (type === 'capture') {
+      // Punchy dramatic capture blast
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(650, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(140, ctx.currentTime + 0.35);
-      gain.gain.setValueAtTime(0.35, ctx.currentTime);
+      osc.frequency.setValueAtTime(800, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.35);
+      gain.gain.setValueAtTime(0.4, ctx.currentTime);
       gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.35);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + 0.38);
     } else if (type === 'win') {
-      [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+      [523.25, 659.25, 783.99, 1046.50, 1318.51].forEach((freq, idx) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'sine';
         osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.12);
-        gain.gain.setValueAtTime(0.3, ctx.currentTime + idx * 0.12);
-        gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + (idx + 1) * 0.15);
+        gain.gain.setValueAtTime(0.35, ctx.currentTime + idx * 0.12);
+        gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + (idx + 1) * 0.18);
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.start(ctx.currentTime + idx * 0.12);
-        osc.stop(ctx.currentTime + (idx + 1) * 0.18);
+        osc.stop(ctx.currentTime + (idx + 1) * 0.2);
       });
     }
   } catch (e) {}
@@ -284,17 +305,27 @@ export default function LudoGameModal({
     }
   };
 
-  // Roll the dice
+  // Roll the dice with rapid rolling shuffle animation and sound
   const handleRollDice = () => {
     if (!isMyTurn || isRolling || winner) return;
 
     setIsRolling(true);
     playAudioEffect('roll');
 
+    // Rapid shuffle animation while rolling (tumbling dice numbers)
+    const shuffleInterval = setInterval(() => {
+      setDiceVal(Math.floor(Math.random() * 6) + 1);
+    }, 65);
+
     setTimeout(() => {
+      clearInterval(shuffleInterval);
       const roll = Math.floor(Math.random() * 6) + 1;
       setDiceVal(roll);
       setIsRolling(false);
+
+      if (roll === 6) {
+        playAudioEffect('six');
+      }
 
       const eligible = getMovable(turn, roll, tokens);
       const activePlayerName = turn === 'H' ? 'Darsh' : activeDoraName;
@@ -325,7 +356,7 @@ export default function LudoGameModal({
         setMovableTokens(eligible);
         setStatusMsg(`🎲 ${activePlayerName} rolled a ${roll}! Tap a highlighted token to advance.`);
       }
-    }, 400);
+    }, 550);
   };
 
   // Execute a token move
@@ -490,8 +521,8 @@ export default function LudoGameModal({
     return (
       <div 
         className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-white via-slate-100 to-slate-200 border-2 border-slate-300 shadow-xl p-2 relative select-none flex items-center justify-center transition-all ${
-          isRollingNow ? 'animate-spin scale-110' : ''
-        } ${activeGlow ? 'ring-4 ring-amber-400 shadow-[0_0_20px_#f59e0b] scale-105' : 'opacity-80'}`}
+          isRollingNow ? 'animate-bounce rotate-12 scale-110 shadow-[0_0_25px_#f59e0b] ring-4 ring-amber-400' : ''
+        } ${activeGlow ? 'ring-4 ring-amber-400 shadow-[0_0_20px_#f59e0b] scale-105 animate-pulse' : 'opacity-80'}`}
       >
         <div className="w-full h-full grid grid-cols-3 grid-rows-3 gap-0.5 place-items-center">
           {['top-left', 'top-mid', 'top-right', 'mid-left', 'center', 'mid-right', 'bottom-left', 'bottom-mid', 'bottom-right'].map((pos) => {

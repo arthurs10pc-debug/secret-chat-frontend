@@ -246,11 +246,10 @@ export const LOVE_DEDUCTION_RULES = [
 
 export const cleanOriginalText = (raw) => {
   if (!raw) return "";
-  let cleaned = raw;
-  while (cleaned.includes('[⤴') || cleaned.startsWith('⤴')) {
-    cleaned = cleaned.replace(/^\[⤴\s*[AH]:\s*"[^"]*"\s*\]\s*/g, '');
-    cleaned = cleaned.replace(/^⤴\s*[AH]:\s*"[^"]*"\s*/g, '');
-  }
+  let cleaned = String(raw);
+  // Match any reply header whether single letter, name, or role, with any quoted content across newlines
+  cleaned = cleaned.replace(/^\[⤴\s*[^:]+:\s*"[\s\S]*?"\]\s*/g, '');
+  cleaned = cleaned.replace(/^⤴\s*[^:]+:\s*"[\s\S]*?"\s*/g, '');
   return cleaned.trim();
 };
 
