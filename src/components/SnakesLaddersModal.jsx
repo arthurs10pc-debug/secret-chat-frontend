@@ -262,16 +262,20 @@ export default function SnakesLaddersModal({
       return;
     }
 
+    const updatePlayerPosition = (pos) => {
+      setPlayers(prev => ({
+        ...prev,
+        [playerKey]: { ...prev[playerKey], position: pos }
+      }));
+    };
+
     // Step 1: Animate pawn moving 1 square at a time
     let currentPos = startPos;
     for (let step = 1; step <= roll; step++) {
       await new Promise(r => setTimeout(r, 180));
       currentPos += 1;
       playSoundEffect('step');
-      setPlayers(prev => ({
-        ...prev,
-        [playerKey]: { ...prev[playerKey], position: currentPos }
-      }));
+      updatePlayerPosition(currentPos);
     }
 
     // Check WIN condition (Reached 100)
