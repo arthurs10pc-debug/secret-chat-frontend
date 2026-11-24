@@ -1079,10 +1079,6 @@ export default function App() {
     return 'default';
   });
 
-  // Frosted Neumorphic Top Banner Notification (Styled after user mockup)
-  const [activeFrostedBanner, setActiveFrostedBanner] = useState(null);
-  const frostedBannerTimerRef = useRef(null);
-
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem('stealth_conversations');
     if (saved) return JSON.parse(saved);
@@ -3485,25 +3481,7 @@ export default function App() {
       } catch (e) {}
     }
 
-    // 2. Frosted Neumorphic Banner (Styled after user's uploaded mockup)
-    const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-    setActiveFrostedBanner({
-      title: title || 'ChatGPT',
-      body: body || '',
-      icon,
-      type,
-      time: timeStr,
-      onClickAction
-    });
-
-    if (frostedBannerTimerRef.current) {
-      clearTimeout(frostedBannerTimerRef.current);
-    }
-    frostedBannerTimerRef.current = setTimeout(() => {
-      setActiveFrostedBanner(null);
-    }, 4500);
-
-    // 3. Mobile Device System Notification Bar (Android / iOS / Windows top status bar)
+    // 2. Mobile Device System Notification Bar (Android / iOS / Windows top status bar)
     try {
       if (typeof window !== 'undefined' && 'Notification' in window) {
         if (Notification.permission === 'granted') {
@@ -12745,46 +12723,6 @@ export default function App() {
           handleLoveBalanceTransaction={handleLoveBalanceTransaction}
           socketRef={socketRef}
         />
-
-        {/* FROSTED NEUMORPHIC NOTIFICATION BANNER (STYLED EXACTLY LIKE USER MOCKUP) */}
-        {activeFrostedBanner && (
-          <div 
-            onClick={() => {
-              if (activeFrostedBanner.onClickAction) {
-                activeFrostedBanner.onClickAction();
-              }
-              setActiveFrostedBanner(null);
-            }}
-            className="fixed top-3 left-1/2 -translate-x-1/2 z-[100001] w-[calc(100vw-24px)] max-w-sm sm:max-w-md bg-[#181a20]/95 backdrop-blur-2xl border border-white/20 text-white p-3.5 sm:p-4 rounded-[26px] shadow-[0_14px_45px_rgba(0,0,0,0.75)] flex items-center gap-3.5 font-sans animate-in fade-in slide-in-from-top-4 duration-300 cursor-pointer active:scale-[0.98] transition-all box-border overflow-hidden"
-          >
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-white/10 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5),0_1px_2px_rgba(255,255,255,0.15)] border border-white/20 flex items-center justify-center shrink-0 text-xl sm:text-2xl">
-              {activeFrostedBanner.icon || <User size={22} className="text-white/80" />}
-            </div>
-            <div className="flex-1 min-w-0 text-left">
-              <div className="flex items-center justify-between gap-2">
-                <h4 className="text-[13px] sm:text-[14px] font-bold text-white tracking-wide truncate">
-                  {activeFrostedBanner.title}
-                </h4>
-                <span className="text-[10px] sm:text-[11px] text-gray-400 font-medium shrink-0">
-                  {activeFrostedBanner.time || 'Just now'}
-                </span>
-              </div>
-              <p className="text-xs text-gray-300 leading-snug line-clamp-2 mt-0.5 font-normal">
-                {activeFrostedBanner.body}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveFrostedBanner(null);
-              }}
-              className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 text-gray-400 hover:text-white flex items-center justify-center text-xs shrink-0 transition-colors"
-            >
-              ✕
-            </button>
-          </div>
-        )}
 
         {/* INCOMING GAME CHALLENGE NOTIFICATION (STYLED LIKE USER MOCKUP, NEVER OVERFLOWS) */}
         {incomingGameChallenge && incomingGameChallenge.challengerRole !== role && (
