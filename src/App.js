@@ -815,6 +815,7 @@ export default function App() {
   const [dailySubmitting, setDailySubmitting] = useState(false);
   const [dailyPreviewModalImg, setDailyPreviewModalImg] = useState(null);
   const [showSlotReportModal, setShowSlotReportModal] = useState(false);
+  const [showStarBonusModal, setShowStarBonusModal] = useState(false);
   const [dailyAdminToast, setDailyAdminToast] = useState(null);
   const [dailyAdminTab, setDailyAdminTab] = useState('review'); // 'review' | 'slots'
   const [showAddSlotModal, setShowAddSlotModal] = useState(false);
@@ -2280,6 +2281,7 @@ export default function App() {
     showGamesHubModal,
     showLoveBalanceModal,
     showSlotReportModal,
+    showStarBonusModal,
     showAddSlotModal,
     showAdminRecordingsModal,
     showPendingModal,
@@ -2328,6 +2330,7 @@ export default function App() {
     showGamesHubModal,
     showLoveBalanceModal,
     showSlotReportModal,
+    showStarBonusModal,
     showAddSlotModal,
     showAdminRecordingsModal,
     showPendingModal,
@@ -2355,6 +2358,8 @@ export default function App() {
         setShowLoveBalanceModal(false);
       } else if (s.showSlotReportModal) {
         setShowSlotReportModal(false);
+      } else if (s.showStarBonusModal) {
+        setShowStarBonusModal(false);
       } else if (s.showAddSlotModal) {
         setShowAddSlotModal(false);
       } else if (s.showAdminRecordingsModal) {
@@ -4209,9 +4214,38 @@ export default function App() {
     });
 
     // 2. Award Love Balance to Dora (deduplicated by submission ID)
-    const approvalId = 'lb_appr_' + (sub.id || `${sub.date}_${sub.slotId}`);
+    const targetDate = sub.date || dailySelectedDate;
+    const approvalId = 'lb_appr_' + (sub.id || `${targetDate}_${sub.slotId}`);
     if (!loveLedger.some(e => e.id === approvalId)) {
       handleLoveBalanceTransaction(pts, 'credit', `Approved Task: ${slotTitle}`, false, 'user', { approvalId, customId: approvalId });
+    }
+
+    // 2b. Check if all active slots are now approved -> Award Star Bonus (+₹2 per active slot)
+    const activeDailySlots = (dailySlots || []).filter(s => s && s.isActive);
+    const activeCount = activeDailySlots.length;
+    if (activeCount > 0) {
+      const alreadyApprovedIds = new Set(
+        dailySubmissions
+          .filter(s => s && s.status === 'APPROVED' && (!s.date || s.date === targetDate))
+          .map(s => s.slotId)
+      );
+      alreadyApprovedIds.add(sub.slotId);
+
+      const allCompleted = activeDailySlots.every(s => alreadyApprovedIds.has(s.id));
+      if (allCompleted) {
+        const starBonusPoints = parseFloat((activeCount * 2.0).toFixed(2));
+        const starBonusId = `lb_daily_star_bonus_${targetDate}`;
+        if (!loveLedger.some(e => e && e.id === starBonusId)) {
+          handleLoveBalanceTransaction(
+            starBonusPoints,
+            'credit',
+            `[Dora] ⭐ All Daily Slots Completed Bonus (${activeCount}/${activeCount} Slots)`,
+            false,
+            'user',
+            { approvalId: starBonusId, customId: starBonusId }
+          );
+        }
+      }
     }
 
     // 3. Dual-channel emission
@@ -4264,6 +4298,15 @@ export default function App() {
       return updated;
     });
 
+    // Revoke star bonus if it was awarded for this date
+    const rejectTargetDate = sub.date || dailySelectedDate;
+    const rejectStarBonusId = `lb_daily_star_bonus_${rejectTargetDate}`;
+    setLoveLedger(prev => {
+      const updated = (prev || []).filter(e => e && e.id !== rejectStarBonusId);
+      try { localStorage.setItem('stealth_love_ledger', JSON.stringify(updated)); } catch(e) {}
+      return updated;
+    });
+
     // 2. Dual-channel emission
     if (socketRef.current) {
       socketRef.current.emit('daily_task_reject', {
@@ -4304,9 +4347,10 @@ export default function App() {
       return updated;
     });
 
-    // 2. Remove approval transaction from loveLedger
+    // 2. Remove approval transaction & star bonus from loveLedger
+    const delStarBonusId = `lb_daily_star_bonus_${targetDate}`;
     setLoveLedger(prev => {
-      const updated = (prev || []).filter(e => e && e.id !== approvalId && !(e.id.includes(sub.slotId) && e.type === 'credit' && e.description.includes('Approved Task')));
+      const updated = (prev || []).filter(e => e && e.id !== approvalId && e.id !== delStarBonusId && !(e.id.includes(sub.slotId) && e.type === 'credit' && e.description.includes('Approved Task')));
       try { localStorage.setItem('stealth_love_ledger', JSON.stringify(updated)); } catch(e) {}
       return updated;
     });
@@ -11071,6 +11115,57 @@ export default function App() {
                             </div>
                           );
                         })}
+
+                        {/* STEADY STAR BONUS SLOT CARD (ADMIN TIMELINE) */}
+                        {(() => {
+                          const activeDailySlots = (dailySlots || []).filter(s => s && s.isActive);
+                          const activeSlotCount = activeDailySlots.length;
+                          const starBonusAmount = activeSlotCount * 2.0;
+                          const approvedSlotsForDate = activeDailySlots.filter(s => {
+                            const sub = getSlotSubmission(s.id, dailySelectedDate);
+                            return sub && sub.status === 'APPROVED';
+                          });
+                          const approvedCount = approvedSlotsForDate.length;
+                          const isAllApproved = activeSlotCount > 0 && approvedCount === activeSlotCount;
+
+                          return (
+                            <div
+                              onClick={() => setShowStarBonusModal(true)}
+                              className={`min-w-[85px] sm:min-w-[100px] max-w-[120px] p-2 sm:p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col items-center justify-between text-center select-none shrink-0 ${
+                                isAllApproved
+                                  ? 'bg-gradient-to-b from-amber-50 to-yellow-100 border-amber-400 ring-2 ring-amber-400 shadow-md scale-105'
+                                  : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-800 shadow-sm'
+                              }`}
+                              title="Daily Routine Star Bonus (Tap for details)"
+                            >
+                              <div className="space-y-0.5 w-full">
+                                <div className="text-xl sm:text-2xl leading-none select-none animate-bounce" style={{ animationDuration: isAllApproved ? '1.5s' : '3s' }}>
+                                  ⭐
+                                </div>
+                                <div className="text-xs sm:text-sm font-black text-gray-900 tracking-tight leading-tight">
+                                  Bonus Point
+                                </div>
+                                <div className="text-[11px] font-extrabold text-amber-600 font-mono">
+                                  +₹{starBonusAmount.toFixed(2)}
+                                </div>
+                              </div>
+
+                              <div className="my-1.5 w-full flex flex-col items-center gap-1">
+                                {isAllApproved ? (
+                                  <div className="bg-amber-500 text-black text-[9px] font-black py-0.5 px-2 rounded-full shadow-sm animate-pulse flex items-center justify-center gap-1">
+                                    <span>✓</span>
+                                    <span>Claimed</span>
+                                  </div>
+                                ) : (
+                                  <div className="bg-blue-100 text-blue-700 border border-blue-200 text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
+                                    <span>⭐</span>
+                                    <span>{approvedCount}/{activeSlotCount} Done</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -11321,6 +11416,62 @@ export default function App() {
                             </div>
                           );
                         })}
+
+                        {/* STEADY STAR BONUS CARD IN ADMIN GRID */}
+                        {(() => {
+                          const activeDailySlots = (dailySlots || []).filter(s => s && s.isActive);
+                          const activeSlotCount = activeDailySlots.length;
+                          const starBonusAmount = activeSlotCount * 2.0;
+                          const approvedSlotsForDate = activeDailySlots.filter(s => {
+                            const sub = getSlotSubmission(s.id, dailySelectedDate);
+                            return sub && sub.status === 'APPROVED';
+                          });
+                          const approvedCount = approvedSlotsForDate.length;
+                          const isAllApproved = activeSlotCount > 0 && approvedCount === activeSlotCount;
+
+                          return (
+                            <div 
+                              onClick={() => setShowStarBonusModal(true)}
+                              className={`p-3 rounded-2xl border transition-all cursor-pointer ${
+                                isAllApproved 
+                                  ? 'bg-gradient-to-r from-amber-950/40 to-yellow-950/30 border-amber-500/60 shadow-lg' 
+                                  : 'bg-[#1a1813] border-amber-500/30 hover:border-amber-500/60'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded font-mono font-bold flex items-center gap-1">
+                                      <span>⭐</span> All-Day Milestone
+                                    </span>
+                                    <span className="text-[9px] bg-yellow-500/20 text-yellow-300 px-1.5 py-0.2 rounded font-bold">
+                                      Star Bonus
+                                    </span>
+                                  </div>
+                                  <h4 className="text-xs font-bold text-white mt-1">Complete All Daily Slots</h4>
+                                  <p className="text-[10px] text-gray-400 mt-0.5">Awarded to Dora when all {activeSlotCount} routine slots are approved</p>
+                                </div>
+                                <span className="text-xs font-bold text-amber-400 font-mono shrink-0">
+                                  +₹ {starBonusAmount.toFixed(2)}
+                                </span>
+                              </div>
+                              <div className="mt-2.5 pt-2 border-t border-[#262626] flex items-center justify-between text-xs">
+                                <span className="text-[11px] text-gray-400 font-mono">
+                                  {approvedCount}/{activeSlotCount} Slots Approved
+                                </span>
+                                {isAllApproved ? (
+                                  <span className="bg-amber-500 text-black text-[9px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                                    ✓ Claimed (+₹{starBonusAmount.toFixed(2)})
+                                  </span>
+                                ) : (
+                                  <span className="bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[9px] font-bold px-2 py-0.5 rounded-full">
+                                    Pending ({activeSlotCount - approvedCount} remaining)
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -11593,6 +11744,57 @@ export default function App() {
                         </div>
                       );
                     })}
+
+                    {/* STEADY STAR BONUS SLOT CARD (DORA / USER TIMELINE) */}
+                    {(() => {
+                      const activeDailySlots = (dailySlots || []).filter(s => s && s.isActive);
+                      const activeSlotCount = activeDailySlots.length;
+                      const starBonusAmount = activeSlotCount * 2.0;
+                      const approvedSlotsForDate = activeDailySlots.filter(s => {
+                        const sub = getSlotSubmission(s.id, dailySelectedDate);
+                        return sub && sub.status === 'APPROVED';
+                      });
+                      const approvedCount = approvedSlotsForDate.length;
+                      const isAllApproved = activeSlotCount > 0 && approvedCount === activeSlotCount;
+
+                      return (
+                        <div
+                          onClick={() => setShowStarBonusModal(true)}
+                          className={`min-w-[85px] sm:min-w-[100px] max-w-[120px] p-2 sm:p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col items-center justify-between text-center select-none shrink-0 ${
+                            isAllApproved
+                              ? 'bg-gradient-to-b from-amber-50 to-yellow-100 border-amber-400 ring-2 ring-amber-400 shadow-md scale-105'
+                              : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-800 shadow-sm'
+                          }`}
+                          title="Daily Routine Star Bonus (Tap for details)"
+                        >
+                          <div className="space-y-0.5 w-full">
+                            <div className="text-xl sm:text-2xl leading-none select-none animate-bounce" style={{ animationDuration: isAllApproved ? '1.5s' : '3s' }}>
+                              ⭐
+                            </div>
+                            <div className="text-xs sm:text-sm font-black text-gray-900 tracking-tight leading-tight">
+                              Bonus Point
+                            </div>
+                            <div className="text-[11px] font-extrabold text-amber-600 font-mono">
+                              +₹{starBonusAmount.toFixed(2)}
+                            </div>
+                          </div>
+
+                          <div className="my-1.5 w-full flex flex-col items-center gap-1">
+                            {isAllApproved ? (
+                              <div className="bg-amber-500 text-black text-[9px] font-black py-0.5 px-2 rounded-full shadow-sm animate-pulse flex items-center justify-center gap-1">
+                                <span>✓</span>
+                                <span>Claimed</span>
+                              </div>
+                            ) : (
+                              <div className="bg-blue-100 text-blue-700 border border-blue-200 text-[10px] font-bold py-0.5 px-2 rounded-full flex items-center justify-center gap-1 shadow-sm">
+                                <span>⭐</span>
+                                <span>{approvedCount}/{activeSlotCount} Done</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -13016,6 +13218,98 @@ export default function App() {
           onDeleteSubmission={(sub, slot) => handleDeleteDailySubmission(sub, slot)}
           isOverdue={checkSlotOverdue(dailySlots.find(s => s.id === dailySelectedSlotId), dailySelectedDate)}
         />
+
+        {/* DAILY ROUTINE STAR BONUS INFO MODAL */}
+        {showStarBonusModal && (() => {
+          const activeDailySlots = (dailySlots || []).filter(s => s && s.isActive);
+          const activeSlotCount = activeDailySlots.length;
+          const starBonusAmount = activeSlotCount * 2.0;
+          const approvedSlotsForDate = activeDailySlots.filter(s => {
+            const sub = getSlotSubmission(s.id, dailySelectedDate);
+            return sub && sub.status === 'APPROVED';
+          });
+          const approvedCount = approvedSlotsForDate.length;
+          const isAllApproved = activeSlotCount > 0 && approvedCount === activeSlotCount;
+
+          return (
+            <div 
+              className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200"
+              onClick={() => setShowStarBonusModal(false)}
+            >
+              <div 
+                className="bg-white rounded-3xl max-w-sm w-full shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 border border-amber-300 text-gray-900"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 p-4 text-gray-900 flex items-center justify-between shadow-sm">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-2xl animate-bounce" style={{ animationDuration: '2s' }}>⭐</span>
+                    <div>
+                      <h3 className="text-base font-black text-gray-900 leading-tight">Daily Star Bonus</h3>
+                      <p className="text-[10px] font-bold text-amber-900">All-Slots Completion Milestone</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowStarBonusModal(false)}
+                    className="w-8 h-8 rounded-full bg-black/10 hover:bg-black/20 flex items-center justify-center text-gray-900 font-bold transition-all cursor-pointer"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {/* Body */}
+                <div className="p-4 space-y-3.5 text-center">
+                  <div className="p-3.5 bg-gradient-to-b from-amber-50 to-yellow-50/50 rounded-2xl border border-amber-200 shadow-inner">
+                    <div className="text-[11px] text-amber-800 font-bold uppercase tracking-wider">Today's Star Bonus Pool</div>
+                    <div className="text-3xl font-black text-amber-600 font-mono mt-1">
+                      +₹{starBonusAmount.toFixed(2)}
+                    </div>
+                    <div className="text-[10px] text-gray-500 mt-1 font-mono">
+                      {activeSlotCount} Active Slots × ₹2.00 per slot
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200 text-left space-y-2 text-xs text-gray-700">
+                    <div className="font-bold text-gray-900 flex items-center gap-1.5 text-xs">
+                      <span>🎯</span> Rule:
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-gray-600">
+                      Dora gets this Star Bonus <span className="font-bold text-amber-700">only if all {activeSlotCount} daily routine slots</span> for the day are completed and approved!
+                    </p>
+                    <div className="pt-2 border-t border-gray-200 flex items-center justify-between text-[11px]">
+                      <span className="font-medium text-gray-600">Progress ({dailySelectedDate}):</span>
+                      <span className={`font-mono font-black ${isAllApproved ? 'text-emerald-600' : 'text-blue-600'}`}>
+                        {approvedCount} / {activeSlotCount} Slots Done
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-center">
+                    {isAllApproved ? (
+                      <div className="bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl p-2.5 text-xs font-bold flex items-center justify-center gap-1.5">
+                        <span>🎉</span>
+                        <span>All {activeSlotCount} slots approved! ₹{starBonusAmount.toFixed(2)} bonus awarded!</span>
+                      </div>
+                    ) : (
+                      <div className="bg-amber-50 text-amber-800 border border-amber-200 rounded-xl p-2 text-[11px] font-semibold">
+                        ⏳ {activeSlotCount - approvedCount} more slot{activeSlotCount - approvedCount > 1 ? 's' : ''} left to unlock this bonus!
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowStarBonusModal(false)}
+                    className="w-full py-2.5 bg-gray-900 hover:bg-black text-white font-bold rounded-xl text-xs transition-all cursor-pointer shadow"
+                  >
+                    Got It
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
         </Suspense>
     </div>
   );
