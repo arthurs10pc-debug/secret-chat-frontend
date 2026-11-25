@@ -23,9 +23,17 @@ export default function DarshAssistantBot({
   setBuddyIntervalMinutes
 }) {
   const [buddyType, setBuddyType] = useState('water');
+  const [buddyGender, setBuddyGender] = useState(() => {
+    return localStorage.getItem('stealth_buddy_gender') || 'boy';
+  });
   const [buddyCustomText, setBuddyCustomText] = useState('Dora, time to drink water! Stay hydrated & fresh 💧');
   const [buddySongInput, setBuddySongInput] = useState('');
   const [scheduledSuccessMsg, setScheduledSuccessMsg] = useState('');
+
+  const handleSelectGender = (g) => {
+    setBuddyGender(g);
+    try { localStorage.setItem('stealth_buddy_gender', g); } catch(e) {}
+  };
 
   if (role !== 'parent') return null;
 
@@ -132,6 +140,39 @@ export default function DarshAssistantBot({
                 </div>
               </div>
 
+              {/* GENDER / CHARACTER SELECTION (GIRL YA BOY CHALKE AAYEGA) */}
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">
+                  Character Chuniye (Screen ke bahar RIGHT SIDE se chalkar aayega):
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectGender('boy')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                      buddyGender === 'boy'
+                        ? 'bg-blue-600/30 text-blue-300 border-blue-500 shadow-md ring-1 ring-blue-400'
+                        : 'bg-[#181818] text-gray-400 border-[#2a2a2a] hover:bg-[#202020]'
+                    }`}
+                  >
+                    <span className="text-base">👦</span>
+                    <span>Hero Boy (Vijay/Suriya)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectGender('girl')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                      buddyGender === 'girl'
+                        ? 'bg-purple-600/30 text-purple-300 border-purple-500 shadow-md ring-1 ring-purple-400'
+                        : 'bg-[#181818] text-gray-400 border-[#2a2a2a] hover:bg-[#202020]'
+                    }`}
+                  >
+                    <span className="text-base">👧</span>
+                    <span>Cute Girl (Dora Look)</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Action Presets */}
               <div>
                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">
@@ -234,14 +275,14 @@ export default function DarshAssistantBot({
                 type="button"
                 onClick={() => {
                   if (handleTriggerBuddyTest) {
-                    handleTriggerBuddyTest(buddyCustomText, buddyType, buddySongInput);
+                    handleTriggerBuddyTest(buddyCustomText, buddyType, buddySongInput, buddyGender);
                     setIsBotOpen(false);
                   }
                 }}
                 className="w-full bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-500 hover:from-blue-500 hover:to-teal-400 text-white font-extrabold text-xs py-3 rounded-xl cursor-pointer shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
               >
                 <Play size={14} fill="currentColor" />
-                <span>Test Hero Walk-In (Song + Walk Animation)</span>
+                <span>Test {buddyGender === 'girl' ? '👧 Girl' : '👦 Boy'} Walk-In (Right Side Entry + Song)</span>
               </button>
             </div>
           )}

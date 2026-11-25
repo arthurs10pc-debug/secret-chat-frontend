@@ -974,12 +974,10 @@ export default function App() {
       const parts = slot.timeRange.split('-').map(p => p.trim());
       if (parts.length < 2) return false;
       let [endH, endM] = parts[1].split(':').map(n => parseInt(n, 10));
-      if (slot.tag === 'Lunch' && endH < 12) endH += 12;
-      if (slot.tag === 'Water' && endH < 12) endH += 12;
-      if (slot.tag === 'Tea' && endH < 12) endH += 12;
-      if (slot.tag === 'Dinner' && endH < 12) endH += 12;
-      if (slot.tag === 'Steps' && endH < 12) endH += 12;
-      if (slot.tag === 'Skincare' && endH < 12) endH += 12;
+      const isPm = /pm/i.test(slot.timeRange) || /pm/i.test(parts[1]);
+      if (isPm && endH < 12) endH += 12;
+      else if (endH >= 1 && endH <= 7) endH += 12;
+      else if (['lunch', 'water', 'tea', 'dinner', 'steps', 'skincare'].includes((slot.tag || '').toLowerCase()) && endH < 12) endH += 12;
 
       const targetDate = date || dailySelectedDate;
       const todayStr = getLocalDateString();
@@ -1112,7 +1110,9 @@ export default function App() {
   const [isPeerTyping, setIsPeerTyping] = useState(false);
   const typingTimerRef = useRef(null);
 
-  const [syncStatus, setSyncStatus] = useState('connected');
+  const [syncStatus, setSyncStatus] = useState(() => {
+    return localStorage.getItem('stealth_sync_status') || 'idle';
+  });
   const [incomingInviteRole, setIncomingInviteRole] = useState('');
   const [youtubeUrlInput, setYoutubeUrlInput] = useState('');
   const [activeTrackTitle, setActiveTrackTitle] = useState('');
@@ -1188,13 +1188,20 @@ export default function App() {
   const [isBuddyActive, setIsBuddyActive] = useState(false);
   const [buddyMessage, setBuddyMessage] = useState('Dora, time to drink water! Stay hydrated & fresh 💧');
   const [buddyType, setBuddyType] = useState('water');
+  const [buddyGender, setBuddyGender] = useState(() => {
+    return localStorage.getItem('stealth_buddy_gender') || 'boy';
+  });
   const [buddyIntervalMinutes, setBuddyIntervalMinutes] = useState(0);
   const [buddySongUrl, setBuddySongUrl] = useState('');
 
-  const handleTriggerBuddyTest = (customText, type = 'water', songUrl = '') => {
+  const handleTriggerBuddyTest = (customText, type = 'water', songUrl = '', gender = 'boy') => {
     if (customText) setBuddyMessage(customText);
     if (type) setBuddyType(type);
     if (songUrl !== undefined) setBuddySongUrl(songUrl);
+    if (gender) {
+      setBuddyGender(gender);
+      try { localStorage.setItem('stealth_buddy_gender', gender); } catch(e) {}
+    }
     setIsBuddyActive(false);
     setTimeout(() => {
       setIsBuddyActive(true);
@@ -3546,7 +3553,10 @@ export default function App() {
       } catch (e) {}
     }
 
-    // 2. Mobile Device System Notification Bar (Android / iOS / Windows top status bar)
+    // 2. Mobile Device System Notification Bar (Only trigger on mobile status bar / push notification, avoid intrusive desktop web toasts)
+    const isMobileDevice = typeof navigator !== 'undefined' && /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent || '');
+    if (!isMobileDevice) return;
+
     try {
       if (typeof window !== 'undefined' && 'Notification' in window) {
         if (Notification.permission === 'granted') {
@@ -3887,11 +3897,75 @@ export default function App() {
       })
       .catch(() => {});
 
+    // Active client-side evaluation for overdue missed slots (ensures points minus even if server sleeps)
+    try {
+      const now = new Date();
+      const istOffset = 5.5 * 60 * 60 * 1000;
+      const istNow = new Date(now.getTime() + istOffset);
+      const todayStr = istNow.toISOString().split('T')[0];
+      const currentMinutes = istNow.getUTCHours() * 60 + istNow.getUTCMinutes();
+      const currentLedger = JSON.parse(localStorage.getItem('stealth_love_ledger') || '[]');
+      const currentSubs = JSON.parse(localStorage.getItem('stealth_daily_submissions') || '[]');
+      const activeSlots = (dailySlots || []).filter(s => s && s.isActive);
+
+      const daysToCheck = [todayStr];
+      const yesterday = new Date(istNow.getTime() - 86400000);
+      daysToCheck.push(yesterday.toISOString().split('T')[0]);
+
+      daysToCheck.forEach(dayStr => {
+        const isPastDay = dayStr < todayStr;
+        activeSlots.forEach(slot => {
+          let isOverdue = false;
+          if (isPastDay) {
+            isOverdue = true;
+          } else {
+            const parts = (slot.timeRange || '').split('-').map(p => p.trim());
+            if (parts.length >= 2) {
+              const colonIdx = parts[1].indexOf(':');
+              if (colonIdx !== -1) {
+                let h = parseInt(parts[1].slice(0, colonIdx), 10);
+                const m = parseInt(parts[1].slice(colonIdx + 1, colonIdx + 3) || '0', 10);
+                if (!isNaN(h)) {
+                  const tag = (slot.tag || '').toLowerCase();
+                  if (['lunch', 'water', 'tea', 'dinner', 'steps', 'skincare'].includes(tag) && h < 12) h += 12;
+                  else if (h >= 1 && h <= 7) h += 12;
+                  const endMins = h * 60 + (isNaN(m) ? 0 : m);
+                  if (currentMinutes > endMins) isOverdue = true;
+                }
+              }
+            }
+          }
+
+          if (isOverdue) {
+            const sub = currentSubs.find(s => s && s.slotId === slot.id && s.date === dayStr);
+            const isApproved = sub && sub.status === 'APPROVED';
+            const isPendingWithProof = sub && sub.status === 'PENDING' && (Boolean(sub.image) || Boolean(sub.note));
+            const slotTxId = `habit_routine_${slot.id}_${dayStr}_user`;
+
+            if (!isApproved && !isPendingWithProof) {
+              const alreadyHas = currentLedger.some(e => e && e.id === slotTxId);
+              if (!alreadyHas) {
+                const penaltyPts = Math.abs(Number(slot.rewardPoints) || 2.0);
+                handleLoveBalanceTransaction(
+                  penaltyPts,
+                  'debit',
+                  `Missed Routine Task: ${slot.title} (${dayStr})`,
+                  true,
+                  'user',
+                  { customId: slotTxId }
+                );
+              }
+            }
+          }
+        });
+      });
+    } catch(err) {}
+
     if (socketRef.current) {
       socketRef.current.emit('love_balance_action', { room: GLOBAL_ROOM, action: 'REQUEST_SYNC' });
       socketRef.current.emit('daily_task_request_sync', { date: dailySelectedDate });
     }
-  }, [dailySelectedDate]);
+  }, [dailySelectedDate, dailySlots, handleLoveBalanceTransaction]);
 
   useEffect(() => {
     checkDailyHabitInfractionsRef.current = checkDailyHabitInfractions;
@@ -5576,6 +5650,13 @@ export default function App() {
       if (!data) return;
       if (data.connected) {
         setSyncStatus('connected');
+        try { localStorage.setItem('stealth_sync_status', 'connected'); } catch(e) {}
+      } else {
+        setSyncStatus('idle');
+        try { localStorage.setItem('stealth_sync_status', 'idle'); } catch(e) {}
+        setActiveTrackTitle('');
+        setActiveVideoId('');
+        setIsPlaying(false);
       }
 
       if (data && Array.isArray(data.queue)) {
@@ -5586,7 +5667,7 @@ export default function App() {
         ]);
       }
 
-      if (data.videoId) {
+      if (data.connected && data.videoId) {
         setActiveTrackTitle(data.title || "YouTube Track");
         playOrLoadVideo(data.videoId, data.currentTime || 0, data.state === 'PLAY');
       }
@@ -5628,12 +5709,14 @@ export default function App() {
 
     socketRef.current.on('sync_connected_event', () => {
       setSyncStatus('connected');
+      try { localStorage.setItem('stealth_sync_status', 'connected'); } catch(e) {}
       playReceiveSound();
       confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
     });
 
     socketRef.current.on('sync_disconnected_event', () => {
       setSyncStatus('idle');
+      try { localStorage.setItem('stealth_sync_status', 'idle'); } catch(e) {}
       setIsPlaying(false);
       setActiveTrackTitle('');
       setActiveVideoId('');
@@ -7310,6 +7393,7 @@ export default function App() {
     if (socketRef.current) {
       socketRef.current.emit('sync_confirm_invite', { room: GLOBAL_ROOM });
       setSyncStatus('connected');
+      try { localStorage.setItem('stealth_sync_status', 'connected'); } catch(e) {}
     }
   };
 
@@ -7327,14 +7411,15 @@ export default function App() {
   const handleDisconnectSync = () => {
     if (socketRef.current) {
       socketRef.current.emit('sync_disconnect_invite', { room: GLOBAL_ROOM });
-      setSyncStatus('idle');
-      setIsPlaying(false);
-      setActiveTrackTitle('');
-      setActiveVideoId('');
-      setYoutubeUrlInput('');
-      if (playerRef.current && playerRef.current.stopVideo) {
-        playerRef.current.stopVideo();
-      }
+    }
+    setSyncStatus('idle');
+    try { localStorage.setItem('stealth_sync_status', 'idle'); } catch(e) {}
+    setIsPlaying(false);
+    setActiveTrackTitle('');
+    setActiveVideoId('');
+    setYoutubeUrlInput('');
+    if (playerRef.current && playerRef.current.stopVideo) {
+      playerRef.current.stopVideo();
     }
   };
 
@@ -11987,7 +12072,18 @@ export default function App() {
                       <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                       <span>LINKED (Exact Sync Across Devices)</span>
                     </div>
-                    <span className="text-[11px] text-gray-400 font-mono">Ready to Play</span>
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <span className="text-[11px] text-gray-400 font-mono hidden sm:inline">Ready to Play</span>
+                      <button
+                        type="button"
+                        onClick={handleDisconnectSync}
+                        className="bg-rose-950/60 hover:bg-rose-900 border border-rose-700/60 text-rose-300 hover:text-white px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                        title="Disconnect Live Audio Sync"
+                      >
+                        <Unlink size={12} />
+                        <span>Disconnect</span>
+                      </button>
+                    </div>
                   </div>
 
                   <div className="relative">
@@ -13206,6 +13302,7 @@ export default function App() {
         {role === 'parent' && (
           <AnimatedScreenBuddy
             isActive={isBuddyActive}
+            gender={buddyGender}
             recipientName={activeDoraName || "Dora"}
             customSongUrl={buddySongUrl}
             onDismiss={() => setIsBuddyActive(false)}

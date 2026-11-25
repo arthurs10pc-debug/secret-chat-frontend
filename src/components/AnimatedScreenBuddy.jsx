@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Droplets, Check, Clock, Volume2, VolumeX, Sparkles } from 'lucide-react';
+import { X, Droplets, Clock, Volume2, VolumeX, Sparkles } from 'lucide-react';
 
 export default function AnimatedScreenBuddy({
   isActive,
   onDismiss,
+  gender = 'boy', // 'boy' | 'girl'
   recipientName = "Dora",
   customSongUrl = null,
   initialLiters = 1.5,
@@ -19,7 +20,7 @@ export default function AnimatedScreenBuddy({
   const customAudioRef = useRef(null);
   const autoExitTimerRef = useRef(null);
 
-  // Synthesized energetic beat (Kick, Snare, HiHat, Groovy Bassline) matching the video's upbeat entry!
+  // Upbeat background song synthesizer (energetic dance/groove beat matching the video)
   const startBackgroundMusic = () => {
     if (isMuted) return;
 
@@ -35,30 +36,28 @@ export default function AnimatedScreenBuddy({
       } catch (e) {}
     }
 
-    // High quality Web Audio API Synthesizer (Instant playback without network lag)
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
       let isRunning = true;
       let step = 0;
-      const bpm = 124;
-      const stepInterval = (60 / bpm) / 4; // 16th notes
+      const bpm = 126;
+      const stepInterval = (60 / bpm) / 4;
 
-      // Catchy funky bassline chords (D minor / G / A)
       const bassFreqs = [146.83, 146.83, 174.61, 196.00, 146.83, 220.00, 196.00, 164.81];
 
       const tick = () => {
         if (!isRunning || ctx.state === 'closed') return;
         const now = ctx.currentTime;
 
-        // 1. Pumping Kick Drum (on beats 0, 4, 8, 12)
+        // 1. Punchy Kick
         if (step % 4 === 0) {
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.frequency.setValueAtTime(140, now);
-          osc.frequency.exponentialRampToValueAtTime(35, now + 0.14);
-          gain.gain.setValueAtTime(0.55, now);
+          osc.frequency.exponentialRampToValueAtTime(32, now + 0.15);
+          gain.gain.setValueAtTime(0.5, now);
           gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
           osc.connect(gain);
           gain.connect(ctx.destination);
@@ -66,13 +65,13 @@ export default function AnimatedScreenBuddy({
           osc.stop(now + 0.16);
         }
 
-        // 2. Snappy Snare / Handclap (on beats 4, 12)
+        // 2. Snare / Clap
         if (step % 8 === 4) {
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.type = 'triangle';
-          osc.frequency.setValueAtTime(260, now);
-          gain.gain.setValueAtTime(0.28, now);
+          osc.frequency.setValueAtTime(250, now);
+          gain.gain.setValueAtTime(0.26, now);
           gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
           osc.connect(gain);
           gain.connect(ctx.destination);
@@ -80,11 +79,11 @@ export default function AnimatedScreenBuddy({
           osc.stop(now + 0.12);
         }
 
-        // 3. Disco Hi-Hat (on every 16th note)
+        // 3. Hi-Hat
         const hatGain = ctx.createGain();
         const hatOsc = ctx.createOscillator();
         hatOsc.type = 'sawtooth';
-        hatOsc.frequency.setValueAtTime(7500, now);
+        hatOsc.frequency.setValueAtTime(8000, now);
         const hatVol = (step % 2 === 1) ? 0.08 : 0.03;
         hatGain.gain.setValueAtTime(hatVol, now);
         hatGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
@@ -93,14 +92,14 @@ export default function AnimatedScreenBuddy({
         hatOsc.start(now);
         hatOsc.stop(now + 0.04);
 
-        // 4. Energetic Bass Synth
+        // 4. Funky Synth Bassline
         if (step % 2 === 0) {
           const noteFreq = bassFreqs[(step / 2) % bassFreqs.length];
           const bassOsc = ctx.createOscillator();
           const bassGain = ctx.createGain();
           bassOsc.type = 'sawtooth';
           bassOsc.frequency.setValueAtTime(noteFreq, now);
-          bassGain.gain.setValueAtTime(0.22, now);
+          bassGain.gain.setValueAtTime(0.2, now);
           bassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
           bassOsc.connect(bassGain);
           bassGain.connect(ctx.destination);
@@ -138,26 +137,24 @@ export default function AnimatedScreenBuddy({
     }
   };
 
-  // Sound effects for Drinking Gulp & Celebration
   const playSipGulpSound = () => {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
       const now = ctx.currentTime;
-      // Gulp pitch drop
-      [360, 420, 320].forEach((freq, idx) => {
+      [380, 440, 330].forEach((freq, idx) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, now + idx * 0.18);
-        osc.frequency.exponentialRampToValueAtTime(freq * 0.7, now + idx * 0.18 + 0.15);
-        gain.gain.setValueAtTime(0.25, now + idx * 0.18);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.18 + 0.16);
+        osc.frequency.setValueAtTime(freq, now + idx * 0.17);
+        osc.frequency.exponentialRampToValueAtTime(freq * 0.7, now + idx * 0.17 + 0.14);
+        gain.gain.setValueAtTime(0.25, now + idx * 0.17);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.17 + 0.15);
         osc.connect(gain);
         gain.connect(ctx.destination);
-        osc.start(now + idx * 0.18);
-        osc.stop(now + idx * 0.18 + 0.16);
+        osc.start(now + idx * 0.17);
+        osc.stop(now + idx * 0.17 + 0.15);
       });
     } catch (e) {}
   };
@@ -168,7 +165,6 @@ export default function AnimatedScreenBuddy({
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
       const now = ctx.currentTime;
-      // High celebratory chime arpeggio
       [587.33, 739.99, 880.00, 1174.66].forEach((f, i) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -184,7 +180,7 @@ export default function AnimatedScreenBuddy({
     } catch (e) {}
   };
 
-  // Trigger Lifecycle
+  // Entrance Lifecycle (Starts from OFF-SCREEN RIGHT, walks leftwards to center)
   useEffect(() => {
     if (!isActive) {
       stopMusic();
@@ -196,10 +192,10 @@ export default function AnimatedScreenBuddy({
     setDialogStatus('prompt');
     startBackgroundMusic();
 
-    // Walking in takes 2.6 seconds to reach the center
+    // Walking in takes 2.5s from offscreen right to center
     const enterTimer = setTimeout(() => {
       setStage('waiting_input');
-    }, 2600);
+    }, 2500);
 
     return () => {
       clearTimeout(enterTimer);
@@ -208,7 +204,6 @@ export default function AnimatedScreenBuddy({
     };
   }, [isActive]);
 
-  // Action: "Drinking now 💧"
   const handleDrinkNow = () => {
     setStage('drinking');
     playSipGulpSound();
@@ -219,14 +214,12 @@ export default function AnimatedScreenBuddy({
       playSuccessCelebrationSound();
       setStage('post_drink');
 
-      // Stay celebrating for 3 seconds then walk out
       autoExitTimerRef.current = setTimeout(() => {
         handleWalkOut();
       }, 3500);
     }, 1200);
   };
 
-  // Action: "I will do it later"
   const handleDoLater = () => {
     setDialogStatus('later');
     setStage('declined');
@@ -236,7 +229,7 @@ export default function AnimatedScreenBuddy({
     }, 2500);
   };
 
-  // Walk out of screen
+  // Exits walking back to the RIGHT side offscreen
   const handleWalkOut = () => {
     setStage('walking_out');
     setTimeout(() => {
@@ -266,44 +259,39 @@ export default function AnimatedScreenBuddy({
         }
         @keyframes walkKneeFlexLeft {
           0% { transform: rotate(0deg); }
-          30% { transform: rotate(-40deg); }
+          30% { transform: rotate(-38deg); }
           60% { transform: rotate(0deg); }
           100% { transform: rotate(0deg); }
         }
         @keyframes walkKneeFlexRight {
           0% { transform: rotate(0deg); }
-          70% { transform: rotate(-40deg); }
+          70% { transform: rotate(-38deg); }
           100% { transform: rotate(0deg); }
         }
         @keyframes walkTorsoBob {
           0%, 100% { transform: translateY(0px) rotate(0deg); }
-          25% { transform: translateY(-9px) rotate(-1.5deg); }
+          25% { transform: translateY(-8px) rotate(-1.5deg); }
           50% { transform: translateY(0px) rotate(0deg); }
-          75% { transform: translateY(-9px) rotate(1.5deg); }
+          75% { transform: translateY(-8px) rotate(1.5deg); }
         }
         @keyframes walkArmSwingLeft {
-          0% { transform: rotate(28deg); }
-          50% { transform: rotate(-28deg); }
-          100% { transform: rotate(28deg); }
+          0% { transform: rotate(26deg); }
+          50% { transform: rotate(-26deg); }
+          100% { transform: rotate(26deg); }
         }
         @keyframes walkArmBottleGroove {
           0%, 100% { transform: rotate(-4deg) translateY(0); }
-          50% { transform: rotate(12deg) translateY(-8px); }
+          50% { transform: rotate(10deg) translateY(-8px); }
         }
         @keyframes celebrateDance {
           0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
-          25% { transform: translateY(-14px) rotate(-4deg) scale(1.02); }
+          25% { transform: translateY(-12px) rotate(-3deg) scale(1.02); }
           50% { transform: translateY(0) rotate(0deg) scale(1); }
-          75% { transform: translateY(-14px) rotate(4deg) scale(1.02); }
+          75% { transform: translateY(-12px) rotate(3deg) scale(1.02); }
         }
         @keyframes drinkBottleTilt {
           0% { transform: translate(0, 0) rotate(0deg); }
-          100% { transform: translate(-30px, -70px) rotate(-125deg); }
-        }
-        @keyframes waterDropletShower {
-          0% { transform: translateY(0) scale(0.5); opacity: 0; }
-          30% { opacity: 1; }
-          100% { transform: translateY(60px) scale(1.2); opacity: 0; }
+          100% { transform: translate(-28px, -68px) rotate(-125deg); }
         }
         @keyframes floorShadowSync {
           0%, 50%, 100% { transform: scaleX(1); opacity: 0.55; }
@@ -311,46 +299,46 @@ export default function AnimatedScreenBuddy({
         }
 
         .animate-walk-torso {
-          animation: walkTorsoBob 0.6s infinite ease-in-out;
+          animation: walkTorsoBob 0.55s infinite ease-in-out;
         }
         .animate-walk-leg-l {
           transform-origin: 38px 150px;
-          animation: walkStrideLeftLeg 0.6s infinite ease-in-out;
+          animation: walkStrideLeftLeg 0.55s infinite ease-in-out;
         }
         .animate-walk-knee-l {
           transform-origin: 38px 190px;
-          animation: walkKneeFlexLeft 0.6s infinite ease-in-out;
+          animation: walkKneeFlexLeft 0.55s infinite ease-in-out;
         }
         .animate-walk-leg-r {
           transform-origin: 62px 150px;
-          animation: walkStrideRightLeg 0.6s infinite ease-in-out;
+          animation: walkStrideRightLeg 0.55s infinite ease-in-out;
         }
         .animate-walk-knee-r {
           transform-origin: 62px 190px;
-          animation: walkKneeFlexRight 0.6s infinite ease-in-out;
+          animation: walkKneeFlexRight 0.55s infinite ease-in-out;
         }
         .animate-walk-arm-l {
           transform-origin: 22px 85px;
-          animation: walkArmSwingLeft 0.6s infinite ease-in-out;
+          animation: walkArmSwingLeft 0.55s infinite ease-in-out;
         }
         .animate-walk-bottle-r {
           transform-origin: 75px 85px;
-          animation: walkArmBottleGroove 0.6s infinite ease-in-out;
+          animation: walkArmBottleGroove 0.55s infinite ease-in-out;
         }
         .animate-hero-celebrate {
           animation: celebrateDance 0.5s infinite ease-in-out;
         }
         .animate-floor-shadow {
-          animation: floorShadowSync 0.6s infinite ease-in-out;
+          animation: floorShadowSync 0.55s infinite ease-in-out;
         }
       `}</style>
 
-      {/* UPPER INTERACTIVE HERO DIALOG CARD (EXACT REPLICA FROM VIDEO) */}
+      {/* UPPER HERO DIALOG CARD (EXACT REPLICA FROM VIDEO) */}
       {(stage === 'waiting_input' || stage === 'drinking' || stage === 'post_drink' || stage === 'declined') && (
         <div 
           className="pointer-events-auto mb-4 w-92 max-w-[94vw] bg-[#0c1017]/95 border-2 border-cyan-400/50 rounded-3xl p-5 shadow-[0_16px_50px_rgba(6,182,212,0.35)] backdrop-blur-xl animate-in zoom-in-95 duration-200 text-center relative space-y-3.5 z-50"
         >
-          {/* Sound & Dismiss Controls */}
+          {/* Controls */}
           <div className="absolute top-3 right-3 flex items-center gap-1">
             <button
               type="button"
@@ -462,16 +450,16 @@ export default function AnimatedScreenBuddy({
         </div>
       )}
 
-      {/* FULL-BODY 3D-STYLE ANIMATED HERO CHARACTER (WALKS FROM OFFSCREEN TO CENTER) */}
+      {/* ANIMATED CHARACTER RIG (ENTERS FROM OFF-SCREEN RIGHT, EXITS TO RIGHT) */}
       <div 
-        className="pointer-events-auto relative flex flex-col items-center cursor-pointer transition-all duration-[2400ms] ease-[cubic-bezier(0.2,0.8,0.3,1)]"
+        className="pointer-events-auto relative flex flex-col items-center cursor-pointer transition-all duration-[2600ms] ease-[cubic-bezier(0.2,0.8,0.3,1)]"
         style={{
           transform: stage === 'walking_in'
-            ? 'translateX(-320px)'
+            ? 'translateX(calc(50vw + 260px))' // Starts 100% OUTSIDE THE SCREEN on the RIGHT (both mobile & desktop)
             : stage === 'walking_out'
-              ? 'translateX(350px)'
+              ? 'translateX(calc(50vw + 280px))' // Walks 100% OUTSIDE THE SCREEN to the RIGHT
               : 'translateX(0px)',
-          opacity: stage === 'walking_out' ? 0.3 : 1
+          opacity: stage === 'walking_out' ? 0.4 : 1
         }}
         onClick={() => {
           if (stage === 'waiting_input') handleDrinkNow();
@@ -493,125 +481,196 @@ export default function AnimatedScreenBuddy({
           </div>
         )}
 
-        {/* CHARACTER SVG (Detailed Thalapathy / Suriya Hero Style: Denim Jacket, Black Shirt, Water Bottle) */}
-        <svg 
-          width="150" 
-          height="240" 
-          viewBox="0 0 100 240" 
-          fill="none" 
-          xmlns="http://www.w3.org/2000/svg"
-          className={`drop-shadow-[0_12px_24px_rgba(0,0,0,0.8)] ${
-            stage === 'post_drink' ? 'animate-hero-celebrate' : ''
-          }`}
-        >
-          {/* LEGS & SHOES RIG */}
-          {/* Left Leg */}
-          <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-leg-l' : ''}>
-            {/* Thigh */}
-            <rect x="33" y="148" width="13" height="38" rx="5" fill="#141821" stroke="#0a0d14" strokeWidth="1" />
-            {/* Knee & Calf */}
-            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-knee-l' : ''}>
-              <rect x="34" y="182" width="11" height="38" rx="4.5" fill="#181d29" />
-              {/* White Sneaker Shoe */}
-              <path d="M28 218 C28 214 34 212 45 212 L48 218 L48 225 L28 225 Z" fill="#ffffff" />
-              <rect x="26" y="222" width="24" height="4" rx="2" fill="#e2e8f0" />
+        {/* 1. BOY HERO CHARACTER (Vijay / Suriya Style: Denim Jacket / Black T-Shirt, Sneaker shoes, Water Bottle) */}
+        {gender === 'boy' && (
+          <svg 
+            width="155" 
+            height="245" 
+            viewBox="0 0 100 240" 
+            fill="none" 
+            xmlns="http://www.w3.org/2000/svg"
+            className={`drop-shadow-[0_12px_24px_rgba(0,0,0,0.8)] ${
+              stage === 'post_drink' ? 'animate-hero-celebrate' : ''
+            }`}
+          >
+            {/* LEGS RIG */}
+            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-leg-l' : ''}>
+              <rect x="33" y="148" width="13" height="38" rx="5" fill="#141821" stroke="#0a0d14" strokeWidth="1" />
+              <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-knee-l' : ''}>
+                <rect x="34" y="182" width="11" height="38" rx="4.5" fill="#181d29" />
+                <path d="M28 218 C28 214 34 212 45 212 L48 218 L48 225 L28 225 Z" fill="#ffffff" />
+                <rect x="26" y="222" width="24" height="4" rx="2" fill="#e2e8f0" />
+              </g>
             </g>
-          </g>
 
-          {/* Right Leg */}
-          <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-leg-r' : ''}>
-            {/* Thigh */}
-            <rect x="54" y="148" width="13" height="38" rx="5" fill="#141821" stroke="#0a0d14" strokeWidth="1" />
-            {/* Knee & Calf */}
-            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-knee-r' : ''}>
-              <rect x="55" y="182" width="11" height="38" rx="4.5" fill="#181d29" />
-              {/* White Sneaker Shoe */}
-              <path d="M49 218 C49 214 55 212 66 212 L69 218 L69 225 L49 225 Z" fill="#ffffff" />
-              <rect x="47" y="222" width="24" height="4" rx="2" fill="#e2e8f0" />
+            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-leg-r' : ''}>
+              <rect x="54" y="148" width="13" height="38" rx="5" fill="#141821" stroke="#0a0d14" strokeWidth="1" />
+              <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-knee-r' : ''}>
+                <rect x="55" y="182" width="11" height="38" rx="4.5" fill="#181d29" />
+                <path d="M49 218 C49 214 55 212 66 212 L69 218 L69 225 L49 225 Z" fill="#ffffff" />
+                <rect x="47" y="222" width="24" height="4" rx="2" fill="#e2e8f0" />
+              </g>
             </g>
-          </g>
 
-          {/* TORSO / BODY (Denim Jacket + Black T-Shirt) */}
-          <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-torso' : ''}>
-            {/* Black T-Shirt Body */}
-            <path d="M34 85 L66 85 L64 152 L36 152 Z" fill="#111317" />
-            {/* Denim Jacket (Open front) */}
-            {/* Left flap */}
-            <path d="M29 82 L44 84 L41 146 L27 142 Z" fill="#2b5282" />
-            {/* Right flap */}
-            <path d="M71 82 L56 84 L59 146 L73 142 Z" fill="#2b5282" />
-            {/* Denim collar & seams */}
-            <polygon points="36,82 45,95 38,98 30,85" fill="#3b699e" />
-            <polygon points="64,82 55,95 62,98 70,85" fill="#3b699e" />
-            {/* Belt */}
-            <rect x="35" y="146" width="30" height="6" fill="#08090b" />
-            <rect x="46" y="145" width="8" height="8" rx="1.5" fill="#cbd5e1" stroke="#64748b" strokeWidth="1" />
+            {/* TORSO & HERO HEAD */}
+            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-torso' : ''}>
+              <path d="M34 85 L66 85 L64 152 L36 152 Z" fill="#111317" />
+              <path d="M29 82 L44 84 L41 146 L27 142 Z" fill="#2b5282" />
+              <path d="M71 82 L56 84 L59 146 L73 142 Z" fill="#2b5282" />
+              <polygon points="36,82 45,95 38,98 30,85" fill="#3b699e" />
+              <polygon points="64,82 55,95 62,98 70,85" fill="#3b699e" />
+              <rect x="35" y="146" width="30" height="6" fill="#08090b" />
+              <rect x="46" y="145" width="8" height="8" rx="1.5" fill="#cbd5e1" stroke="#64748b" strokeWidth="1" />
 
-            {/* HEAD & FACE (Hero Style with Beard, Styled Hair & Smile) */}
-            {/* Neck */}
-            <rect x="44" y="68" width="12" height="18" fill="#e0a982" />
-            {/* Face */}
-            <rect x="33" y="32" width="34" height="42" rx="14" fill="#f0be97" />
-            {/* Beard & Stubble */}
-            <path d="M34 54 C34 74 66 74 66 54 C66 68 58 75 50 75 C42 75 34 68 34 54 Z" fill="#241b17" opacity="0.85" />
-            {/* Moustache */}
-            <path d="M42 59 C46 57 54 57 58 59 C54 62 46 62 42 59 Z" fill="#1c1411" />
-            {/* Smile / Teeth */}
-            <path d="M43 62 C45 66 55 66 57 62 Z" fill="#ffffff" stroke="#1c1411" strokeWidth="1" />
+              {/* Head & Hair */}
+              <rect x="44" y="68" width="12" height="18" fill="#e0a982" />
+              <rect x="33" y="32" width="34" height="42" rx="14" fill="#f0be97" />
+              <path d="M34 54 C34 74 66 74 66 54 C66 68 58 75 50 75 C42 75 34 68 34 54 Z" fill="#241b17" opacity="0.85" />
+              <path d="M42 59 C46 57 54 57 58 59 C54 62 46 62 42 59 Z" fill="#1c1411" />
+              <path d="M43 62 C45 66 55 66 57 62 Z" fill="#ffffff" stroke="#1c1411" strokeWidth="1" />
 
-            {/* Eyes & Eyebrows */}
-            {/* Eyebrows */}
-            <path d="M37 45 C41 43 45 44 47 46" stroke="#150f0c" strokeWidth="2.5" strokeLinecap="round" />
-            <path d="M53 46 C55 44 59 43 63 45" stroke="#150f0c" strokeWidth="2.5" strokeLinecap="round" />
-            {/* Big Expressive Eyes */}
-            <circle cx="42" cy="50" r="3.5" fill="#150f0c" />
-            <circle cx="43" cy="49" r="1.2" fill="#ffffff" />
-            <circle cx="58" cy="50" r="3.5" fill="#150f0c" />
-            <circle cx="59" cy="49" r="1.2" fill="#ffffff" />
+              <path d="M37 45 C41 43 45 44 47 46" stroke="#150f0c" strokeWidth="2.5" strokeLinecap="round" />
+              <path d="M53 46 C55 44 59 43 63 45" stroke="#150f0c" strokeWidth="2.5" strokeLinecap="round" />
+              <circle cx="42" cy="50" r="3.5" fill="#150f0c" />
+              <circle cx="43" cy="49" r="1.2" fill="#ffffff" />
+              <circle cx="58" cy="50" r="3.5" fill="#150f0c" />
+              <circle cx="59" cy="49" r="1.2" fill="#ffffff" />
 
-            {/* Stylish Voluminous Hair (Hero Pompadour/Slicked) */}
+              <path 
+                d="M30 38 C28 20 40 12 50 12 C62 12 72 20 70 38 C72 44 71 50 70 52 C65 42 62 40 50 40 C38 40 35 42 30 52 C29 48 29 42 30 38 Z" 
+                fill="#1e1612" 
+              />
+
+              {/* Arms */}
+              <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-arm-l' : ''}>
+                <path d="M29 86 C21 95 18 112 21 126 L29 124 C27 114 28 100 34 92 Z" fill="#2b5282" />
+                <circle cx="23" cy="132" r="5" fill="#f0be97" />
+              </g>
+
+              {/* Bottle Arm */}
+              {stage === 'drinking' ? (
+                <g style={{ animation: 'drinkBottleTilt 1.2s forwards ease-in-out' }}>
+                  <path d="M69 88 C76 96 74 110 65 112 L61 106 C66 102 68 94 65 88 Z" fill="#2b5282" />
+                  <circle cx="58" cy="65" r="5" fill="#f0be97" />
+                  <rect x="46" y="44" width="14" height="34" rx="3" fill="#bae6fd" stroke="#0284c7" strokeWidth="1.5" opacity="0.85" />
+                  <rect x="48" y="52" width="10" height="14" fill="#38bdf8" />
+                  <rect x="49" y="40" width="8" height="5" rx="1.5" fill="#ffffff" stroke="#0369a1" strokeWidth="1" />
+                </g>
+              ) : (
+                <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-bottle-r' : ''}>
+                  <path d="M70 86 C77 94 80 106 79 116 L71 115 C72 107 70 98 66 90 Z" fill="#2b5282" />
+                  <path d="M74 114 L82 108 L86 114 L78 120 Z" fill="#2b5282" />
+                  <circle cx="84" cy="110" r="5" fill="#f0be97" />
+                  <rect x="80" y="86" width="12" height="30" rx="3" fill="#bae6fd" stroke="#0284c7" strokeWidth="1.5" opacity="0.9" />
+                  <rect x="81" y="96" width="10" height="19" rx="1.5" fill="#38bdf8" />
+                  <rect x="82" y="82" width="8" height="5" rx="1.5" fill="#ffffff" stroke="#0284c7" strokeWidth="1" />
+                </g>
+              )}
+            </g>
+          </svg>
+        )}
+
+        {/* 2. GIRL CHARACTER (Chic Stylish Anime/Chibi Girl: Dark Hair, Chic Glasses/Coat, Holding Bottle) */}
+        {gender === 'girl' && (
+          <svg 
+            width="155" 
+            height="245" 
+            viewBox="0 0 100 240" 
+            fill="none" 
+            xmlns="http://www.w3.org/2000/svg"
+            className={`drop-shadow-[0_12px_24px_rgba(0,0,0,0.8)] ${
+              stage === 'post_drink' ? 'animate-hero-celebrate' : ''
+            }`}
+          >
+            {/* LEGS RIG */}
+            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-leg-l' : ''}>
+              <rect x="34" y="148" width="11" height="38" rx="4" fill="#1f1824" />
+              <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-knee-l' : ''}>
+                <rect x="35" y="182" width="9.5" height="38" rx="4" fill="#231b29" />
+                <path d="M30 218 C30 214 36 212 45 212 L47 218 L47 225 L30 225 Z" fill="#0d0d0d" />
+                <rect x="29" y="222" width="20" height="4" rx="2" fill="#e056fd" />
+              </g>
+            </g>
+
+            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-leg-r' : ''}>
+              <rect x="55" y="148" width="11" height="38" rx="4" fill="#1f1824" />
+              <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-knee-r' : ''}>
+                <rect x="56" y="182" width="9.5" height="38" rx="4" fill="#231b29" />
+                <path d="M51 218 C51 214 57 212 66 212 L68 218 L68 225 L51 225 Z" fill="#0d0d0d" />
+                <rect x="50" y="222" width="20" height="4" rx="2" fill="#e056fd" />
+              </g>
+            </g>
+
+            {/* BACK LONG FLOWING HAIR */}
             <path 
-              d="M30 38 C28 20 40 12 50 12 C62 12 72 20 70 38 C72 44 71 50 70 52 C65 42 62 40 50 40 C38 40 35 42 30 52 C29 48 29 42 30 38 Z" 
-              fill="#1e1612" 
+              d="M24 38 C20 70 18 100 24 130 C27 142 38 146 50 146 C62 146 73 142 76 130 C82 100 80 70 76 38 Z" 
+              fill="#261c16" 
             />
 
-            {/* LEFT ARM (Swings during walk, raises in celebration) */}
-            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-arm-l' : ''}>
-              <path d="M29 86 C21 95 18 112 21 126 L29 124 C27 114 28 100 34 92 Z" fill="#2b5282" />
-              {/* Hand */}
-              <circle cx="23" cy="132" r="5" fill="#f0be97" />
-            </g>
+            {/* TORSO / STYLISH COAT */}
+            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-torso' : ''}>
+              <path d="M29 82 L71 82 L67 152 L33 152 Z" fill="#2c2738" />
+              {/* Inner blouse */}
+              <polygon points="50,82 43,105 57,105" fill="#fdf4ff" />
+              {/* Trench lapels */}
+              <polygon points="43,82 50,110 36,98" fill="#1c1824" />
+              <polygon points="57,82 50,110 64,98" fill="#201b2a" />
+              {/* Belt */}
+              <rect x="33" y="120" width="34" height="6" fill="#131018" />
+              <rect x="46" y="119" width="8" height="8" rx="1.5" fill="#f59e0b" />
 
-            {/* RIGHT ARM & WATER BOTTLE RIG */}
-            {stage === 'drinking' ? (
-              /* Arm Raised Drinking from Bottle */
-              <g style={{ animation: 'drinkBottleTilt 1.2s forwards ease-in-out' }}>
-                <path d="M69 88 C76 96 74 110 65 112 L61 106 C66 102 68 94 65 88 Z" fill="#2b5282" />
-                {/* Hand holding bottle near mouth */}
-                <circle cx="58" cy="65" r="5" fill="#f0be97" />
-                {/* Water Bottle Tilted */}
-                <rect x="46" y="44" width="14" height="34" rx="3" fill="#bae6fd" stroke="#0284c7" strokeWidth="1.5" opacity="0.85" />
-                <rect x="48" y="52" width="10" height="14" fill="#38bdf8" />
-                <rect x="49" y="40" width="8" height="5" rx="1.5" fill="#ffffff" stroke="#0369a1" strokeWidth="1" />
+              {/* Head & Face */}
+              <rect x="44" y="66" width="12" height="18" fill="#fbd5c0" />
+              <rect x="33" y="28" width="34" height="42" rx="14" fill="#fde5d4" />
+              <ellipse cx="39" cy="54" rx="4" ry="2" fill="#ff7675" opacity="0.6" />
+              <ellipse cx="61" cy="54" rx="4" ry="2" fill="#ff7675" opacity="0.6" />
+
+              {/* Eyes & Glasses */}
+              <circle cx="42" cy="48" r="3.2" fill="#1a110b" />
+              <circle cx="43" cy="47" r="1.2" fill="#ffffff" />
+              <circle cx="58" cy="48" r="3.2" fill="#1a110b" />
+              <circle cx="59" cy="47" r="1.2" fill="#ffffff" />
+              <path d="M47 56 C48 59 52 59 53 56" stroke="#d63031" strokeWidth="2" strokeLinecap="round" />
+
+              {/* Chic Glasses */}
+              <rect x="36" y="42" width="13" height="11" rx="3" fill="none" stroke="#111111" strokeWidth="1.8" />
+              <rect x="52" y="42" width="13" height="11" rx="3" fill="none" stroke="#111111" strokeWidth="1.8" />
+              <line x1="49" y1="46" x2="52" y2="46" stroke="#111" strokeWidth="1.8" />
+
+              {/* Front Hair Bangs */}
+              <path 
+                d="M28 32 C30 18 42 14 50 14 C58 14 70 18 72 32 C74 38 73 45 72 50 C66 40 58 38 50 38 C42 38 34 40 28 50 Z" 
+                fill="#382920" 
+              />
+
+              {/* Left Arm */}
+              <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-arm-l' : ''}>
+                <path d="M29 84 C21 94 18 110 22 124 L30 122 C27 112 28 98 34 90 Z" fill="#2c2738" />
+                <circle cx="24" cy="130" r="4.5" fill="#fde5d4" />
               </g>
-            ) : (
-              /* Arm Holding Bottle Proudly / Dancing */
-              <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-bottle-r' : ''}>
-                <path d="M70 86 C77 94 80 106 79 116 L71 115 C72 107 70 98 66 90 Z" fill="#2b5282" />
-                {/* Forearm bent forward holding bottle */}
-                <path d="M74 114 L82 108 L86 114 L78 120 Z" fill="#2b5282" />
-                {/* Hand */}
-                <circle cx="84" cy="110" r="5" fill="#f0be97" />
-                {/* Water Bottle (Clear bottle with blue water + white cap) */}
-                <rect x="80" y="86" width="12" height="30" rx="3" fill="#bae6fd" stroke="#0284c7" strokeWidth="1.5" opacity="0.9" />
-                {/* Water Level inside */}
-                <rect x="81" y="96" width="10" height="19" rx="1.5" fill="#38bdf8" />
-                {/* Bottle Cap */}
-                <rect x="82" y="82" width="8" height="5" rx="1.5" fill="#ffffff" stroke="#0284c7" strokeWidth="1" />
-              </g>
-            )}
-          </g>
-        </svg>
+
+              {/* Bottle Arm */}
+              {stage === 'drinking' ? (
+                <g style={{ animation: 'drinkBottleTilt 1.2s forwards ease-in-out' }}>
+                  <path d="M69 86 C76 94 74 108 65 110 L61 104 C66 100 68 92 65 86 Z" fill="#2c2738" />
+                  <circle cx="58" cy="65" r="4.5" fill="#fde5d4" />
+                  <rect x="46" y="44" width="14" height="34" rx="3" fill="#bae6fd" stroke="#0284c7" strokeWidth="1.5" opacity="0.85" />
+                  <rect x="48" y="52" width="10" height="14" fill="#38bdf8" />
+                  <rect x="49" y="40" width="8" height="5" rx="1.5" fill="#ffffff" stroke="#0369a1" strokeWidth="1" />
+                </g>
+              ) : (
+                <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-walk-bottle-r' : ''}>
+                  <path d="M70 84 C77 92 80 104 79 114 L71 113 C72 105 70 96 66 88 Z" fill="#2c2738" />
+                  <path d="M74 112 L82 106 L86 112 L78 118 Z" fill="#2c2738" />
+                  <circle cx="84" cy="108" r="4.5" fill="#fde5d4" />
+                  <rect x="80" y="84" width="12" height="30" rx="3" fill="#bae6fd" stroke="#0284c7" strokeWidth="1.5" opacity="0.9" />
+                  <rect x="81" y="94" width="10" height="19" rx="1.5" fill="#38bdf8" />
+                  <rect x="82" y="80" width="8" height="5" rx="1.5" fill="#ffffff" stroke="#0284c7" strokeWidth="1" />
+                </g>
+              )}
+            </g>
+          </svg>
+        )}
       </div>
     </div>
   );
