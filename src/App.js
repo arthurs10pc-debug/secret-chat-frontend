@@ -5009,6 +5009,10 @@ export default function App() {
       setIsPeerTyping(false);
     });
 
+    socketRef.current.on('connect_error', () => {
+      setIsConnected(false);
+    });
+
     socketRef.current.on('start_audio_call', ({ fromRole }) => {
       const myRole = roleRef.current || localStorage.getItem('stealth_role') || 'user';
       if (fromRole !== myRole) {
