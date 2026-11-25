@@ -1189,18 +1189,25 @@ export default function App() {
   const [buddyMessage, setBuddyMessage] = useState('Dora, time to drink water! Stay hydrated & fresh 💧');
   const [buddyType, setBuddyType] = useState('water');
   const [buddyGender, setBuddyGender] = useState(() => {
-    return localStorage.getItem('stealth_buddy_gender') || 'boy';
+    return localStorage.getItem('stealth_buddy_gender') || 'pixel_boy';
+  });
+  const [buddyWalkSpeed, setBuddyWalkSpeed] = useState(() => {
+    return localStorage.getItem('stealth_buddy_speed') || 'slow';
   });
   const [buddyIntervalMinutes, setBuddyIntervalMinutes] = useState(0);
   const [buddySongUrl, setBuddySongUrl] = useState('');
 
-  const handleTriggerBuddyTest = (customText, type = 'water', songUrl = '', gender = 'boy') => {
+  const handleTriggerBuddyTest = (customText, type = 'water', songUrl = '', gender = 'pixel_boy', walkSpeed = 'slow') => {
     if (customText) setBuddyMessage(customText);
     if (type) setBuddyType(type);
     if (songUrl !== undefined) setBuddySongUrl(songUrl);
     if (gender) {
       setBuddyGender(gender);
       try { localStorage.setItem('stealth_buddy_gender', gender); } catch(e) {}
+    }
+    if (walkSpeed) {
+      setBuddyWalkSpeed(walkSpeed);
+      try { localStorage.setItem('stealth_buddy_speed', walkSpeed); } catch(e) {}
     }
     setIsBuddyActive(false);
     setTimeout(() => {
@@ -3897,68 +3904,92 @@ export default function App() {
       })
       .catch(() => {});
 
-    // Active client-side evaluation for overdue missed slots (ensures points minus even if server sleeps)
+    // Active client-side evaluation for overdue missed slots (ONLY for today's past deadlines)
     try {
       const now = new Date();
       const istOffset = 5.5 * 60 * 60 * 1000;
       const istNow = new Date(now.getTime() + istOffset);
       const todayStr = istNow.toISOString().split('T')[0];
       const currentMinutes = istNow.getUTCHours() * 60 + istNow.getUTCMinutes();
-      const currentLedger = JSON.parse(localStorage.getItem('stealth_love_ledger') || '[]');
+      let currentLedger = JSON.parse(localStorage.getItem('stealth_love_ledger') || '[]');
       const currentSubs = JSON.parse(localStorage.getItem('stealth_daily_submissions') || '[]');
       const activeSlots = (dailySlots || []).filter(s => s && s.isActive);
+      let ledgerModified = false;
 
-      const daysToCheck = [todayStr];
-      const yesterday = new Date(istNow.getTime() - 86400000);
-      daysToCheck.push(yesterday.toISOString().split('T')[0]);
-
-      daysToCheck.forEach(dayStr => {
-        const isPastDay = dayStr < todayStr;
-        activeSlots.forEach(slot => {
-          let isOverdue = false;
-          if (isPastDay) {
-            isOverdue = true;
-          } else {
-            const parts = (slot.timeRange || '').split('-').map(p => p.trim());
-            if (parts.length >= 2) {
-              const colonIdx = parts[1].indexOf(':');
-              if (colonIdx !== -1) {
-                let h = parseInt(parts[1].slice(0, colonIdx), 10);
-                const m = parseInt(parts[1].slice(colonIdx + 1, colonIdx + 3) || '0', 10);
-                if (!isNaN(h)) {
-                  const tag = (slot.tag || '').toLowerCase();
-                  if (['lunch', 'water', 'tea', 'dinner', 'steps', 'skincare'].includes(tag) && h < 12) h += 12;
-                  else if (h >= 1 && h <= 7) h += 12;
-                  const endMins = h * 60 + (isNaN(m) ? 0 : m);
-                  if (currentMinutes > endMins) isOverdue = true;
+      activeSlots.forEach(slot => {
+        const timeRange = slot.timeRange || '';
+        const parts = timeRange.split('-').map(p => p.trim());
+        let endMins = null;
+        if (parts.length >= 2) {
+          const timePart = parts[1];
+          const colonIdx = timePart.indexOf(':');
+          if (colonIdx !== -1) {
+            let h = parseInt(timePart.slice(0, colonIdx), 10);
+            const m = parseInt(timePart.slice(colonIdx + 1, colonIdx + 3) || '0', 10);
+            if (!isNaN(h)) {
+              const isPm = /pm/i.test(timeRange) || /pm/i.test(timePart);
+              const isAm = /am/i.test(timeRange) || /am/i.test(timePart);
+              if (isPm && h < 12) h += 12;
+              else if (isAm && h === 12) h = 0;
+              else if (!isPm && !isAm) {
+                const lower = ((slot.tag || '') + ' ' + (slot.title || '')).toLowerCase();
+                if (['lunch', 'water', 'tea', 'dinner', 'steps', 'skincare', 'night', 'sleep', 'evening'].some(k => lower.includes(k)) && h < 12) {
+                  h += 12;
+                } else if (h >= 1 && h <= 7) {
+                  h += 12;
                 }
               }
+              endMins = h * 60 + (isNaN(m) ? 0 : m);
             }
           }
+        }
 
-          if (isOverdue) {
-            const sub = currentSubs.find(s => s && s.slotId === slot.id && s.date === dayStr);
-            const isApproved = sub && sub.status === 'APPROVED';
-            const isPendingWithProof = sub && sub.status === 'PENDING' && (Boolean(sub.image) || Boolean(sub.note));
-            const slotTxId = `habit_routine_${slot.id}_${dayStr}_user`;
+        const slotTxId = `habit_routine_${slot.id}_${todayStr}_user`;
 
-            if (!isApproved && !isPendingWithProof) {
-              const alreadyHas = currentLedger.some(e => e && e.id === slotTxId);
-              if (!alreadyHas) {
-                const penaltyPts = Math.abs(Number(slot.rewardPoints) || 2.0);
-                handleLoveBalanceTransaction(
-                  penaltyPts,
-                  'debit',
-                  `Missed Routine Task: ${slot.title} (${dayStr})`,
-                  true,
-                  'user',
-                  { customId: slotTxId }
-                );
-              }
+        // 1. If slot is still UPCOMING today, REMOVE any accidental premature deduction!
+        if (endMins !== null && currentMinutes <= endMins) {
+          const prematureDebit = currentLedger.find(e => e && e.id === slotTxId && e.type === 'debit');
+          if (prematureDebit) {
+            currentLedger = currentLedger.filter(e => e && e.id !== slotTxId);
+            ledgerModified = true;
+            // Restore deducted points
+            const refundPts = Math.abs(Number(prematureDebit.points) || Number(slot.rewardPoints) || 2.0);
+            setLoveBalance(prev => {
+              const next = parseFloat((prev + refundPts).toFixed(2));
+              try { localStorage.setItem('stealth_love_balance', next.toString()); } catch(e) {}
+              return next;
+            });
+          }
+          return;
+        }
+
+        // 2. ONLY if deadline has ACTUALLY PASSED today
+        if (endMins !== null && currentMinutes > endMins) {
+          const sub = currentSubs.find(s => s && s.slotId === slot.id && s.date === todayStr);
+          const isApproved = sub && sub.status === 'APPROVED';
+          const isPendingWithProof = sub && sub.status === 'PENDING' && (Boolean(sub.image) || Boolean(sub.note));
+
+          if (!isApproved && !isPendingWithProof) {
+            const alreadyHas = currentLedger.some(e => e && e.id === slotTxId);
+            if (!alreadyHas) {
+              const penaltyPts = Math.abs(Number(slot.rewardPoints) || 2.0);
+              handleLoveBalanceTransaction(
+                penaltyPts,
+                'debit',
+                `Missed Routine Task: ${slot.title} (${todayStr})`,
+                true,
+                'user',
+                { customId: slotTxId }
+              );
             }
           }
-        });
+        }
       });
+
+      if (ledgerModified) {
+        setLoveLedger(currentLedger);
+        try { localStorage.setItem('stealth_love_ledger', JSON.stringify(currentLedger)); } catch(e) {}
+      }
     } catch(err) {}
 
     if (socketRef.current) {
@@ -13303,6 +13334,7 @@ export default function App() {
           <AnimatedScreenBuddy
             isActive={isBuddyActive}
             gender={buddyGender}
+            walkSpeed={buddyWalkSpeed}
             recipientName={activeDoraName || "Dora"}
             customSongUrl={buddySongUrl}
             onDismiss={() => setIsBuddyActive(false)}

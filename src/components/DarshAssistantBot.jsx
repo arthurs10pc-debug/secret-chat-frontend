@@ -24,7 +24,10 @@ export default function DarshAssistantBot({
 }) {
   const [buddyType, setBuddyType] = useState('water');
   const [buddyGender, setBuddyGender] = useState(() => {
-    return localStorage.getItem('stealth_buddy_gender') || 'boy';
+    return localStorage.getItem('stealth_buddy_gender') || 'pixel_boy';
+  });
+  const [buddyWalkSpeed, setBuddyWalkSpeed] = useState(() => {
+    return localStorage.getItem('stealth_buddy_speed') || 'slow';
   });
   const [buddyCustomText, setBuddyCustomText] = useState('Dora, time to drink water! Stay hydrated & fresh 💧');
   const [buddySongInput, setBuddySongInput] = useState('');
@@ -33,6 +36,11 @@ export default function DarshAssistantBot({
   const handleSelectGender = (g) => {
     setBuddyGender(g);
     try { localStorage.setItem('stealth_buddy_gender', g); } catch(e) {}
+  };
+
+  const handleSelectSpeed = (s) => {
+    setBuddyWalkSpeed(s);
+    try { localStorage.setItem('stealth_buddy_speed', s); } catch(e) {}
   };
 
   if (role !== 'parent') return null;
@@ -140,7 +148,7 @@ export default function DarshAssistantBot({
                 </div>
               </div>
 
-              {/* GENDER / CHARACTER SELECTION (GIRL YA BOY CHALKE AAYEGA) */}
+              {/* GENDER / CHARACTER SELECTION (PIXEL ART & REALISTIC OPTIONS) */}
               <div>
                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">
                   Character Chuniye (Screen ke bahar RIGHT SIDE se chalkar aayega):
@@ -148,27 +156,99 @@ export default function DarshAssistantBot({
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
+                    onClick={() => handleSelectGender('pixel_boy')}
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-start gap-2 cursor-pointer transition-all ${
+                      buddyGender === 'pixel_boy'
+                        ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500 shadow-md ring-1 ring-emerald-400'
+                        : 'bg-[#181818] text-gray-400 border-[#2a2a2a] hover:bg-[#202020]'
+                    }`}
+                  >
+                    <span className="text-base shrink-0">👾</span>
+                    <div className="text-left min-w-0">
+                      <span className="block truncate">Pixel Hero Boy</span>
+                      <span className="text-[9px] text-emerald-400 font-mono block">Video Reel Style</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectGender('pixel_girl')}
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-start gap-2 cursor-pointer transition-all ${
+                      buddyGender === 'pixel_girl'
+                        ? 'bg-pink-600/30 text-pink-300 border-pink-500 shadow-md ring-1 ring-pink-400'
+                        : 'bg-[#181818] text-gray-400 border-[#2a2a2a] hover:bg-[#202020]'
+                    }`}
+                  >
+                    <span className="text-base shrink-0">👾</span>
+                    <div className="text-left min-w-0">
+                      <span className="block truncate">Pixel Dora Girl</span>
+                      <span className="text-[9px] text-pink-400 font-mono block">Video Reel Style</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => handleSelectGender('boy')}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-start gap-2 cursor-pointer transition-all ${
                       buddyGender === 'boy'
                         ? 'bg-blue-600/30 text-blue-300 border-blue-500 shadow-md ring-1 ring-blue-400'
                         : 'bg-[#181818] text-gray-400 border-[#2a2a2a] hover:bg-[#202020]'
                     }`}
                   >
-                    <span className="text-base">👦</span>
-                    <span>Hero Boy (Vijay/Suriya)</span>
+                    <span className="text-base shrink-0">👦</span>
+                    <div className="text-left min-w-0">
+                      <span className="block truncate">Hero Boy</span>
+                      <span className="text-[9px] text-blue-400 font-mono block">Vijay/Suriya</span>
+                    </div>
                   </button>
+
                   <button
                     type="button"
                     onClick={() => handleSelectGender('girl')}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-start gap-2 cursor-pointer transition-all ${
                       buddyGender === 'girl'
                         ? 'bg-purple-600/30 text-purple-300 border-purple-500 shadow-md ring-1 ring-purple-400'
                         : 'bg-[#181818] text-gray-400 border-[#2a2a2a] hover:bg-[#202020]'
                     }`}
                   >
-                    <span className="text-base">👧</span>
-                    <span>Cute Girl (Dora Look)</span>
+                    <span className="text-base shrink-0">👧</span>
+                    <div className="text-left min-w-0">
+                      <span className="block truncate">Cute Girl</span>
+                      <span className="text-[9px] text-purple-400 font-mono block">Dora Look</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* WALK SPEED: DHEERE DHEERE REAL WALK vs NORMAL */}
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">
+                  Walk Pace (Video jaisa dheere dheere chalna):
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectSpeed('slow')}
+                    className={`py-1.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                      buddyWalkSpeed === 'slow'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500 shadow-sm ring-1 ring-amber-400/50'
+                        : 'bg-[#181818] text-gray-400 border-[#2a2a2a] hover:bg-[#202020]'
+                    }`}
+                  >
+                    <span>🐢</span>
+                    <span>Dheere Dheere (Real Walk)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectSpeed('normal')}
+                    className={`py-1.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                      buddyWalkSpeed === 'normal'
+                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500 shadow-sm ring-1 ring-cyan-400/50'
+                        : 'bg-[#181818] text-gray-400 border-[#2a2a2a] hover:bg-[#202020]'
+                    }`}
+                  >
+                    <span>⚡</span>
+                    <span>Normal Walk</span>
                   </button>
                 </div>
               </div>
@@ -275,14 +355,16 @@ export default function DarshAssistantBot({
                 type="button"
                 onClick={() => {
                   if (handleTriggerBuddyTest) {
-                    handleTriggerBuddyTest(buddyCustomText, buddyType, buddySongInput, buddyGender);
+                    handleTriggerBuddyTest(buddyCustomText, buddyType, buddySongInput, buddyGender, buddyWalkSpeed);
                     setIsBotOpen(false);
                   }
                 }}
                 className="w-full bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-500 hover:from-blue-500 hover:to-teal-400 text-white font-extrabold text-xs py-3 rounded-xl cursor-pointer shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
               >
                 <Play size={14} fill="currentColor" />
-                <span>Test {buddyGender === 'girl' ? '👧 Girl' : '👦 Boy'} Walk-In (Right Side Entry + Song)</span>
+                <span>
+                  Test {buddyGender.startsWith('pixel') ? '👾 Pixel' : ''} {buddyGender.includes('girl') ? '👧 Girl' : '👦 Boy'} Walk-In ({buddyWalkSpeed === 'slow' ? '🐢 Dheere Dheere' : '⚡ Normal'} + Right Entry)
+                </span>
               </button>
             </div>
           )}

@@ -4,7 +4,8 @@ import { X, Droplets, Clock, Volume2, VolumeX, Sparkles } from 'lucide-react';
 export default function AnimatedScreenBuddy({
   isActive,
   onDismiss,
-  gender = 'boy', // 'boy' | 'girl'
+  gender = 'pixel_boy', // 'pixel_boy' | 'pixel_girl' | 'boy' | 'girl'
+  walkSpeed = 'slow', // 'slow' | 'normal'
   recipientName = "Dora",
   customSongUrl = null,
   initialLiters = 1.5,
@@ -15,6 +16,11 @@ export default function AnimatedScreenBuddy({
   const [liters, setLiters] = useState(initialLiters);
   const [isMuted, setIsMuted] = useState(false);
   const [dialogStatus, setDialogStatus] = useState('prompt'); // 'prompt' | 'success' | 'later'
+
+  const isSlowWalk = walkSpeed === 'slow';
+  const walkDuration = isSlowWalk ? 5200 : 2600;
+  const walkCadence = isSlowWalk ? '0.85s' : '0.55s';
+  const exitDuration = isSlowWalk ? 4800 : 2400;
 
   const musicEngineRef = useRef(null);
   const customAudioRef = useRef(null);
@@ -192,17 +198,17 @@ export default function AnimatedScreenBuddy({
     setDialogStatus('prompt');
     startBackgroundMusic();
 
-    // Walking in takes 2.5s from offscreen right to center
+    // Walking in takes realistic time from offscreen right to center
     const enterTimer = setTimeout(() => {
       setStage('waiting_input');
-    }, 2500);
+    }, walkDuration);
 
     return () => {
       clearTimeout(enterTimer);
       clearTimeout(autoExitTimerRef.current);
       stopMusic();
     };
-  }, [isActive]);
+  }, [isActive, walkDuration]);
 
   const handleDrinkNow = () => {
     setStage('drinking');
@@ -236,7 +242,7 @@ export default function AnimatedScreenBuddy({
       stopMusic();
       setStage('closed');
       if (onDismiss) onDismiss();
-    }, 2400);
+    }, exitDuration);
   };
 
   if (!isActive && stage === 'closed') return null;
@@ -298,38 +304,86 @@ export default function AnimatedScreenBuddy({
           25%, 75% { transform: scaleX(0.72); opacity: 0.3; }
         }
 
+        /* Pixel Art Walk Keyframes */
+        @keyframes walkPixelLegL {
+          0%, 100% { transform: rotate(-24deg); }
+          50% { transform: rotate(24deg); }
+        }
+        @keyframes walkPixelLegR {
+          0%, 100% { transform: rotate(24deg); }
+          50% { transform: rotate(-24deg); }
+        }
+        @keyframes walkPixelTorsoBob {
+          0%, 100% { transform: translateY(0px); }
+          25%, 75% { transform: translateY(-4px); }
+          50% { transform: translateY(0px); }
+        }
+        @keyframes walkPixelArmL {
+          0%, 100% { transform: rotate(22deg); }
+          50% { transform: rotate(-22deg); }
+        }
+        @keyframes walkPixelBottleArm {
+          0%, 100% { transform: rotate(-3deg); }
+          50% { transform: rotate(8deg) translateY(-3px); }
+        }
+        @keyframes drinkPixelBottleTilt {
+          0% { transform: translate(0, 0) rotate(0deg); }
+          100% { transform: translate(-22px, -36px) rotate(-115deg); }
+        }
+
         .animate-walk-torso {
-          animation: walkTorsoBob 0.55s infinite ease-in-out;
+          animation: walkTorsoBob ${walkCadence} infinite ease-in-out;
         }
         .animate-walk-leg-l {
           transform-origin: 38px 150px;
-          animation: walkStrideLeftLeg 0.55s infinite ease-in-out;
+          animation: walkStrideLeftLeg ${walkCadence} infinite ease-in-out;
         }
         .animate-walk-knee-l {
           transform-origin: 38px 190px;
-          animation: walkKneeFlexLeft 0.55s infinite ease-in-out;
+          animation: walkKneeFlexLeft ${walkCadence} infinite ease-in-out;
         }
         .animate-walk-leg-r {
           transform-origin: 62px 150px;
-          animation: walkStrideRightLeg 0.55s infinite ease-in-out;
+          animation: walkStrideRightLeg ${walkCadence} infinite ease-in-out;
         }
         .animate-walk-knee-r {
           transform-origin: 62px 190px;
-          animation: walkKneeFlexRight 0.55s infinite ease-in-out;
+          animation: walkKneeFlexRight ${walkCadence} infinite ease-in-out;
         }
         .animate-walk-arm-l {
           transform-origin: 22px 85px;
-          animation: walkArmSwingLeft 0.55s infinite ease-in-out;
+          animation: walkArmSwingLeft ${walkCadence} infinite ease-in-out;
         }
         .animate-walk-bottle-r {
           transform-origin: 75px 85px;
-          animation: walkArmBottleGroove 0.55s infinite ease-in-out;
+          animation: walkArmBottleGroove ${walkCadence} infinite ease-in-out;
         }
         .animate-hero-celebrate {
           animation: celebrateDance 0.5s infinite ease-in-out;
         }
         .animate-floor-shadow {
-          animation: floorShadowSync 0.55s infinite ease-in-out;
+          animation: floorShadowSync ${walkCadence} infinite ease-in-out;
+        }
+
+        /* Stepped Authentic Pixel Walk Classes */
+        .animate-pixel-torso {
+          animation: walkPixelTorsoBob ${walkCadence} infinite steps(2, end);
+        }
+        .animate-pixel-leg-l {
+          transform-origin: 43px 96px;
+          animation: walkPixelLegL ${walkCadence} infinite steps(3, end);
+        }
+        .animate-pixel-leg-r {
+          transform-origin: 57px 96px;
+          animation: walkPixelLegR ${walkCadence} infinite steps(3, end);
+        }
+        .animate-pixel-arm-l {
+          transform-origin: 32px 58px;
+          animation: walkPixelArmL ${walkCadence} infinite steps(3, end);
+        }
+        .animate-pixel-bottle-r {
+          transform-origin: 68px 58px;
+          animation: walkPixelBottleArm ${walkCadence} infinite steps(3, end);
         }
       `}</style>
 
@@ -452,14 +506,19 @@ export default function AnimatedScreenBuddy({
 
       {/* ANIMATED CHARACTER RIG (ENTERS FROM OFF-SCREEN RIGHT, EXITS TO RIGHT) */}
       <div 
-        className="pointer-events-auto relative flex flex-col items-center cursor-pointer transition-all duration-[2600ms] ease-[cubic-bezier(0.2,0.8,0.3,1)]"
+        className="pointer-events-auto relative flex flex-col items-center cursor-pointer"
         style={{
           transform: stage === 'walking_in'
-            ? 'translateX(calc(50vw + 260px))' // Starts 100% OUTSIDE THE SCREEN on the RIGHT (both mobile & desktop)
+            ? 'translateX(calc(50vw + 260px))' // Starts 100% OUTSIDE THE SCREEN on the RIGHT
             : stage === 'walking_out'
               ? 'translateX(calc(50vw + 280px))' // Walks 100% OUTSIDE THE SCREEN to the RIGHT
               : 'translateX(0px)',
-          opacity: stage === 'walking_out' ? 0.4 : 1
+          transition: stage === 'walking_in'
+            ? `transform ${walkDuration}ms cubic-bezier(0.18, 0.85, 0.35, 1)`
+            : stage === 'walking_out'
+              ? `transform ${exitDuration}ms cubic-bezier(0.35, 0, 0.75, 0.15), opacity ${exitDuration}ms`
+              : 'transform 0.4s ease-out',
+          opacity: stage === 'walking_out' ? 0.35 : 1
         }}
         onClick={() => {
           if (stage === 'waiting_input') handleDrinkNow();
@@ -479,6 +538,186 @@ export default function AnimatedScreenBuddy({
             <span className="text-teal-300 text-sm animate-bounce" style={{ animationDelay: '0.3s' }}>✨</span>
             <span className="text-cyan-300 text-base animate-bounce" style={{ animationDelay: '0.2s' }}>💧</span>
           </div>
+        )}
+
+        {/* 1. RETRO 16-BIT PIXEL HERO BOY (ARJUN MENON / PRANJALI REEL TUTORIAL STYLE) */}
+        {gender === 'pixel_boy' && (
+          <svg 
+            width="145" 
+            height="215" 
+            viewBox="0 0 100 150" 
+            fill="none" 
+            xmlns="http://www.w3.org/2000/svg"
+            shapeRendering="crispEdges"
+            className={`drop-shadow-[0_12px_24px_rgba(0,0,0,0.85)] ${
+              stage === 'post_drink' ? 'animate-hero-celebrate' : ''
+            }`}
+          >
+            {/* PIXEL LEGS RIG */}
+            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-pixel-leg-l' : ''}>
+              <rect x="38" y="96" width="10" height="26" fill="#1e293b" />
+              <rect x="40" y="104" width="6" height="18" fill="#0f172a" />
+              <rect x="32" y="122" width="16" height="6" fill="#dc2626" />
+              <rect x="32" y="128" width="18" height="4" fill="#ffffff" />
+            </g>
+
+            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-pixel-leg-r' : ''}>
+              <rect x="52" y="96" width="10" height="26" fill="#1e293b" />
+              <rect x="54" y="104" width="6" height="18" fill="#0f172a" />
+              <rect x="50" y="122" width="16" height="6" fill="#dc2626" />
+              <rect x="50" y="128" width="18" height="4" fill="#ffffff" />
+            </g>
+
+            {/* PIXEL TORSO & HEAD */}
+            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-pixel-torso' : ''}>
+              <rect x="42" y="56" width="16" height="38" fill="#111827" />
+              <rect x="48" y="66" width="4" height="14" fill="#f8fafc" />
+              <rect x="34" y="56" width="8" height="38" fill="#1d4ed8" />
+              <rect x="58" y="56" width="8" height="38" fill="#1d4ed8" />
+              <rect x="36" y="54" width="6" height="8" fill="#2563eb" />
+              <rect x="58" y="54" width="6" height="8" fill="#2563eb" />
+              <rect x="40" y="56" width="4" height="12" fill="#3b82f6" />
+              <rect x="56" y="56" width="4" height="12" fill="#3b82f6" />
+              <rect x="34" y="92" width="32" height="4" fill="#0f172a" />
+              <rect x="48" y="92" width="4" height="4" fill="#fbbf24" />
+
+              <rect x="46" y="48" width="8" height="8" fill="#f59e0b" />
+              <rect x="34" y="18" width="32" height="30" fill="#fcd34d" />
+              <rect x="30" y="26" width="4" height="8" fill="#f59e0b" />
+              <rect x="66" y="26" width="4" height="8" fill="#f59e0b" />
+
+              <rect x="32" y="8" width="36" height="12" fill="#1c1917" />
+              <rect x="36" y="2" width="28" height="8" fill="#292524" />
+              <rect x="42" y="0" width="16" height="4" fill="#44403c" />
+              <rect x="30" y="16" width="6" height="12" fill="#1c1917" />
+              <rect x="64" y="16" width="6" height="12" fill="#1c1917" />
+
+              <rect x="38" y="26" width="10" height="8" fill="#0f172a" />
+              <rect x="52" y="26" width="10" height="8" fill="#0f172a" />
+              <rect x="48" y="28" width="4" height="2" fill="#0f172a" />
+              <rect x="40" y="28" width="4" height="2" fill="#60a5fa" />
+              <rect x="54" y="28" width="4" height="2" fill="#60a5fa" />
+
+              <rect x="46" y="40" width="8" height="2" fill="#991b1b" />
+              <rect x="48" y="42" width="4" height="2" fill="#ffffff" />
+
+              <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-pixel-arm-l' : ''}>
+                <rect x="26" y="58" width="8" height="22" fill="#1d4ed8" />
+                <rect x="26" y="80" width="8" height="10" fill="#fcd34d" />
+              </g>
+
+              {stage === 'drinking' ? (
+                <g style={{ animation: 'drinkPixelBottleTilt 1.2s forwards ease-in-out' }}>
+                  <rect x="66" y="58" width="8" height="18" fill="#1d4ed8" />
+                  <rect x="64" y="46" width="8" height="14" fill="#fcd34d" />
+                  <rect x="48" y="26" width="10" height="22" fill="#38bdf8" stroke="#0284c7" strokeWidth="1" />
+                  <rect x="50" y="32" width="6" height="12" fill="#0284c7" />
+                  <rect x="50" y="22" width="6" height="4" fill="#ffffff" />
+                </g>
+              ) : (
+                <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-pixel-bottle-r' : ''}>
+                  <rect x="66" y="58" width="8" height="20" fill="#1d4ed8" />
+                  <rect x="68" y="78" width="8" height="10" fill="#fcd34d" />
+                  <rect x="72" y="86" width="6" height="6" fill="#fcd34d" />
+                  <rect x="76" y="66" width="10" height="24" fill="#38bdf8" stroke="#0284c7" strokeWidth="1" />
+                  <rect x="78" y="74" width="6" height="14" fill="#0284c7" />
+                  <rect x="78" y="62" width="6" height="4" fill="#ffffff" />
+                  <rect x="78" y="68" width="2" height="18" fill="#ffffff" opacity="0.75" />
+                </g>
+              )}
+            </g>
+          </svg>
+        )}
+
+        {/* 2. RETRO 16-BIT PIXEL CUTE GIRL (DORA LOOK) */}
+        {gender === 'pixel_girl' && (
+          <svg 
+            width="145" 
+            height="215" 
+            viewBox="0 0 100 150" 
+            fill="none" 
+            xmlns="http://www.w3.org/2000/svg"
+            shapeRendering="crispEdges"
+            className={`drop-shadow-[0_12px_24px_rgba(0,0,0,0.85)] ${
+              stage === 'post_drink' ? 'animate-hero-celebrate' : ''
+            }`}
+          >
+            {/* PIXEL LEGS RIG */}
+            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-pixel-leg-l' : ''}>
+              <rect x="38" y="96" width="8" height="24" fill="#fef08a" />
+              <rect x="38" y="116" width="8" height="6" fill="#ffffff" />
+              <rect x="34" y="122" width="14" height="6" fill="#ec4899" />
+              <rect x="34" y="126" width="16" height="3" fill="#ffffff" />
+            </g>
+
+            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-pixel-leg-r' : ''}>
+              <rect x="54" y="96" width="8" height="24" fill="#fef08a" />
+              <rect x="54" y="116" width="8" height="6" fill="#ffffff" />
+              <rect x="52" y="122" width="14" height="6" fill="#ec4899" />
+              <rect x="52" y="126" width="16" height="3" fill="#ffffff" />
+            </g>
+
+            {/* BACK LONG WAVY HAIR */}
+            <rect x="28" y="18" width="44" height="52" fill="#3f271d" />
+
+            {/* PIXEL TORSO & HEAD */}
+            <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-pixel-torso' : ''}>
+              <rect x="44" y="56" width="12" height="32" fill="#ffffff" />
+              <rect x="36" y="56" width="8" height="34" fill="#db2777" />
+              <rect x="56" y="56" width="8" height="34" fill="#db2777" />
+              <rect x="38" y="54" width="6" height="6" fill="#f472b6" />
+              <rect x="56" y="54" width="6" height="6" fill="#f472b6" />
+              <rect x="34" y="88" width="32" height="12" fill="#1e1b4b" />
+              <rect x="36" y="98" width="4" height="2" fill="#312e81" />
+              <rect x="44" y="98" width="4" height="2" fill="#312e81" />
+              <rect x="52" y="98" width="4" height="2" fill="#312e81" />
+              <rect x="60" y="98" width="4" height="2" fill="#312e81" />
+
+              <rect x="46" y="48" width="8" height="8" fill="#fde047" />
+              <rect x="34" y="18" width="32" height="30" fill="#fef08a" />
+
+              <rect x="32" y="10" width="36" height="12" fill="#3f271d" />
+              <rect x="30" y="18" width="6" height="16" fill="#3f271d" />
+              <rect x="64" y="18" width="6" height="16" fill="#3f271d" />
+              <rect x="34" y="14" width="32" height="8" fill="#451a03" />
+
+              <rect x="38" y="38" width="4" height="4" fill="#f472b6" />
+              <rect x="58" y="38" width="4" height="4" fill="#f472b6" />
+
+              <rect x="38" y="28" width="8" height="8" fill="none" stroke="#0f172a" strokeWidth="2" />
+              <rect x="54" y="28" width="8" height="8" fill="none" stroke="#0f172a" strokeWidth="2" />
+              <rect x="46" y="31" width="8" height="2" fill="#0f172a" />
+              <rect x="41" y="31" width="3" height="3" fill="#0f172a" />
+              <rect x="57" y="31" width="3" height="3" fill="#0f172a" />
+
+              <rect x="46" y="42" width="8" height="2" fill="#e11d48" />
+
+              <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-pixel-arm-l' : ''}>
+                <rect x="28" y="58" width="8" height="22" fill="#db2777" />
+                <rect x="28" y="80" width="8" height="8" fill="#fef08a" />
+              </g>
+
+              {stage === 'drinking' ? (
+                <g style={{ animation: 'drinkPixelBottleTilt 1.2s forwards ease-in-out' }}>
+                  <rect x="64" y="58" width="8" height="18" fill="#db2777" />
+                  <rect x="62" y="46" width="8" height="14" fill="#fef08a" />
+                  <rect x="48" y="26" width="10" height="22" fill="#38bdf8" stroke="#0284c7" strokeWidth="1" />
+                  <rect x="50" y="32" width="6" height="12" fill="#0284c7" />
+                  <rect x="50" y="22" width="6" height="4" fill="#f472b6" />
+                </g>
+              ) : (
+                <g className={stage === 'walking_in' || stage === 'walking_out' ? 'animate-pixel-bottle-r' : ''}>
+                  <rect x="64" y="58" width="8" height="20" fill="#db2777" />
+                  <rect x="66" y="78" width="8" height="10" fill="#fef08a" />
+                  <rect x="70" y="86" width="6" height="6" fill="#fef08a" />
+                  <rect x="74" y="66" width="10" height="24" fill="#38bdf8" stroke="#0284c7" strokeWidth="1" />
+                  <rect x="76" y="74" width="6" height="14" fill="#0284c7" />
+                  <rect x="76" y="62" width="6" height="4" fill="#f472b6" />
+                  <rect x="76" y="68" width="2" height="18" fill="#ffffff" opacity="0.75" />
+                </g>
+              )}
+            </g>
+          </svg>
         )}
 
         {/* 1. BOY HERO CHARACTER (Vijay / Suriya Style: Denim Jacket / Black T-Shirt, Sneaker shoes, Water Bottle) */}
